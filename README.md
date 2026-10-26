@@ -131,3 +131,12 @@ The installer includes two tools, unchanged from their own releases, from `apps/
 Their licence lets anyone distribute them freely for **non-commercial, non-profit** use, as long as their notices
 (`unp64.txt`, `LICENSE.txt`) stay with them. Do not sell a build that includes them. Kick Assembler, Java and VICE are
 not included: install them yourself.
+
+## License
+
+KickReasm Studio is free software: you can redistribute it and/or modify it under the terms of the
+[GNU General Public License, version 3](LICENSE) (GPL-3.0-only). It is distributed in the hope that it will be useful,
+but without any warranty; see the license for details.
+
+The bundled unp64 and Exomizer are separate programs under their own licence (see above), which the GPL does not
+change.

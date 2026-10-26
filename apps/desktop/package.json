@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "KickReasm Studio — Electron desktop IDE for re-assembling C64 PRG files into Kick Assembler projects.",
+  "license": "GPL-3.0-only",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

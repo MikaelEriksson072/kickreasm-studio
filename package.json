@@ -2,6 +2,7 @@
   "name": "kickreasm-studio",
   "private": true,
   "description": "Re-assemble Commodore 64 PRG files into clean, byte-exact Kick Assembler projects.",
+  "license": "GPL-3.0-only",
   "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20"
