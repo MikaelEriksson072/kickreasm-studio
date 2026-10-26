@@ -1,0 +1,48 @@
+# Windows packaging (spec 3). `pnpm --filter @kickreasm/desktop package` runs `electron-vite build`
+# and then electron-builder, which writes an NSIS installer and a portable exe to release/<version>/.
+# The packaged app is out/ (main, preload, renderer) plus the production dependencies (zod);
+# @kickreasm/core is bundled into out/ by electron-vite.
+appId: studio.kickreasm.desktop
+productName: KickReasm Studio
+executableName: KickReasm Studio
+copyright: Copyright © 2026 KickReasm Studio
+
+directories:
+  output: release/${version}
+
+files:
+  - out/**/*
+  - package.json
+
+# reuse the Electron binary pnpm installed instead of downloading it again
+electronDist: node_modules/electron/dist
+
+asar: true
+
+# unp64 for packed PRGs (vendor/unp64/README.md) and Exomizer for the Pack view (vendor/exomizer/README.md): installed
+# as resources\unp64\ and resources\exomizer\, where the main process finds them and points the settings at them.
+# Their notices (unp64.txt, LICENSE.txt) come along, as their license asks.
+extraResources:
+  - from: vendor/unp64
+    to: unp64
+  - from: vendor/exomizer
+    to: exomizer
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: KickReasm Studio
+  artifactName: KickReasm-Studio-${version}-setup.${ext}
+
+portable:
+  artifactName: KickReasm-Studio-${version}-portable.${ext}

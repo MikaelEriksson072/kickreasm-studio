@@ -1,0 +1,40 @@
+/* Design tokens (spec 14.2). Dark is the default; light follows the OS unless the user picked a theme.
+ * tailwind.config.cjs maps these variables to colors, so components and utilities share one palette. */
+:root {
+  color-scheme: dark;
+  --bg: #121218; --panel: #18181f; --panel-2: #1f1f29; --editor: #14141a; --line: #292935; --line-2: #363645;
+  --fg: #dedde9; --fg-2: #a4a2b9; --fg-3: #6d6b82;
+  --accent: #8b80f9; --accent-hi: #b5aeff; --accent-ink: #100e26;
+  --row-hover: rgba(139, 128, 249, 0.07); --sel: rgba(139, 128, 249, 0.15); --sel-strong: rgba(139, 128, 249, 0.32); --cur: rgba(139, 128, 249, 0.22);
+  --scroll: rgba(160, 158, 190, 0.22); --map-empty: #1b1b23; --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --ok: #3fbf7f; --warn: #e5a83b; --err: #ef6a6a; --hint: #7fb2ff;
+  --g-code: #3987e5; --g-gfx: #d95926; --g-music: #199e70; --g-table: #c98500; --g-text: #d55181; --g-basic: #9085e9; --g-data: #5e5c72; --g-fill: #2d2c38;
+  --syn-mn: #8cb4ff; --syn-ill: #ff9b73; --syn-dir: #c49bff; --syn-label: #f0c674; --syn-hw: #4fd1c0; --syn-kw: #ff8ccb; --syn-num: #e4a76a; --syn-str: #9dd28a; --syn-comment: #6f6d88;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-pixel: "Silkscreen", "JetBrains Mono", monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #e9e7f0; --panel: #f5f4f9; --panel-2: #ffffff; --editor: #fcfbff; --line: #dad7e5; --line-2: #c7c3d7;
+    --fg: #1d1b2a; --fg-2: #54516a; --fg-3: #87849b;
+    --accent: #5a4ed1; --accent-hi: #4236b5; --accent-ink: #ffffff;
+    --row-hover: rgba(90, 78, 209, 0.06); --sel: rgba(90, 78, 209, 0.11); --sel-strong: rgba(90, 78, 209, 0.24); --cur: rgba(90, 78, 209, 0.15);
+    --scroll: rgba(60, 55, 90, 0.2); --map-empty: #e2e0ea; --shadow: 0 12px 40px rgba(30, 25, 60, 0.18);
+    --ok: #18864f; --warn: #a86a00; --err: #c8372f; --hint: #2f6fd0;
+    --g-code: #2a78d6; --g-gfx: #eb6834; --g-music: #1baf7a; --g-table: #eda100; --g-text: #e87ba4; --g-basic: #4a3aa7; --g-data: #aaa8b9; --g-fill: #dcdae4;
+    --syn-mn: #2356c4; --syn-ill: #c2410c; --syn-dir: #7c3aed; --syn-label: #946200; --syn-hw: #0d7d71; --syn-kw: #be185d; --syn-num: #b45309; --syn-str: #3b7a1e; --syn-comment: #8a879f;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #e9e7f0; --panel: #f5f4f9; --panel-2: #ffffff; --editor: #fcfbff; --line: #dad7e5; --line-2: #c7c3d7;
+  --fg: #1d1b2a; --fg-2: #54516a; --fg-3: #87849b;
+  --accent: #5a4ed1; --accent-hi: #4236b5; --accent-ink: #ffffff;
+  --row-hover: rgba(90, 78, 209, 0.06); --sel: rgba(90, 78, 209, 0.11); --sel-strong: rgba(90, 78, 209, 0.24); --cur: rgba(90, 78, 209, 0.15);
+  --scroll: rgba(60, 55, 90, 0.2); --map-empty: #e2e0ea; --shadow: 0 12px 40px rgba(30, 25, 60, 0.18);
+  --ok: #18864f; --warn: #a86a00; --err: #c8372f; --hint: #2f6fd0;
+  --g-code: #2a78d6; --g-gfx: #eb6834; --g-music: #1baf7a; --g-table: #eda100; --g-text: #e87ba4; --g-basic: #4a3aa7; --g-data: #aaa8b9; --g-fill: #dcdae4;
+  --syn-mn: #2356c4; --syn-ill: #c2410c; --syn-dir: #7c3aed; --syn-label: #946200; --syn-hw: #0d7d71; --syn-kw: #be185d; --syn-num: #b45309; --syn-str: #3b7a1e; --syn-comment: #8a879f;
+}

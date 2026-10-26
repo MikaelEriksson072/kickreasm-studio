@@ -1,0 +1,9 @@
+{
+  "//": "Playwright tests run in Node but pass callbacks to the page, so they need the DOM types as well.",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["**/*", "../playwright.config.ts"]
+}

@@ -1,0 +1,6 @@
+l "fixtures/prg/raster-demo.prg" 0
+break 08c7
+g 0810
+delete
+dump "fixtures/vsf/raster-demo.vsf"
+quit

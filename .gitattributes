@@ -1,0 +1,16 @@
+# text is stored with LF and checked out as the platform likes it
+* text=auto
+
+# Windows build scripts keep CRLF, shell scripts LF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sh text eol=lf
+
+# C64 programs, disk images and VICE snapshots, and the bundled Windows tools
+*.prg binary
+*.d64 binary
+*.vsf binary
+*.sid binary
+*.bin binary
+*.exe binary
+*.png binary

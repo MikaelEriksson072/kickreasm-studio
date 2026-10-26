@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["electron/**/*", "shared/**/*", "test/**/*", "electron.vite.config.ts", "vitest.config.ts"]
+}

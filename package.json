@@ -1,0 +1,22 @@
+{
+  "name": "kickreasm-studio",
+  "private": true,
+  "description": "Re-assemble Commodore 64 PRG files into clean, byte-exact Kick Assembler projects.",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @kickreasm/desktop dev",
+    "build": "pnpm -r --workspace-concurrency=1 build",
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "typecheck": "pnpm -r --workspace-concurrency=1 typecheck",
+    "kickreasm": "pnpm --filter @kickreasm/cli start"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  }
+}

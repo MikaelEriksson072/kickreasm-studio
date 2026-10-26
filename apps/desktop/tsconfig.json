@@ -1,0 +1,6 @@
+{
+  "//": "Editor view of the whole app; `pnpm typecheck` checks the main/preload and renderer halves separately.",
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": { "types": ["vite/client", "node"] },
+  "include": ["src/**/*", "shared/**/*", "electron/**/*", "test/**/*", "e2e/**/*"]
+}

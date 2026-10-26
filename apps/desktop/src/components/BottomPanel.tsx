@@ -1,0 +1,146 @@
+/* Bottom panel: analysis log, problems, cross-references, raster IRQs, statistics, build output. */
+import { decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, type Addr, type AnalysisResult, type RasterIrq, type RenderResult, type Settings } from '@kickreasm/core';
+import { Icon, LVL_ICON } from '../lib/icons';
+import { cx, fmtBytes, GROUP_LABEL, GROUP_ORDER, groupOfType } from '../lib/util';
+import type { BottomTab } from '../store/ui';
+import type { BuildState, UiProblem } from '../lib/types';
+import type { TypeGroup } from '@kickreasm/core';
+
+export function LogList({ items, onNavigate, empty }: { items: UiProblem[]; onNavigate: (a: Addr) => void; empty: string }) {
+  if (!items.length) return <div className="empty">{empty}</div>;
+  return (
+    <div className="loglist">
+      {items.map((l, i) => (
+        <div key={i} className={cx('logrow', `lvl-${l.lvl}`)}>
+          <Icon name={LVL_ICON[l.lvl] || 'info'} size={14} className="lvl-icon" />
+          <span className="log-cat">{l.cat}</span>
+          <span className="log-msg">{l.msg}</span>
+          {l.action && <button className="btn small primary log-action" onClick={l.action.run}>{l.action.label}</button>}
+          {l.addr != null && <button className="addr-link" onClick={() => onNavigate(l.addr!)}>${h4(l.addr)}</button>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const XREF_KIND: Record<string, string> = { call: 'call', jump: 'jump', branch: 'branch', read: 'read', write: 'write', rmw: 'read+write', ptr: 'pointer' };
+
+export function XrefPanel({ A, R, cursor, onNavigate, S }: { A: AnalysisResult; R: RenderResult; cursor: Addr | null; onNavigate: (a: Addr) => void; S: Settings }) {
+  if (cursor == null) return <div className="empty">Place the cursor on a line to see who references it.</div>;
+  const ins = A.insLen[cursor] ? cursor : A.codeOwner[cursor] >= 0 ? A.codeOwner[cursor] : cursor;
+  const label = R.labels.get(ins);
+  const to = (A.xrefs.get(ins) || []).slice().sort((x, y) => x.from - y.from);
+  const text = (a: Addr) => { const l = R.lines.find(x => x.a === a && (x.k === 'ins' || x.k === 'dat')); return l ? lineText(l, S).trim().replace(/\s+\/\/.*$/, '') : ''; };
+  const outgoing: Addr[] = [];
+  if (A.insLen[ins]) { const d = decode(A.mem, ins); if (d.target != null) outgoing.push(d.target); }
+  return (
+    <div className="xref">
+      <div className="xref-head">References to <b className="mono">{label ? label.name : '$' + h4(ins)}</b> <span className="muted">(${h4(ins)})</span> — {to.length}</div>
+      {to.length ? (
+        <table className="tbl"><thead><tr><th>From</th><th>Kind</th><th>Instruction</th></tr></thead><tbody>
+          {to.map((x, i) => <tr key={i} onClick={() => onNavigate(x.from)}><td className="mono link-cell">${h4(x.from)}</td><td><span className={cx('kind', `kind-${x.kind}`)}>{XREF_KIND[x.kind] || x.kind}</span></td><td className="mono">{text(x.from)}</td></tr>)}
+        </tbody></table>
+      ) : <div className="empty small">No references. Entry points, vectors and data reached only through computed addresses have none.</div>}
+      {outgoing.length > 0 && <div className="xref-out">This instruction targets <button className="addr-link" onClick={() => onNavigate(outgoing[0])}>${h4(outgoing[0])}</button>{R.labels.get(outgoing[0]) ? <span className="mono"> {R.labels.get(outgoing[0])!.name}</span> : (hwSymbol(outgoing[0]) ? <span className="mono syn-hw"> {hwSymbol(outgoing[0])!.text}</span> : null)}</div>}
+    </div>
+  );
+}
+
+/** Every IRQ handler with the raster line it runs at (spec 8.11d), by line; a row goes to its handler. */
+export function RasterPanel({ A, R, onNavigate }: { A: AnalysisResult; R: RenderResult; onNavigate: (a: Addr) => void }) {
+  if (!A.raster.length) return <div className="empty">No IRQ handlers found: the trace finds them where the code sets $0314 or $fffe, and in a snapshot where its vectors point.</div>;
+  const link = (a: Addr | null) => a == null ? <span className="muted">—</span>
+    : <button className="addr-link" title={`$${h4(a)}`} onClick={e => { e.stopPropagation(); onNavigate(a); }}>{R.labels.get(a)?.name ?? `$${h4(a)}`}</button>;
+  const d011 = (r: RasterIrq) => !r.d011 ? '—' : r.d011.value != null ? `$${h2(r.d011.value)}` : r.d011.bit8 != null ? `bit 7 = ${r.d011.bit8}` : '?';
+  const handlers = new Set(A.raster.map(r => r.handler)).size;
+  return (
+    <div className="xref raster">
+      <div className="xref-head">{A.raster.length} raster interrupt{A.raster.length === 1 ? '' : 's'}, {handlers} handler{handlers === 1 ? '' : 's'} <span className="muted">· the line is $d012 with bit 7 of $d011 as bit 8 (0 where $d011 is not written)</span></div>
+      <table className="tbl" aria-label="Raster IRQs"><thead><tr><th>Line</th><th>$d012</th><th>$d011</th><th>Handler</th><th>Set at</th><th>By</th></tr></thead><tbody>
+        {A.raster.map((r, i) => (
+          <tr key={i} onClick={() => onNavigate(r.handler)}>
+            <td className="mono">{r.line != null ? `${r.line} ($${r.line.toString(16).padStart(3, '0')})` : '?'}</td>
+            <td className="mono">{r.d012 != null ? `$${h2(r.d012)}` : r.setAt != null ? '?' : '—'}</td>
+            <td className="mono">{d011(r)}</td>
+            <td className="mono">{link(r.handler)}</td>
+            <td className="mono">{link(r.setAt ?? r.installedAt)}</td>
+            <td>{r.from == null ? (r.installedAt == null ? <span className="muted">no line found</span> : 'main code') : r.from === r.handler && r.installedAt == null ? 'itself' : link(r.from)}{r.vector != null && <span className="muted"> via ${h4(r.vector)}</span>}</td>
+          </tr>
+        ))}
+      </tbody></table>
+    </div>
+  );
+}
+
+const MODE_NAME: Record<string, string> = { imp: 'implied', acc: 'accumulator', imm: 'immediate', zp: 'zero page', zpx: 'zp,x', zpy: 'zp,y', izx: '(zp,x)', izy: '(zp),y', rel: 'relative', abs: 'absolute', abx: 'abs,x', aby: 'abs,y', ind: 'indirect' };
+
+export function StatsPanel({ A }: { A: AnalysisResult }) {
+  const st = A.stats;
+  const top = Object.entries(st.mn).sort((a, b) => b[1] - a[1]).slice(0, 18);
+  const max = top.length ? top[0][1] : 1;
+  const modes = Object.entries(st.modes).sort((a, b) => b[1] - a[1]);
+  const modeMax = modes.length ? modes[0][1] : 1;
+  const groups: Partial<Record<TypeGroup, number>> = {};
+  for (const [t, n] of Object.entries(st.bytesByType)) { const g = groupOfType(+t); groups[g] = (groups[g] || 0) + n; }
+  const codePct = Math.round(100 * (groups.code || 0) / Math.max(1, st.total));
+  return (
+    <div className="stats">
+      <div className="tiles">
+        <div className="tile"><div className="tile-v">{st.ins}</div><div className="tile-l">instructions</div></div>
+        <div className="tile"><div className="tile-v">{codePct}%</div><div className="tile-l">of loaded bytes are code</div></div>
+        <div className="tile"><div className="tile-v">{A.blocks.length}</div><div className="tile-l">blocks</div></div>
+        <div className="tile"><div className="tile-v">{st.xrefs}</div><div className="tile-l">cross-references</div></div>
+        <div className="tile"><div className="tile-v">{st.illegal}</div><div className="tile-l">undocumented opcodes</div></div>
+        <div className="tile"><div className="tile-v">{st.ms.toFixed(1)} ms</div><div className="tile-l">analysis time (worker)</div></div>
+      </div>
+      <div className="stat-cols">
+        <section>
+          <h4>Memory composition <span className="muted">({fmtBytes(st.total)} loaded)</span></h4>
+          <div className="stack" role="img" aria-label="Share of loaded bytes per classification">
+            {GROUP_ORDER.filter(g => groups[g]).map(g => <span key={g} style={{ flex: groups[g], background: `var(--g-${g})` }} title={`${GROUP_LABEL[g]}: ${groups[g]} bytes`} />)}
+          </div>
+          <ul className="legend">{GROUP_ORDER.filter(g => groups[g]).map(g => <li key={g}><i style={{ background: `var(--g-${g})` }} />{GROUP_LABEL[g]} <span className="muted mono">{fmtBytes(groups[g]!)}</span></li>)}</ul>
+          <h4>Addressing modes</h4>
+          <div className="bars">{modes.map(([m, n]) => <div key={m} className="bar-row" title={`${MODE_NAME[m]}: ${n}`}><span className="bar-l">{MODE_NAME[m]}</span><span className="bar-track"><span className="bar alt" style={{ width: `${(n / modeMax) * 100}%` }} /></span><span className="bar-v">{n}</span></div>)}</div>
+        </section>
+        <section>
+          <h4>Opcode frequency <span className="muted">(top {top.length})</span></h4>
+          <div className="bars">{top.map(([m, n]) => { const ill = OPC.some(o => o.mn === m && o.ill) && !OPC.some(o => o.mn === m && !o.ill); return <div key={m} className="bar-row" title={`${m}: ${n}`}><span className={cx('bar-l mono', ill && 'syn-ill')}>{kickMnemonic(m)}</span><span className="bar-track"><span className="bar" style={{ width: `${(n / max) * 100}%` }} /></span><span className="bar-v">{n}</span></div>; })}</div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+interface BuildPanelProps { build: BuildState | null; S: Settings; names: string[]; stale: boolean; busy: string | null; onVerify: () => void; onRun: () => void; onCopy: (s: string) => void }
+
+export function BuildPanel({ build, S, names, stale, busy, onVerify, onRun, onCopy }: BuildPanelProps) {
+  const name = names[0] || 'main';
+  const q = (s: string) => (/\s/.test(s) ? `"${s}"` : s);
+  const kickCmd = `${q(S.javaPath)} -jar ${q(S.kickJar)} ${name}.asm -odir ${S.outDir} ${S.kickArgs}`;
+  const viceCmd = `${q(S.vicePath)} ${S.viceArgs} -moncommands ${S.outDir}/${name}.vs -autostart ${S.outDir}/${name}.prg`;
+  return (
+    <div className="build">
+      <div className="build-actions">
+        <button className="btn" onClick={onVerify} disabled={!!busy}><Icon name="check" />Verify round-trip</button>
+        <button className="btn primary" onClick={onRun} disabled={!!busy}><Icon name="play" />Build &amp; run</button>
+        {busy ? <span className="small text-accent-hi">{busy}…</span> : <span className="muted small">The main process runs these with argument arrays (no shell), in a temporary build folder:</span>}
+      </div>
+      <div className="cmd"><code>{kickCmd}</code><button className="icon-btn" title="Copy command" onClick={() => onCopy(kickCmd)}><Icon name="copy" size={14} /></button></div>
+      <div className="cmd"><code>{viceCmd}</code><button className="icon-btn" title="Copy command" onClick={() => onCopy(viceCmd)}><Icon name="copy" size={14} /></button></div>
+      {build ? (
+        <>
+          <div className="mb-2 flex flex-wrap gap-2 text-[11.5px]">
+            <span className={cx('rounded border px-2 py-0.5', build.V.ok ? 'border-ok text-ok' : 'border-err text-err')}>built-in verifier: {build.V.ok ? 'byte-identical' : 'differences'}</span>
+            {build.kick
+              ? <span className={cx('rounded border px-2 py-0.5', build.kick.ok ? 'border-ok text-ok' : 'border-err text-err')}>KickAss.jar: {build.kick.ok ? 'byte-identical' : `${build.kick.problems.length} problem${build.kick.problems.length === 1 ? '' : 's'}`}</span>
+              : <span className="rounded border border-line-2 px-2 py-0.5 text-fg-3">KickAss.jar: not run (set its path in Settings → Toolchain)</span>}
+          </div>
+          <pre className={cx('build-log', build.ok ? 'ok' : 'bad', stale && 'stale')}>{stale && '(project changed since this run — verify again)\n'}{build.log}</pre>
+        </>
+      ) : <div className="empty small">Run “Verify round-trip” to re-assemble the generated source with the built-in verifier and, when KickAss.jar is configured, with the real Kick Assembler, then compare every byte with the original PRG.</div>}
+    </div>
+  );
+}
+
+export const BOTTOM_TABS: [BottomTab, string][] = [['log', 'Analysis log'], ['problems', 'Problems'], ['xrefs', 'Cross-references'], ['irqs', 'Raster IRQs'], ['stats', 'Statistics'], ['build', 'Build output']];

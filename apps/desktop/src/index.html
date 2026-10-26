@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- No remote code: Monaco, fonts and the analysis worker are bundled locally (spec 4.2). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>KickReasm Studio</title>
+  </head>
+  <body>
+    <div id="root"><div class="boot">Starting KickReasm Studio…</div></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

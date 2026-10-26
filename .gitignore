@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+out/
+release/
+*.tsbuildinfo
+
+# test output
+coverage/
+test-results/
+playwright-report/
+# scratch output from the KickAss integration test and CLI runs
+.kickass-tmp/
+
+# logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# local editor and tool settings
+.claude/
+.vscode/
+.idea/
+.env
+.env.*
+
+# the original single-file prototype (not needed to build or run; the differential test has its own copy in
+# packages/core/test/reference/)
+prototype-src/
+kickreasm-studio.html
