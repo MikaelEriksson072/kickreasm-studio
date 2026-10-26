@@ -10,7 +10,7 @@
     "preview": "electron-vite preview",
     "test": "vitest run",
     "e2e": "electron-vite build && playwright test",
-    "package": "electron-vite build && electron-builder --win --publish never",
+    "package": "electron-vite build && node -e \"require('electron')\" && electron-builder --win --publish never",
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && tsc -p e2e/tsconfig.json"
   },
   "dependencies": {

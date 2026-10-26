@@ -126,8 +126,9 @@ Exomizer 3.1.1 (Magnus Lind) is in `resources\exomizer\` the same way, from `app
 a setting that points at a file that is gone gets the bundled one, and an empty setting is kept.
 
 The package holds `out/` and the production dependencies (only `zod`; `@kickreasm/core` is bundled into `out/` by
-electron-vite, so it is a dev dependency). Electron is taken from `node_modules/electron/dist`, not downloaded; the
-NSIS tools are downloaded once into the electron-builder cache. The exe is not code-signed and uses the default
+electron-vite, so it is a dev dependency). Electron is taken from `node_modules/electron/dist`. Electron 44 has no install
+script: it fetches its binary the first time it is required, so the package script does `node -e "require('electron')"`
+before electron-builder (a fresh clone has no binary until then). The NSIS tools are downloaded once into the electron-builder cache. The exe is not code-signed and uses the default
 Electron icon. Like `pnpm dev`, the packaged app keeps its settings in `%APPDATA%\@kickreasm\desktop\settings.json`
 (the app name comes from `package.json`); KickAss.jar and x64sc are found the same way as in development.
 
