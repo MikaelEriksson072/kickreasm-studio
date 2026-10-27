@@ -37,7 +37,8 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
 - **A Memory tab.** It prints memory the way the VICE monitor does (`m`, `i`, `ii`).
 - **Every edit still assembles, and every edit can be undone:**
   - rename labels and comment lines;
-  - mark ranges as code, bytes, words or text;
+  - mark ranges as code, bytes, words or text, and write data, tables and words in hex, decimal or binary, as many
+    a row as you like;
   - merge blocks, or drag a byte into the block next to it;
   - set the memory configuration for a range, keep bookmarks and fold blocks;
   - leave blocks out of the build, or save them as binary files.

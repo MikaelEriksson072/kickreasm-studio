@@ -2081,3 +2081,38 @@ test('the Raster IRQs panel lists every IRQ handler with its $d012 and $d011 and
   await row.getByRole('button', { name: '$0836' }).click();
   await expect(statusBar(page)).toContainText('$0836');
 });
+
+test('the inspector writes a table in binary or decimal and words as numbers, several a row', async ({ page }) => {
+  await waitForListing(page);
+  const format = page.getByRole('group', { name: 'Number format' });
+  await goTo(page, 'colors_0939');
+  await expect(format.getByRole('button', { name: 'Hex' })).toHaveAttribute('aria-pressed', 'true');
+
+  await test.step('a table: binary, then 4 bytes a row', async () => {
+    await format.getByRole('button', { name: 'Bin' }).click();
+    await expect(format.getByRole('button', { name: 'Bin' })).toHaveAttribute('aria-pressed', 'true');
+    expect(rowAt(await listingRows(page), '0939')?.text).toMatch(/^\.byte %00000110, %00001110, %00000011/);
+    await page.getByLabel('Bytes per row').fill('4');
+    await page.getByLabel('Bytes per row').press('Enter');
+    expect(rowAt(await listingRows(page), '0939')?.text).toBe('.byte %00000110, %00001110, %00000011, %00000001');
+    expect(rowAt(await listingRows(page), '093d')?.text).toMatch(/^\.byte %00000011/);
+  });
+
+  await test.step('the same bytes as words: addresses by default, then decimal, 4 a row; F7 verifies', async () => {
+    await listing(page).focus();
+    await page.keyboard.press('w');
+    await expect(format.getByRole('button', { name: 'Addr' })).toHaveAttribute('aria-pressed', 'true');
+    expect(rowAt(await listingRows(page), '0939')?.text).toBe('.word $0e06');
+    await format.getByRole('button', { name: 'Dec' }).click();
+    await page.getByLabel('Words per row').fill('4');
+    await page.getByLabel('Words per row').press('Enter');
+    expect(rowAt(await listingRows(page), '0939')?.text).toBe('.word 3590, 259, 3587, 6');
+    await listing(page).focus();
+    await page.keyboard.press('F7');
+    await expect(statusBar(page)).toContainText('✓ round-trip verified', { timeout: 90_000 });
+    // Ctrl+Z goes back to addresses
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Control+z');
+    expect(rowAt(await listingRows(page), '0939')?.text).toBe('.word $0e06');
+  });
+});

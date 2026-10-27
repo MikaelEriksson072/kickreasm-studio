@@ -446,6 +446,10 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .field input, .field textarea { border-radius: 6px; border: 1px solid var(--line-2); background: var(--editor); padding: 5px 8px; outline: none; color: var(--fg); resize: vertical; }
 .field input { height: 28px; }
 .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+.field input.bad { border-color: var(--err); }
+.fmt-fields { display: flex; gap: 12px; align-items: flex-start; }
+.fmt-fields .seg.fmt-seg { margin-left: 0; align-self: flex-start; }
+.fmt-fields .fmt-row input { width: 64px; }
 .check { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; margin: 6px 0; color: var(--fg); }
 .check input { margin-top: 2px; accent-color: var(--accent); }
 .gfx-box { display: grid; place-items: center; padding: 10px; border-radius: 6px; background: #161434; border: 1px solid var(--line); }

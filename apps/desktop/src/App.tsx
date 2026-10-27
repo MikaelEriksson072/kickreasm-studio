@@ -6,8 +6,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   bankRange, buildScripts, comparePrg, createProject, cyclePath, d64FileName, detectPacking, makePrg, mergeOverride, portName, portText, deserializeProject, exportFiles, findBlock, h2, h4, kindInfo, lineMove, lineText, MARK_AS, MARK_TYPE, moveBlockKeys,
-  openC64File, overwritesSystemArea, parseVsf, patchSnapshot, editRanges, showcaseProject, parseD64, parsePrg, projectNameFor, rangeCover, readD64File, projectTextFiles, shellWord, SYSTEM_AREA, TOOLCHAIN_KEYS, validLabel, withId,
-  type Addr, type AnalysisResult, type Bookmark, type BuildScript, type ByteMove, type D64File, type Override, type PackingInfo, type PackPrefs, type KickProblem, type ListingLine, type LoadedFile, type Project, type RenderResult,
+  formatOverride, openC64File, overwritesSystemArea, parseVsf, patchSnapshot, editRanges, showcaseProject, parseD64, parsePrg, projectNameFor, rangeCover, readD64File, projectTextFiles, shellWord, SYSTEM_AREA, TOOLCHAIN_KEYS, validLabel, withId,
+  type Addr, type AnalysisResult, type Block, type Bookmark, type BuildScript, type ByteMove, type D64File, type NumberFormat, type Override, type PackingInfo, type PackPrefs, type KickProblem, type ListingLine, type LoadedFile, type Project, type RenderResult,
   type SerializedProject, type Settings, type Token, type ToolchainSettings, type VerifyResult,
 } from '@kickreasm/core';
 import { useProject } from './store/project';
@@ -302,6 +302,11 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     const merged = id === 'code' ? 0 : A.blocks.filter(b => b.start < r.end && b.end > r.start).length;
     update(`Mark $${h4(r.start)}-$${h4(r.end - 1)} as ${m ? m.label : id}`, d => { d.overrides.push({ start: r.start, end: r.end, type: MARK_TYPE[id], ...(m?.props ? { props: { ...m.props } } : {}) }); });
     toast(`$${h4(r.start)}–$${h4(r.end - 1)} marked as ${m ? m.label : id}${merged > 1 ? `, merging ${merged} blocks into one` : ''}`, 'ok');
+  };
+  /** a data, table or word block's number format and items a row (an override like the block, with them) */
+  const setFormat = (b: Block, change: { fmt?: NumberFormat | null; row?: number | null }) => {
+    const what = change.fmt !== undefined ? `${change.fmt === 'bin' ? 'binary' : change.fmt === 'dec' ? 'decimal' : change.fmt === 'hex' ? 'hex' : 'addresses'} numbers` : `${change.row ?? 'default'} a row`;
+    update(`$${h4(b.start)}-$${h4(b.end - 1)}: ${what}`, d => { d.overrides.push(formatOverride(b, change, d.overrides)); });
   };
   /** the code in `r` runs with this $01 value / VIC bank; null returns it to detection */
   const setBankZone = (r: Range, part: 'port' | 'vicBank', v: number | null) => {
@@ -1088,7 +1093,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       <aside className="insp-col"><ErrorBoundary>
         <Inspector A={A} R={R} project={project} cursor={cursor} sel={sel} colors={colors} heatMode={heatMode} setHeatMode={setHeatMode}
           onNavigate={nav} onSelect={(s, e) => { setSel({ start: s, end: e, multi: true, anchor: s }); setCursor(s); }}
-          onMark={mark} onMerge={mergeBlock} onMergeRange={() => setModal('merge')} onToggleExcluded={toggleExcluded} onToggleBinary={toggleBinary} onBankZone={setBankZone} onRename={(a, n) => rename(a, n)} onBlockComment={setBlockComment}
+          onMark={mark} onMerge={mergeBlock} onMergeRange={() => setModal('merge')} onToggleExcluded={toggleExcluded} onToggleBinary={toggleBinary} onFormat={setFormat} onBankZone={setBankZone} onRename={(a, n) => rename(a, n)} onBlockComment={setBlockComment}
           zpVar={pickedDef?.zp && pickedDef.at === cursor ? pickedDef.addr : null} onZpNote={(a, t) => setNote(a, t, !!project.notes[a]?.block)} onZpComment={(a, t) => { if ((project.comments[a] || '') !== t) setComment(a, t); }} onClearOverride={b => clearOverride({ start: b.start, end: b.end })}
           cycles={cycles && path ? { path, onToggle: toggleTaken } : null} />
       </ErrorBoundary></aside>

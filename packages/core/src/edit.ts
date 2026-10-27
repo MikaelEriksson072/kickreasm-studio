@@ -1,5 +1,5 @@
 /* Editing helpers the UI and the CLI share: they turn an intent into the override that does it. */
-import type { Addr, AnalysisResult, Block, BlockKind, ListingLine, Override, OverrideProps, Project } from './types';
+import type { Addr, AnalysisResult, Block, BlockKind, ListingLine, NumberFormat, Override, OverrideProps, Project } from './types';
 import { findBlock } from './analyze/classify';
 import { MARK_AS, MARK_TYPE } from './model';
 import { h4 } from './util/hex';
@@ -18,13 +18,31 @@ export interface BlockMerge {
 const AS_OVERRIDE: Partial<Record<BlockKind, BlockKind>> = { lohi: 'data', basic: 'data' };
 
 /** An override that gives `start`..`end` the type and settings of block `b` (text encoding, table kind, number
- *  format and row length, music init/play). */
+ *  format and row length of data, tables and words, music init/play). */
+/** The blocks whose numbers can be written in another format, and how many go on a row: data, tables and words. */
+export const FORMATTABLE: readonly BlockKind[] = ['data', 'table', 'words'];
+
+/**
+ * The override that gives block `b` a number format (`hex`, `dec` or `bin`; null: the default, which for words is
+ * addresses) or a count of items a row (null: the default), keeping its type and its other settings. `overrides`
+ * are the project's: the last one over exactly the block gives the settings, so a second change made before the
+ * analysis has caught up with the first keeps the first.
+ */
+export function formatOverride(b: Block, change: { fmt?: NumberFormat | null; row?: number | null }, overrides: readonly Override[] = []): Override {
+  const o = overrideLike(b, b.start, b.end);
+  const last = [...overrides].reverse().find(x => x.start === o.start && x.end === o.end);
+  const props: OverrideProps = { ...(last && last.type === o.type ? last.props : o.props) };
+  if (change.fmt !== undefined) { if (change.fmt && !(change.fmt === 'hex' && b.type !== 'words')) props.fmt = change.fmt; else delete props.fmt; }
+  if (change.row !== undefined) { if (change.row) props.row = change.row; else delete props.row; }
+  return { start: o.start, end: o.end, type: o.type, ...(Object.keys(props).length ? { props } : {}) };
+}
+
 function overrideLike(b: Block, start: Addr, end: Addr): Override {
   const type = AS_OVERRIDE[b.type] ?? b.type;
   const p = b.props, props: OverrideProps = {};
   if (type === 'text' && p.enc) props.enc = p.enc;
   if (type === 'table' && p.sub) props.sub = p.sub;
-  if (type === 'data') { if (p.fmt) props.fmt = p.fmt; if (p.row) props.row = p.row; }
+  if (type === 'data' || type === 'table' || type === 'words') { if (p.fmt) props.fmt = p.fmt; if (p.row) props.row = p.row; }
   if (type === 'music') { if (p.init != null) props.init = p.init; if (p.play != null) props.play = p.play; }
   return { start, end, type, ...(Object.keys(props).length ? { props } : {}) };
 }

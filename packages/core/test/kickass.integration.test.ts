@@ -7,7 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { analyze, comparePrg, h4, makeDemo, OPC, openC64File, parsePrg, render, showcaseProject, type ProjectInput } from '../src';
+import { analyze, comparePrg, formatOverride, h4, makeDemo, OPC, openC64File, parsePrg, render, showcaseProject, type ProjectInput } from '../src';
 import { findKickAssJar, runKickAssembler, writeVfs } from '../src/node';
 import { allOpcodesProgram, fromSource, randomPrg, seededProject, SETTING_VARIANTS, zeroPageProgram } from './helpers/programs';
 
@@ -30,6 +30,12 @@ function cases(): Case[] {
     // a dump to $ffff that sets its own IRQ vector and reads RAM under the KERNAL, its top 8 KB one binary block
     const dump = fromSource('dump.prg', '.pc = $0801\n.byte $0b,$08,$0a,$00,$9e,$32,$30,$36,$31,$00,$00,$00\n.pc = $080d\n sei\n lda #<irq\n sta $fffe\n lda #>irq\n sta $ffff\n lda #$35\n sta $01\n lda $eaa5\n sta $d020\n cli\n jmp *\nirq:\n rti\n.pc = $e000\n .byte 1,2,3,4\n.pc = $ffff\n .byte 0');
     for (const hwInclude of ['import', 'none'] as const) out.push({ name: `dump over the CPU vectors, binary top block (hwInclude ${hwInclude})`, project: { name: 'dump', files: [dump], overrides: [{ start: 0xe000, end: 0x10000, type: 'charset' }], binary: [0xe000], settings: { hwInclude } } });
+  }
+  {
+    // number formats: the colour table in binary, 4 a row, and the same bytes as words in decimal and binary
+    const A = analyze(demo()), colors = A.blocks.find(b => b.start === 0x0939)!;
+    out.push({ name: 'demo/a table in binary, 4 a row', project: { ...demo(), overrides: [formatOverride(colors, { fmt: 'bin', row: 4 })] } });
+    for (const fmt of ['dec', 'bin', 'hex'] as const) out.push({ name: `demo/words in ${fmt}, 3 a row`, project: { ...demo(), overrides: [{ start: 0x0939, end: 0x0949, type: 'words' }, { start: 0x0939, end: 0x0949, type: 'words', props: { fmt, row: 3 } }] } });
   }
   const snap = openC64File('raster-demo.vsf', new Uint8Array(readFileSync(join(__dirname, '../../../fixtures/vsf/raster-demo.vsf'))));
   out.push({ name: 'VICE snapshot (RAM $0200-$ffff, entries at the PC and the IRQ handler)', project: { name: 'snapshot', files: [snap], entries: snap.entries } });

@@ -40,7 +40,7 @@ export { parseKickOutput } from './verify/kick-output';
 export { DEMO_FONT, makeDemo } from './demo';
 export type { DemoProgram } from './demo';
 export { makeShowcase, showcaseProject, type ShowcaseProgram } from './showcase';
-export { lineMove, markIdOf, mergeOverride, mergeRange, moveBlockKeys, moveBytes, type BlockMerge, type ByteMove, type RangeMerge } from './edit';
+export { FORMATTABLE, formatOverride, lineMove, markIdOf, mergeOverride, mergeRange, moveBlockKeys, moveBytes, type BlockMerge, type ByteMove, type RangeMerge } from './edit';
 export { createProject, demoProject, serializeProject, deserializeProject, projectNameFor, withId, newId, b64enc, b64dec } from './project';
 export { buildScripts, BUILD_SCRIPTS, readme, projectScripts, projectTextFiles, exportFiles } from './export';
 export { NOTES_FILE, NOTES_TEXT_FILE, notesDocument, notesExport, notesFile, notesFor, notesText, lineHtml } from './notes-doc';

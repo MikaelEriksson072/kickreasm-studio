@@ -1,7 +1,7 @@
 /* Inspector (right column): memory map, block evidence/type/label/comment (or the zero-page variable whose .label line
  * was clicked: its name and comments), graphics/music/text preview. */
 import { useEffect, useMemo, useState } from 'react';
-import { textEncoding, ALL_BANKS, bankRange, banksOf, describePorts, findBlock, h2, h4, kindInfo, MARK_AS, mergeOverride, OPC, portName, portsOf, portText, type Addr, type AnalysisResult, type Block, type CyclePath, type Project, type RenderResult } from '@kickreasm/core';
+import { textEncoding, ALL_BANKS, bankRange, banksOf, describePorts, findBlock, h2, h4, kindInfo, MARK_AS, mergeOverride, OPC, portName, portsOf, portText, type Addr, type AnalysisResult, type Block, type CyclePath, type Project, type RenderResult, FORMATTABLE, type NumberFormat } from '@kickreasm/core';
 import type { TypeGroup } from '@kickreasm/core';
 import { Icon } from '../lib/icons';
 import { cx, GROUP_LABEL, GROUP_ORDER, groupOfType } from '../lib/util';
@@ -24,6 +24,8 @@ interface InspectorProps {
   onToggleExcluded: (at: Addr) => void;
   /** save the block as data/<label>.bin (loaded with .import binary), or write it in the source again */
   onToggleBinary: (at: Addr) => void;
+  /** the number format of a data, table or word block (null: the default) and how many items a row (null: the default) */
+  onFormat: (b: Block, change: { fmt?: NumberFormat | null; row?: number | null }) => void;
   /** cycle counting on: the counted range and how to mark a branch as taken */
   cycles?: { path: CyclePath; onToggle: (pc: Addr) => void } | null;
   /** the zero-page variable whose `.label` line in the file head was clicked (it has no block of its own) */
@@ -34,7 +36,7 @@ interface InspectorProps {
 
 const MARK_ID: Record<string, string> = { code: 'code', data: 'bytes', words: 'words', table: 'table', sprite: 'sprite', charset: 'charset', bitmap: 'bitmap', screen: 'screen', music: 'music', fill: 'fill' };
 
-export function Inspector({ A, R, project, cursor, sel, colors, heatMode, setHeatMode, onNavigate, onSelect, onMark, onRename, onBlockComment, onClearOverride, onBankZone, onMerge, onMergeRange, onToggleExcluded, onToggleBinary, cycles, zpVar, onZpNote, onZpComment }: InspectorProps) {
+export function Inspector({ A, R, project, cursor, sel, colors, heatMode, setHeatMode, onNavigate, onSelect, onMark, onRename, onBlockComment, onClearOverride, onBankZone, onMerge, onMergeRange, onToggleExcluded, onToggleBinary, onFormat, cycles, zpVar, onZpNote, onZpComment }: InspectorProps) {
   const blk = cursor != null ? findBlock(A.blocks, cursor) : null;
   const fit = useUi(s => s.heatFit), setUi = useUi(s => s.set);
   const [view, setView] = useState<'auto' | GfxMode>('auto');
@@ -82,6 +84,7 @@ export function Inspector({ A, R, project, cursor, sel, colors, heatMode, setHea
               {blk.type === 'basic' && <option value="">BASIC (detected)</option>}
               {blk.user && <option value="auto">Automatic (clear override)</option>}
             </select></label>
+          {FORMATTABLE.includes(blk.type) && <FormatFields blk={blk} defaultRow={blk.type === 'words' ? 1 : A.S.bytesPerRow} onFormat={onFormat} />}
           <label className="check"><input type="checkbox" aria-label="Include in the build" checked={!project.excluded.includes(blk.start)} onChange={() => onToggleExcluded(blk.start)} /><span>Include in the build<small className="muted"> — when off, the block stays in the source under #if and its bytes are left out</small></span></label>
           <label className="check"><input type="checkbox" aria-label="Save as a binary file" checked={project.binary.includes(blk.start)} onChange={() => onToggleBinary(blk.start)} /><span>Save as a binary file<small className="muted"> — the export writes <span className="mono">data/{lb ? lb.name : `block_${h4(blk.start)}`}.bin</span> and the source loads it with .import binary</small></span></label>
           <div className="merge-row">
@@ -125,6 +128,43 @@ export function Inspector({ A, R, project, cursor, sel, colors, heatMode, setHea
 }
 
 /** what a code block runs with ($01, VIC bank): detected, or set by the user for the block */
+/** How a data, table or word block writes its numbers: hex, decimal or binary (bits), or for words also as addresses
+ *  (labels, the default), and how many go on a row. */
+function FormatFields({ blk, defaultRow, onFormat }: { blk: Block; defaultRow: number; onFormat: InspectorProps['onFormat'] }) {
+  const words = blk.type === 'words';
+  const fmt = blk.props.fmt ?? (words ? null : 'hex');
+  const opts: [NumberFormat | null, string, string][] = [
+    ...(words ? [[null, 'Addr', 'Addresses: a label where a word points into the program (.word sub_1000)'] as [null, string, string]] : []),
+    ['hex', 'Hex', words ? 'Hexadecimal numbers (.word $1234)' : 'Hexadecimal (.byte $12)'],
+    ['dec', 'Dec', words ? 'Decimal numbers (.word 4660)' : 'Decimal (.byte 18)'],
+    ['bin', 'Bin', words ? 'Binary, the bits of each word (.word %0001001000110100)' : 'Binary, the bits of each byte (.byte %00010010)'],
+  ];
+  const row = blk.props.row ?? defaultRow;
+  const [text, setText] = useState(String(row));
+  const [bad, setBad] = useState(false);
+  useEffect(() => { setText(String(row)); setBad(false); }, [blk.start, row]);
+  const take = (t = text) => {
+    const n = Number(t.trim());
+    if (!Number.isInteger(n) || n < 1 || n > 64) { setBad(true); return; }
+    setBad(false);
+    if (n !== row) onFormat(blk, { row: n === defaultRow ? null : n });
+  };
+  return (
+    <div className="fmt-fields">
+      <div className="field"><span>Format</span>
+        <div className="seg fmt-seg" role="group" aria-label="Number format">
+          {opts.map(([k, l, t]) => <button key={l} className={cx(fmt === k && 'on')} aria-pressed={fmt === k} title={t} onClick={() => { if (fmt !== k) onFormat(blk, { fmt: k }); }}>{l}</button>)}
+        </div></div>
+      <label className="field fmt-row" title={`1 to 64 ${words ? 'words' : 'bytes'} on a line of the source; ${defaultRow} is the default${words ? '' : ' (Settings → Kick Assembler output)'}`}><span>{words ? 'Words per row' : 'Bytes per row'}</span>
+        <input className={cx('mono', bad && 'bad')} value={text} inputMode="numeric" spellCheck={false} onChange={e => { setText(e.target.value); setBad(false); }} onBlur={() => take()}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); take(); }
+            else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); const n = Math.min(64, Math.max(1, (Number(text) || row) + (e.key === 'ArrowUp' ? 1 : -1))); setText(String(n)); take(String(n)); }
+          }} /></label>
+    </div>
+  );
+}
+
 function MemoryFields({ A, blk, onBankZone }: { A: AnalysisResult; blk: Block; onBankZone: InspectorProps['onBankZone'] }) {
   const m = A.mcfg!;
   const port = m.port[blk.start], vic = m.vic[blk.start];

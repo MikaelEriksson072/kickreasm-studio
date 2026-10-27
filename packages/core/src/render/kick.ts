@@ -390,13 +390,23 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
       case 'words': {
         label(b.start);
         if (hiddenLabel(b.start + 1, b.start + ((b.end - b.start) & ~1), 2)) { dataRows(out, b.start, b.end, ctx, {}); break; }
-        let p = b.start;
-        for (; p + 1 < b.end; p += 2) {
-          if (p !== b.start) label(p);
-          const v = mem[p] | (mem[p + 1] << 8);
+        // without a number format the words are addresses (labels where they point into the program), one a row
+        const fmt = b.props.fmt, row = b.props.row || 1;
+        const word = (q: Addr): Token[] => {
+          const v = mem[q] | (mem[q + 1] << 8);
+          if (fmt) return [{ t: 'num', s: fmt === 'bin' ? '%' + v.toString(2).padStart(16, '0') : fmt === 'dec' ? String(v) : n4(v) }];
           // a bare number is widened to 4 digits; offsets in `label+n` must stay as they are
           const tk = addrTokens(v, Object.assign({}, ctx, { zpWidth: false }));
-          out.push({ k: 'dat', a: p, n: 2, dir: '.word', tok: tk.length === 1 && tk[0].t === 'num' ? [Object.assign({}, tk[0], { s: n4(v) })] : tk, cmt: '' });
+          return tk.length === 1 && tk[0].t === 'num' ? [Object.assign({}, tk[0], { s: n4(v) })] : tk;
+        };
+        let p = b.start;
+        while (p + 1 < b.end) {
+          if (p !== b.start) label(p);
+          const items: Token[][] = [];
+          let q = p;
+          while (q + 1 < b.end && items.length < row && !(q !== p && (labelAt(q) || breakAt(q)))) { items.push(word(q)); q += 2; }
+          out.push({ k: 'dat', a: p, n: q - p, dir: '.word', tok: joinList(items), cmt: '' });
+          p = q;
         }
         // an odd trailing byte (or a 1-byte block, whose label was already written above)
         if (p < b.end) { if (p !== b.start) label(p); dataRows(out, p, b.end, ctx, {}); }
