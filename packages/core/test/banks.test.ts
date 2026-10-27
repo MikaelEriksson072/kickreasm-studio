@@ -227,6 +227,26 @@ describe('VIC bank', () => {
     const ram = run(fromSource('p.prg', '.pc = $c000\n lda #$34\n sta $01\n lda #$02\n sta $dd00\n rts'));
     expect([...ram.A.vic.banks]).toEqual([0]);
   });
+
+  it('counts $d018 in the bank a $dd00 store right after it selects', () => {
+    const { A } = run(fromSource('p.prg', '.pc = $8000\n lda #$32\n sta $d018\n lda #$00\n sta $dd00\n rts\n.pc = $c800\n .fill 2048, $81\n'));
+    expect([...A.vic.banks]).toEqual([3]);
+    expect(A.blocks.find(b => b.type === 'charset')).toMatchObject({ start: 0xc800, reason: '$d018=$32 selects charset at $c800' });
+  });
+
+  it('goes on from a snapshot with the VIC bank its $dd00 holds, and never puts graphics over the zero page and the stack', () => {
+    const src = '.pc = $8000\nloop: lda #$30\n sta $d018\n jmp loop\n.pc = $c000\n .fill 2048, $81\n';
+    // $dd00 = $00 with $dd02 = $3f: bank 3, so the charset is at $c000
+    const bank3 = openC64File('snap.vsf', snapshotOf(src, 0x8000, [0x37, 0x2f], [0x00, 0x3f]));
+    const a = run(bank3, { entries: bank3.entries }).A;
+    expect(a.mcfg!.vic[0x8000]).toBe(bit(3));
+    expect(a.blocks.find(b => b.type === 'charset')).toMatchObject({ start: 0xc000, reason: '$d018=$30 selects charset at $c000' });
+    // without CIA 2's state: bank 0, where $d018 = $30 would show the zero page and the stack
+    const bank0 = openC64File('snap.vsf', snapshotOf(src, 0x8000));
+    const b = run(bank0, { entries: bank0.entries }).A;
+    expect(b.blocks.some(x => x.type === 'charset')).toBe(false);
+    expect(b.log.some(l => l.msg === '$d018=$30 would put the charset at $0000, over the zero page and the stack, which the CPU changes all the time, so it is not taken as one')).toBe(true);
+  });
 });
 
 describe('bank zones', () => {

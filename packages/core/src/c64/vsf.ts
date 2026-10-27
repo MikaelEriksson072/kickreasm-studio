@@ -1,5 +1,5 @@
 /* VICE snapshots (.vsf): the C64's 64 KB of RAM, the CPU port and the CPU registers, from the snapshot's C64MEM and
- * MAINCPU modules. A snapshot opens like a PRG: its RAM from $0200 is the file, and the code the CPU was running and
+ * MAINCPU modules, and CIA 2's port A (the VIC bank) from its CIA2 module. A snapshot opens like a PRG: its RAM from $0200 is the file, and the code the CPU was running and
  * its interrupt handlers become entry points (spec 13.7). The snapshot itself is kept, so that Build & Run can restart
  * it as it was, with the built program in its RAM (patchSnapshot). */
 import type { Addr } from '../types';
@@ -31,6 +31,8 @@ export interface Snapshot {
   port: { dir: number; data: number };
   /** the CPU registers, when the MAINCPU module could be read */
   cpu: { pc: Addr; a: number; x: number; y: number; sp: number; status: number } | null;
+  /** CIA 2's port A ($dd00) and its direction ($dd02), when the CIA2 module could be read */
+  cia2: { pra: number; ddra: number } | null;
 }
 
 const text = (b: Uint8Array, at: number, n: number) => String.fromCharCode(...b.subarray(at, at + n));
@@ -61,8 +63,15 @@ export function parseVsf(b: Uint8Array, name = 'snapshot'): Snapshot {
   const cpuMod = modules.find(m => m.name === 'MAINCPU');
   const clk = version[0] >= 2 ? 8 : 4;
   const cpu = cpuMod && cpuMod.size >= clk + 7 ? (o => ({ a: b[o], x: b[o + 1], y: b[o + 2], sp: b[o + 3], pc: b[o + 4] | (b[o + 5] << 8), status: b[o + 6] }))(cpuMod.offset + clk) : null;
-  return { machine, version, vice, modules, ram, port, cpu };
+  // CIA2: PRA, PRB, DDRA, DDRB first
+  const ciaMod = modules.find(m => m.name === 'CIA2');
+  const cia2 = ciaMod && ciaMod.size >= 4 ? { pra: b[ciaMod.offset], ddra: b[ciaMod.offset + 2] } : null;
+  return { machine, version, vice, modules, ram, port, cpu, cia2 };
 }
+
+/** The VIC bank (0-3, $0000/$4000/$8000/$c000) the snapshot was showing: $dd00 bits 0-1, inputs read as 1; null: unknown. */
+export const snapshotVicBank = (s: Snapshot): number | null =>
+  s.cia2 ? 3 - (((s.cia2.pra & s.cia2.ddra) | (~s.cia2.ddra & 0xff)) & 3) : null;
 
 /** The RAM a snapshot opens as: from $0200, after the zero page and the stack, which are machine state. */
 export const SNAPSHOT_LOAD = 0x0200;

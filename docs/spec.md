@@ -468,7 +468,7 @@ Konstanta skrivningar ger exakta adresser:
 | `$D016` bit 4 | multicolor |
 | skärm + `$3F8…$3FF` | spritepekare: data på bankbas + v × 64 |
 
-Med bankspårning (8.7b) räknas en `$D018`-skrivning som bitmapp bara när den `$D011`-skrivning som ligger närmast i koden slår på bitmappsläget. En delad skärm (en bitmapslogga ovanför text) ger då både bitmappen och teckenuppsättningen. Utan bankspårning gör bitmappsläge någonstans varje `$D018`-värde till en bitmapp. Teckenuppsättningar på `$1000–$1FFF` i bank 0 och 2 är ROM-skuggor och ignoreras. Ett fönster (teckensnitt, skärm, bitmap eller sprite) får sin typ bara på byte som fortfarande är data, och bara om det mesta av det som är laddat i fönstret är data, inte kod eller musik. En bit mellan kod som är kortare än ett tecken eller en bitmappscell (8 byte) förblir data. En variabel mellan två rutiner i fönstret blir alltså inget Charset-block på en byte. Varje bit får fönstrets skäl (*$d018=$1c selects charset at $3000*). Utan registerevidens används storlek och justering, med lägre konfidens: 8000 byte på 8K-gräns → bitmap, 2048 byte på 2K-gräns med tecken-lika celler (≤ 6 olika bytevärden per 8-bytecell i > 80 % av cellerna) → teckensnitt. Inspektorns förhandsvisning (Sprite/Chars/Bitmap, hires/multicolor) låter användaren bekräfta eller hitta grafik som heuristiken missat.
+Med bankspårning (8.7b) räknas en `$D018`-skrivning som bitmapp bara när den `$D011`-skrivning som ligger närmast i koden slår på bitmappsläget. En delad skärm (en bitmapslogga ovanför text) ger då både bitmappen och teckenuppsättningen. Utan bankspårning gör bitmappsläge någonstans varje `$D018`-värde till en bitmapp. Teckenuppsättningar på `$1000–$1FFF` i bank 0 och 2 är ROM-skuggor och ignoreras. Inget fönster läggs över nollsidan och stacken (`$0000–$01FF`), som CPU:n ändrar hela tiden: `$d018=$30` i bank 0 (teckensnitt på `$0000`) eller en bitmapp på `$0000` blir ingen grafik, och loggen säger det när fönstret täcker laddade byte (*$d018=$30 would put the charset at $0000, over the zero page and the stack, …*). Ett fönster (teckensnitt, skärm, bitmap eller sprite) får sin typ bara på byte som fortfarande är data, och bara om det mesta av det som är laddat i fönstret är data, inte kod eller musik. En bit mellan kod som är kortare än ett tecken eller en bitmappscell (8 byte) förblir data. En variabel mellan två rutiner i fönstret blir alltså inget Charset-block på en byte. Varje bit får fönstrets skäl (*$d018=$1c selects charset at $3000*). Utan registerevidens används storlek och justering, med lägre konfidens: 8000 byte på 8K-gräns → bitmap, 2048 byte på 2K-gräns med tecken-lika celler (≤ 6 olika bytevärden per 8-bytecell i > 80 % av cellerna) → teckensnitt. Inspektorns förhandsvisning (Sprite/Chars/Bitmap, hires/multicolor) låter användaren bekräfta eller hitta grafik som heuristiken missat.
 
 ### 8.7b Minneskonfiguration ($01) och VIC-bank
 
@@ -481,7 +481,7 @@ och VIC-banker den kan köras med, som mängder (bitmasker). Varje register bär
 `lda #$35 / sta $01`, `dec $01` / `inc $01`, `lda $01 / and #$f8 / ora #$05 / sta $01` och `ldx #$34 / stx $01` följs exakt;
 allt annat gör registret okänt. Där vägar möts slås mängderna ihop.
 
-- Programmet startar med `$37` och VIC-bank 0. En VICE-snapshot fortsätter i stället med det `$01` som snapshoten har, från programstarten, från PC och från avbrottsrutinerna som dess vektorer pekar på.
+- Programmet startar med `$37` och VIC-bank 0. En VICE-snapshot fortsätter i stället med det `$01` och den VIC-bank som snapshoten har (`$DD00` och `$DD02` ur modulen CIA2, `snapshotVicBank`), från programstarten, från PC och från avbrottsrutinerna som dess vektorer pekar på.
 - Subrutiner lämnar tillbaka sitt tillstånd till varje anropare (via sina RTS); anrop utanför filerna (KERNAL) lämnar `$01` orört men registren okända.
 - Avbrottsrutiner startar med det huvudkoden satt, begränsat av vektorn: `$0314/$0318` kräver KERNAL (HIRAM = 1), `$FFFE/$FFFA` kräver den urkopplad (HIRAM = 0). En rutin som kvitterar sitt avbrott (skriver `$D019` eller läser `$DC0D`/`$DD0D` innan den ändrar `$01`) körs dessutom med I/O synlig. Annars skulle avbrottet aldrig kvitteras och komma igen direkt. En huvudloop som växlar mellan `$35` och `$34` för att nå RAM under I/O, som en loader gör, ger därför inte IRQ-rutinens `sta $d012` en RAM-etikett (`var_d012`) med *RAM or I/O*.
 - Kod kan bara köras där CPU:n ser RAM: kod på `$E000–$FFFF` körs med KERNAL ute, på `$A000–$BFFF` med BASIC ute, på `$D000–$DFFF` med allt RAM.
@@ -498,8 +498,9 @@ skiljer sig eller `$01` är okänt, räknas `$D000–$DFFF` som I/O (`reachesFor
 snapshot). Bara kod som säkert körs med RAM där (`$30`, `$34`) får RAM-etiketten. I övriga växlingsbara områden behålls
 det vanliga namnet när det varierar. I båda fallen får raden kommentaren t.ex. `RAM or I/O: $01 is $34 or $37 here`. Skrivningar till `$01`/`$DD00`/`$DD02` får kommentaren
 `memory $35 (RAM · I/O · RAM)` respektive `VIC bank 1 ($4000-$7fff)` och en rad i loggen; ett värde som inte går att följa
-ger ett tips om att sätta konfigurationen. VIC-evidensen (8.7) använder banken där `$D018` och spritepekare skrivs och
-bortser från VIC-skrivningar med I/O urkopplat. Statusraden visar `$01` vid markören.
+ger ett tips om att sätta konfigurationen. VIC-evidensen (8.7) använder banken där `$D018` och spritepekare skrivs, eller den
+som en `$DD00`/`$DD02`-skrivning högst 5 instruktioner efter `$D018`-skrivningen väljer (`sta $d018 / lda #$00 / sta
+$dd00` räknas i bank 3), och bortser från VIC-skrivningar med I/O urkopplat. Statusraden visar `$01` vid markören.
 
 Namnen ändrar aldrig byten, så round-trip-garantin gäller oförändrad. Inställningen *Follow the memory configuration
 ($01) and VIC bank* (`bankTracking`, på som standard) stänger av allt detta; differentialtestet mot prototypen kör med

@@ -47,8 +47,8 @@ export function fromSource(name: string, src: string): FileInput {
 }
 
 /** A VICE snapshot (MAINCPU and C64MEM, as x64sc 3.10 writes them) of RAM holding the assembled program, with the CPU
- *  at `pc` and the CPU port at `port` ($01 data, $00 direction). */
-export function snapshotOf(src: string, pc: number, port: [number, number] = [0x37, 0x2f]): Uint8Array {
+ *  at `pc` and the CPU port at `port` ($01 data, $00 direction), and with `cia2` ($dd00, $dd02) a CIA2 module. */
+export function snapshotOf(src: string, pc: number, port: [number, number] = [0x37, 0x2f], cia2?: [number, number]): Uint8Array {
   const f = fromSource('snap.prg', src), ram = new Uint8Array(0x10000);
   ram.set(f.bytes.subarray(0, 0x10000 - f.load), f.load);
   const bytes: number[] = [...'VICE Snapshot File\x1a'].map(c => c.charCodeAt(0)), pad = (s: string, n: number) => [...s.padEnd(n, '\0')].map(c => c.charCodeAt(0));
@@ -56,6 +56,7 @@ export function snapshotOf(src: string, pc: number, port: [number, number] = [0x
   const module = (name: string, data: number[]) => { const size = 22 + data.length; bytes.push(...pad(name, 16), 1, 0, size & 0xff, (size >> 8) & 0xff, (size >> 16) & 0xff, size >>> 24, ...data); };
   module('MAINCPU', [...Array(8).fill(0), 1, 2, 3, 0xf0, pc & 0xff, pc >> 8, 0x20, 0, 0, 0, 0]);
   module('C64MEM', [port[0], port[1], 1, 1, ...ram, 0, 0, 0]);
+  if (cia2) module('CIA2', [cia2[0], 0, cia2[1], 0, ...Array(12).fill(0)]);
   return new Uint8Array(bytes);
 }
 

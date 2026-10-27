@@ -5,7 +5,7 @@
  * Subroutines hand their state back to every caller. Interrupt handlers start with what the main code
  * set, narrowed by the vector they were installed through ($0314 needs the KERNAL, $fffe needs it out) and, when
  * they acknowledge their interrupt at VIC or a CIA, to the configurations with I/O. A snapshot's program goes on
- * with the snapshot's $01, from its PC and from its live interrupt vectors.
+ * with the snapshot's $01 and VIC bank, from its PC and from its live interrupt vectors.
  * Code under ROM or I/O can only run with RAM there, which narrows the state. BankZones (the user's
  * word) replace the state inside their range and flow on from there. A deep analysis (5.17) also follows values
  * through the stack (`lda $01 / pha … pla / sta $01`) and through variables code only stores to (`lda $01 /
@@ -16,7 +16,7 @@ import { CLOBBER_A, OPC, SHIFT_MN } from '../cpu/opcodes';
 import { decode } from '../cpu/decode';
 import { $4 } from '../util/hex';
 import { ALL_BANKS, ALL_PORTS, DEFAULT_PORT, bankRange, banksOf, describePorts, ioVisible, portsOf } from '../c64/memconfig';
-import { parseVsf, snapshotConfig, type Snapshot } from '../c64/vsf';
+import { parseVsf, snapshotConfig, snapshotVicBank, type Snapshot } from '../c64/vsf';
 
 const N = 0x10000;
 const UNKNOWN = ALL_PORTS;
@@ -222,9 +222,10 @@ export function memConfig(ctx: Ctx): MemConfigInfo {
   let snap: Snapshot | null = null;
   for (const f of ctx.files) if (!snap && f.vsf) try { snap = parseVsf(f.vsf); } catch { /* not readable: a plain start */ }
   const startPort = snap ? bit(snapshotConfig(snap)) : bit(DEFAULT_PORT);
-  // ... and VIC bank 0
-  for (const [a, k] of entryKind) if (k === 'entry') seed(a, startPort, 1);
-  if (snap?.cpu) seed(snap.cpu.pc, startPort, 1);
+  // ... and the VIC bank its $dd00 holds (a program starts with bank 0)
+  const startBank = 1 << ((snap && snapshotVicBank(snap)) ?? 0);
+  for (const [a, k] of entryKind) if (k === 'entry') seed(a, startPort, startBank);
+  if (snap?.cpu) seed(snap.cpu.pc, startPort, startBank);
   run();
   let mainP = 0, mainB = 0;
   for (let a = 0; a < N; a++) if (seen[a]) { mainP |= P[a]; mainB |= B[a]; }

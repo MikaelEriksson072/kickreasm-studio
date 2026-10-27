@@ -355,6 +355,11 @@ the reference as a patch in `test/helpers/reference.ts`):
     traced on trial, branches decided by known flags, `$01` followed through the stack and variables, and rounds that
     do not follow calls into ROM, through operands code writes, or past routines that never return. With it off,
     nothing changes; the differential test runs with it off, and the fuzz test turns it on at random.
+24. The VIC bank of a VICE snapshot comes from its CIA2 module ($dd00 and $dd02), as `$01` does from C64MEM. It used
+    to be bank 0, so a snapshot showing bank 3 got its `$d018=$30` charset at $0000, over the zero page. A `$d018`
+    store also counts in the bank that a `$dd00`/`$dd02` store right after it selects, and no graphics window goes
+    over the zero page and the stack ($0000-$01ff). In 47 of 1060 real programs a guessed bitmap at $0000 had made
+    the program's own bytes from $0800 a bitmap.
 
 Fixes 3–10 were found by the fast-check fuzz test, which covers more inputs (entries, comments, renames, every override
 kind, every setting, two-file projects) than the prototype harness did. Fix 11 was found while writing the e2e tests,

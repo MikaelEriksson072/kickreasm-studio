@@ -21,7 +21,7 @@ export {
   clipRanges, findInMemory, loadedRanges, MAX_MATCHES, monitorChar, monitorHexOf, monitorLine, monitorPrefix, monitorRows, monitorText, monitorTextOf, MONITOR_ROW, parseMonitorCommand, petsciiToScreen,
   type FindAs, type MemoryMatch, type MonitorChar, type MonitorCommand, type MonitorMode, type MonitorRange, type MonitorRow,
 } from './c64/monitor';
-export { isVsf, openC64File, parseVsf, patchSnapshot, snapshotConfig, SNAPSHOT_LOAD, SNAPSHOT_ZP_LOAD, type OpenedFile, type OpenOptions, type Snapshot, type VsfModule } from './c64/vsf';
+export { isVsf, openC64File, parseVsf, patchSnapshot, snapshotConfig, snapshotVicBank, SNAPSHOT_LOAD, SNAPSHOT_ZP_LOAD, type OpenedFile, type OpenOptions, type Snapshot, type VsfModule } from './c64/vsf';
 export { d64FileName, makeD64, parseD64, petsciiName, readD64File, sectorsOnTrack, type D64File, type D64FileType, type D64Image } from './c64/d64';
 export { makePsid, parsePsid } from './c64/psid';
 export { artStudioPicture, ART_STUDIO_LOAD, BITMAP_SIZE, gfxSource, koalaPicture, KOALA_LOAD, SCREEN_SIZE, type GfxFileColors, type GfxFileKind } from './c64/gfxfiles';
