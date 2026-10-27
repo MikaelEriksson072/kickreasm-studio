@@ -2116,3 +2116,37 @@ test('the inspector writes a table in binary or decimal and words as numbers, se
     expect(rowAt(await listingRows(page), '0939')?.text).toBe('.word $0e06');
   });
 });
+
+test('the Memory tab finds text as PETSCII and as screen codes, and bytes, and steps through the hits', async ({ page }) => {
+  await waitForListing(page);
+  await page.getByRole('tab', { name: 'Memory' }).click();
+  const q = page.getByLabel('Find in memory'), status = page.getByLabel('Find result');
+  const bar = page.getByLabel('Memory as the VICE monitor shows it').locator('.gfxv-sel');
+
+  await test.step('text: the title in PETSCII and the greeting in screen codes, Enter and Shift+Enter step', async () => {
+    await q.fill('kickreasm');
+    await expect(status).toHaveText('2 matches');
+    await q.press('Enter');
+    await expect(status).toHaveText('1 of 2 matches · PETSCII');
+    await expect(bar).toContainText('$0949–$0951');
+    await q.press('Enter');
+    await expect(status).toHaveText('2 of 2 matches · screen codes');
+    await expect(bar).toContainText('$0994–$099c');
+    await q.press('Shift+Enter');
+    await expect(status).toHaveText('1 of 2 matches · PETSCII');
+    await expect(page.locator('.mon-b.hit, .mon-b.hit-cur')).toHaveCount(18);
+  });
+
+  await test.step('bytes: hex pairs with ?? for any byte, and an error for what is no byte', async () => {
+    await page.getByRole('group', { name: 'Find as' }).getByRole('button', { name: 'Bytes' }).click();
+    await q.fill('8d ?? d0');
+    await expect(status).toContainText('matches');
+    await page.getByRole('button', { name: 'Next match' }).click();
+    await expect(status).toContainText('1 of');
+    await q.fill('8d 2');
+    await expect(status).toContainText('is not a byte');
+    await expect(q).toHaveClass(/bad/);
+    await q.press('Escape');
+    await expect(q).toHaveValue('');
+  });
+});

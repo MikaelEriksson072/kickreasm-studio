@@ -18,8 +18,8 @@ export { TEXT_ENCODINGS, textEncoding, type TextEncodingInfo } from './c64/text'
 export { parseBasic, BASIC_TOKENS } from './c64/basic';
 export { parsePrg, makePrg, overwritesSystemArea, SYSTEM_AREA } from './c64/prg';
 export {
-  clipRanges, loadedRanges, monitorChar, monitorHexOf, monitorLine, monitorPrefix, monitorRows, monitorText, monitorTextOf, MONITOR_ROW, parseMonitorCommand, petsciiToScreen,
-  type MonitorChar, type MonitorCommand, type MonitorMode, type MonitorRange, type MonitorRow,
+  clipRanges, findInMemory, loadedRanges, MAX_MATCHES, monitorChar, monitorHexOf, monitorLine, monitorPrefix, monitorRows, monitorText, monitorTextOf, MONITOR_ROW, parseMonitorCommand, petsciiToScreen,
+  type FindAs, type MemoryMatch, type MonitorChar, type MonitorCommand, type MonitorMode, type MonitorRange, type MonitorRow,
 } from './c64/monitor';
 export { isVsf, openC64File, parseVsf, patchSnapshot, snapshotConfig, SNAPSHOT_LOAD, SNAPSHOT_ZP_LOAD, type OpenedFile, type OpenOptions, type Snapshot, type VsfModule } from './c64/vsf';
 export { d64FileName, makeD64, parseD64, petsciiName, readD64File, sectorsOnTrack, type D64File, type D64FileType, type D64Image } from './c64/d64';

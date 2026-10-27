@@ -2,11 +2,11 @@
  * with the same bytes as text, `i` 40 bytes a row as PETSCII text and `ii` as screen codes, the inverse ones inverted.
  * The cursor and the selection are the listing's: a click puts the cursor on a byte, Shift+click or a drag selects,
  * the arrow keys move. The command field takes VICE's commands (`m 0801 08ff`, `ii 0400`); Copy writes the rows as
- * VICE does. */
+ * VICE does. Find searches text (as PETSCII and as screen codes) or bytes, marks every hit and steps through them. */
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import {
-  clipRanges, findBlock, h2, h4, kindInfo, loadedRanges, monitorChar, monitorPrefix, monitorRows, monitorText, MONITOR_ROW, parseMonitorCommand,
-  type Addr, type AnalysisResult, type MonitorMode, type MonitorRange, type MonitorRow, type RenderResult,
+  clipRanges, findBlock, findInMemory, h2, h4, kindInfo, loadedRanges, monitorChar, monitorPrefix, monitorRows, monitorText, MONITOR_ROW, parseMonitorCommand,
+  type Addr, type AnalysisResult, type FindAs, type MemoryMatch, type MonitorMode, type MonitorRange, type MonitorRow, type RenderResult,
 } from '@kickreasm/core';
 import { Icon } from '../lib/icons';
 import { cx, groupOfType, ROW } from '../lib/util';
@@ -18,6 +18,8 @@ const MODES: [MonitorMode, string, string][] = [
 ];
 /** what a selection can be marked as from here */
 const MARKS: [string, string][] = [['text', 'Text'], ['textsc', 'Text (screen codes)'], ['bytes', 'Bytes'], ['code', 'Code']];
+const FIND_AS: [FindAs, string, string][] = [['text', 'Text', 'Text as the dump shows it, as PETSCII and as screen codes, in any case'], ['bytes', 'Bytes', 'Hex bytes: a9 00 8d, and ?? for any byte']];
+const MATCHED: Record<MemoryMatch['as'], string> = { petscii: 'PETSCII', screen: 'screen codes', both: 'PETSCII and screen codes', bytes: 'bytes' };
 
 type Item = { row: MonitorRow } | { gap: MonitorRange };
 
@@ -115,6 +117,8 @@ export function MemoryDump({ A, R, cursor, sel, onCursor, onSelect, onClear, onM
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); e.stopPropagation(); copy(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); findInput.current?.select(); return; }
+    if (e.key === 'F3') { e.preventDefault(); e.stopPropagation(); goHit(e.shiftKey ? -1 : 1); return; }
     if (e.key === 'Escape') { e.stopPropagation(); anchor.current = null; onClear(); }
   };
   // Shift+arrows: the selection grows from the anchor; the cursor shown is the moving end
@@ -122,6 +126,40 @@ export function MemoryDump({ A, R, cursor, sel, onCursor, onSelect, onClear, onM
   const onCursorKeep = (b: Addr) => setMoving(b);
   useEffect(() => { if (!sel?.multi) setMoving(null); }, [sel]);
   const cur = sel?.multi && moving != null ? moving : cursor;
+
+  // find: every hit marked in the dump, Enter and the arrows step through them from the cursor
+  const [findAs, setFindAs] = useState<FindAs>('text');
+  const [query, setQuery] = useState('');
+  const [hitIdx, setHitIdx] = useState<number | null>(null);
+  const findInput = useRef<HTMLInputElement>(null);
+  const found = useMemo(() => findInMemory(A.mem, ranges, query, findAs, lower), [A, ranges, query, findAs, lower]);
+  const hits = 'matches' in found ? found.matches : [];
+  useEffect(() => { setHitIdx(null); }, [found]);
+  const hitMap = useMemo(() => {
+    const m = new Uint8Array(0x10000);
+    for (const h of hits) m.fill(1, h.start, h.end);
+    if (hitIdx != null && hits[hitIdx]) m.fill(2, hits[hitIdx].start, hits[hitIdx].end);
+    return m;
+  }, [hits, hitIdx]);
+  const goHit = (dir: 1 | -1) => {
+    if (!hits.length) return;
+    let i: number;
+    if (hitIdx != null) i = (hitIdx + dir + hits.length) % hits.length;
+    else {
+      const at = cur ?? -1;
+      i = dir > 0 ? hits.findIndex(h => h.start > at) : hits.map(h => h.start < at).lastIndexOf(true);
+      if (i < 0) i = dir > 0 ? 0 : hits.length - 1;
+    }
+    setHitIdx(i);
+    const h = hits[i];
+    anchor.current = h.start;
+    onSelect(h.start, h.end);
+    scrollTo(h.start);
+  };
+  const findStatus = 'error' in found ? found.error
+    : !query ? (findAs === 'text' ? 'Text as PETSCII and as screen codes, in any case' : 'Hex bytes: a9 00 8d, ?? for any byte')
+      : !hits.length ? 'No matches'
+        : `${hitIdx != null ? `${hitIdx + 1} of ` : ''}${hits.length}${found.more ? '+' : ''} match${hits.length === 1 ? '' : 'es'}${hitIdx != null ? ` · ${MATCHED[hits[hitIdx].as]}` : ''}`;
 
   const labelAt = (n: string) => { for (const [a, l] of R.labels) if (l.name === n) return a; return undefined; };
   const run = () => {
@@ -154,7 +192,7 @@ export function MemoryDump({ A, R, cursor, sel, onCursor, onSelect, onClear, onM
       continue;
     }
     const { a, n } = it.row;
-    const cls = (x: Addr) => cx(inSel(x) && 'sel', x === cur && 'cur', x === hover && 'hov');
+    const cls = (x: Addr) => cx(inSel(x) && 'sel', x === cur && 'cur', x === hover && 'hov', hitMap[x] === 1 && 'hit', hitMap[x] === 2 && 'hit-cur');
     const col = (x: Addr) => (colors ? { color: `var(--g-${groupOfType(A.tm[x])})` } : undefined);
     const text = Array.from({ length: n }, (_, k) => { const x = a + k, c = monitorChar(A.mem[x], mode === 'ii', lower); return <span key={k} data-a={x} className={cx('mon-c', cls(x), !c && 'dot', c?.inv && 'inv')} style={col(x)}>{c ? c.ch : '.'}</span>; });
     rows.push(
@@ -173,7 +211,6 @@ export function MemoryDump({ A, R, cursor, sel, onCursor, onSelect, onClear, onM
     <div className="gfxv monv" aria-label="Memory as the VICE monitor shows it">
       <div className="gfxv-bar">
         <div className="seg" role="group" aria-label="Show memory as">{MODES.map(([k, l, t]) => <button key={k} className={cx('mono', mode === k && 'on')} aria-pressed={mode === k} title={t} onClick={() => set({ mode: k })}>{l}</button>)}</div>
-        <span className="muted">{MODES.find(m => m[0] === mode)![2]}</span>
         {mode === 'm' && <label className="gfxv-field">Per row<select aria-label="Bytes per row" value={prefs.perRow} onChange={e => set({ perRow: +e.target.value as 8 | 16 })}><option value={16}>16</option><option value={8}>8 (40 columns)</option></select></label>}
         <label className="check gfxv-mc"><input type="checkbox" checked={lower} onChange={e => set({ lower: e.target.checked })} /><span>Lower case</span></label>
         <label className="check gfxv-mc" title="Colour the bytes by the type of their block, as in the memory map"><input type="checkbox" checked={colors} onChange={e => set({ colors: e.target.checked })} /><span>Block colours</span></label>
@@ -183,7 +220,18 @@ export function MemoryDump({ A, R, cursor, sel, onCursor, onSelect, onClear, onM
             onChange={e => { setCmd(e.target.value); setCmdErr(null); }} />
           <button className="btn small" type="submit"><Icon name="target" size={13} />Go</button>
         </form>
-        <button className="btn small" onClick={copy} title={range ? 'Copy the selected bytes as monitor text' : 'Copy all loaded memory as monitor text'}><Icon name="copy" size={13} />{range ? 'Copy selection' : 'Copy all'}</button>
+        <div className="mon-find">
+          <div className="seg" role="group" aria-label="Find as">{FIND_AS.map(([k, l, t]) => <button key={k} className={cx(findAs === k && 'on')} aria-pressed={findAs === k} title={t} onClick={() => setFindAs(k)}>{l}</button>)}</div>
+          <input ref={findInput} aria-label="Find in memory" className={cx('mono mon-find-q', 'error' in found && 'bad')} value={query} spellCheck={false}
+            placeholder={findAs === 'text' ? 'Find text' : 'a9 00 8d'} title="Enter: the next hit from the cursor, Shift+Enter: the one before (F3 / Shift+F3 in the dump)"
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); goHit(e.shiftKey ? -1 : 1); } else if (e.key === 'Escape') { e.preventDefault(); setQuery(''); scroller.current?.focus(); } }} />
+          <button className="icon-btn small" aria-label="Previous match" title="Previous match (Shift+Enter)" disabled={!hits.length} onClick={() => goHit(-1)}><Icon name="up" size={14} /></button>
+          <button className="icon-btn small" aria-label="Next match" title="Next match (Enter)" disabled={!hits.length} onClick={() => goHit(1)}><Icon name="down" size={14} /></button>
+          <span className={cx('small', 'error' in found ? 'err-text' : 'muted')} role="status" aria-label="Find result">{findStatus}</span>
+          <span className="grow" />
+          <button className="btn small" onClick={copy} title={range ? 'Copy the selected bytes as monitor text' : 'Copy all loaded memory as monitor text'}><Icon name="copy" size={13} />{range ? 'Copy selection' : 'Copy all'}</button>
+        </div>
       </div>
       {cmdErr && <div className="gfxv-sel err-text small" role="alert">{cmdErr}</div>}
       <div className="gfxv-sel" role="status">

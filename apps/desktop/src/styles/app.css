@@ -547,6 +547,12 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .gfxv-addr:focus { border-color: var(--accent); }
 .gfxv-addr.bad { border-color: var(--err); }
 .gfxv-addr.gfxv-count { width: 52px; }
+.mon-find { display: flex; align-items: center; gap: 6px; flex: 1 0 100%; }
+.mon-find-q { width: 220px; height: 24px; border-radius: 5px; border: 1px solid var(--line-2); background: var(--editor); color: var(--fg); padding: 0 6px; font-size: 12px; outline: none; }
+.mon-find-q:focus { border-color: var(--accent); }
+.mon-find-q.bad { border-color: var(--err); }
+.mon-b.hit, .mon-c.hit { background: color-mix(in srgb, var(--warn) 30%, transparent); }
+.mon-b.hit-cur, .mon-c.hit-cur { background: color-mix(in srgb, var(--warn) 65%, transparent); color: var(--bg); }
 .gfxv-field select.gfxv-pick { max-width: 200px; }
 .gfxv-field .icon-btn.small { width: 22px; height: 24px; margin-left: -3px; }
 .gfxv-sel { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-height: 36px; padding: 5px 10px; border-bottom: 1px solid var(--line); font-size: 12.5px; }

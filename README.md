@@ -34,7 +34,8 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
 - **A Graphics tab.** It shows all 64 KB as characters, sprites, bitmaps, screens or a font per character row. You
   select what you find, mark it and save it as raw bytes, a `.prg`, a Koala or Art Studio picture, a PNG or `.byte`
   source.
-- **A Memory tab.** It prints memory the way the VICE monitor does (`m`, `i`, `ii`).
+- **A Memory tab.** It prints memory the way the VICE monitor does (`m`, `i`, `ii`). You can search it for text, as
+  PETSCII and as screen codes at once, or for bytes (`a9 00 8d`, `??` for any byte), and step through the hits.
 - **Every edit still assembles, and every edit can be undone:**
   - rename labels and comment lines;
   - mark ranges as code, bytes, words or text, and write data, tables and words in hex, decimal or binary, as many

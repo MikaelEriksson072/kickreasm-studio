@@ -1385,6 +1385,18 @@ rad om minnet som inte är laddat.
 eller utan `.`), och `0801-08ff`. Slutet räknas med, som i VICE. Kommandot byter läge, börjar raderna på sin adress som VICE
 gör (raden före blir kortare) och markerar intervallet eller sätter markören.
 
+**Sök** (verktygsradens andra rad, `Ctrl+F` i dumpen) letar i det laddade minnet (`findInMemory`):
+- **Text** jämförs med tecknen som dumpen visar, i den valda teckenuppsättningen, utan hänsyn till skiftläge och
+  inverterade tecken. Den hittas både som PETSCII och som skärmkoder. Siffror och tecken som är lika i båda räknas som en
+  träff (*PETSCII and screen codes*).
+- **Bytes** är hexpar: `a9 00 8d`, `$a9,$00` eller `a9008d`, med `??` för vilken byte som helst. Det som inte är en byte ger
+  ett fel i rött.
+
+Varje träff färgas i både hex- och textkolumnen. En träff går aldrig över slutet av ett laddat område, och sökningen
+stannar efter 5000 träffar. `Enter` (eller ↓, och `F3` i dumpen) går till nästa träff efter markören och `Shift+Enter`
+(↑, `Shift+F3`) till den före. Träffen markeras, så den kan markeras som text, skärmkoder, data eller kod direkt.
+Statusen säger vilken träff det är och hur den matchade (*1 of 2 matches · PETSCII*). `Esc` tömmer fältet.
+
 **Markör och markering** delas med listningen:
 - Ett klick på en byte, i hexkolumnen eller textkolumnen, sätter markören där.
 - `Shift`+klick eller att dra markerar, och piltangenterna flyttar (med `Shift` växer markeringen).

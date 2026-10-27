@@ -117,6 +117,58 @@ export function monitorText(mem: ArrayLike<number>, ranges: readonly MonitorRang
 export const clipRanges = (ranges: readonly MonitorRange[], start: Addr, end: Addr): MonitorRange[] =>
   ranges.map(r => ({ start: Math.max(r.start, start), end: Math.min(r.end, end) })).filter(r => r.end > r.start);
 
+/** A search hit: its bytes, and how they matched (text as PETSCII, as screen codes or as both, or bytes). */
+export interface MemoryMatch { start: Addr; end: Addr; as: 'petscii' | 'screen' | 'both' | 'bytes' }
+export type FindAs = 'text' | 'bytes';
+/** the most hits one search gives */
+export const MAX_MATCHES = 5000;
+
+/**
+ * Searches the loaded memory. Text matches the characters the Memory tab shows (in the upper or the lower case
+ * character set), ignoring case and inverse, both as PETSCII and as screen codes. Bytes are hex pairs (`a9 00 8d`,
+ * `$a9,$00`, `a9008d`) and `??` for any byte. A hit never crosses the end of a loaded range; `more` says the search
+ * stopped at MAX_MATCHES.
+ */
+export function findInMemory(mem: ArrayLike<number>, ranges: readonly MonitorRange[], query: string, as: FindAs, lower = false): { matches: MemoryMatch[]; more: boolean } | { error: string } {
+  const matches: MemoryMatch[] = [];
+  let more = false;
+  if (as === 'bytes') {
+    const pat: (number | null)[] = [];
+    for (const t of query.replace(/\$/g, ' ').split(/[\s,]+/).filter(Boolean)) {
+      if (/^(\?\??|\*)$/.test(t)) { pat.push(null); continue; }
+      if (!/^[0-9a-f]+$/i.test(t) || t.length % 2) return { error: `"${t}" is not a byte: write hex pairs (a9 00 8d), and ?? for any byte.` };
+      for (let i = 0; i < t.length; i += 2) pat.push(parseInt(t.slice(i, i + 2), 16));
+    }
+    if (pat.length && pat.every(p => p == null)) return { error: 'Give at least one byte, not only ??.' };
+    if (pat.length) for (const r of ranges) {
+      for (let a = r.start; a + pat.length <= r.end; a++) {
+        let ok = true;
+        for (let i = 0; ok && i < pat.length; i++) if (pat[i] != null && mem[a + i] !== pat[i]) ok = false;
+        if (!ok) continue;
+        if (matches.length === MAX_MATCHES) { more = true; break; }
+        matches.push({ start: a, end: a + pat.length, as: 'bytes' });
+      }
+    }
+    return { matches, more };
+  }
+  const q = [...query.toLowerCase()];
+  if (!q.length) return { matches, more };
+  const char = (b: number, screen: boolean) => monitorChar(b, screen, lower)?.ch.toLowerCase() ?? null;
+  for (const r of ranges) {
+    for (let a = r.start; a + q.length <= r.end; a++) {
+      let pet = true, scr = true;
+      for (let i = 0; (pet || scr) && i < q.length; i++) {
+        if (pet && char(mem[a + i], false) !== q[i]) pet = false;
+        if (scr && char(mem[a + i], true) !== q[i]) scr = false;
+      }
+      if (!pet && !scr) continue;
+      if (matches.length === MAX_MATCHES) { more = true; break; }
+      matches.push({ start: a, end: a + q.length, as: pet && scr ? 'both' : pet ? 'petscii' : 'screen' });
+    }
+  }
+  return { matches, more };
+}
+
 /** `start` missing: the mode only (`ii` alone), the dump stays where it is */
 export type MonitorCommand = { mode?: MonitorMode; start?: Addr; end?: Addr } | { error: string };
 

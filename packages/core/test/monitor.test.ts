@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadedRanges, makeDemo, monitorChar, monitorLine, monitorRows, monitorText, parseMonitorCommand, petsciiToScreen, parsePrg } from '../src';
+import { findInMemory, loadedRanges, makeDemo, MAX_MATCHES, monitorChar, monitorLine, monitorRows, monitorText, parseMonitorCommand, petsciiToScreen, parsePrg } from '../src';
 import { findVice } from '../src/node';
 
 const mem = new Uint8Array(0x10000);
@@ -67,6 +67,40 @@ describe('the dump', () => {
     expect(parseMonitorCommand('m 0900 0800')).toMatchObject({ error: expect.stringMatching(/before the start/) });
     expect(parseMonitorCommand('m nowhere')).toMatchObject({ error: expect.stringMatching(/neither a hex address nor a label/) });
     expect(parseMonitorCommand('')).toMatchObject({ error: expect.any(String) });
+  });
+});
+
+describe('finding text and bytes', () => {
+  const ranges = loadedRanges(owner);
+  const find = (q: string, as: 'text' | 'bytes', lower = false) => { const r = findInMemory(mem, ranges, q, as, lower); if ('error' in r) throw new Error(r.error); return r.matches; };
+
+  it('finds text as PETSCII and as screen codes, whatever its case and the character set', () => {
+    // the demo's title in PETSCII at $0949 and its greeting in screen codes at $0985 ("hello from the kickreasm studio demo!")
+    expect(find('kickreasm', 'text')).toEqual([{ start: 0x0949, end: 0x0952, as: 'petscii' }, { start: 0x0994, end: 0x099d, as: 'screen' }]);
+    expect(find('KickReasm Studio', 'text', true).map(m => m.start)).toEqual([0x0949, 0x0994]);
+    expect(find('Hello from', 'text')).toEqual([{ start: 0x0985, end: 0x098f, as: 'screen' }]);
+    expect(find('', 'text')).toEqual([]);
+    expect(find('no such words', 'text')).toEqual([]);
+  });
+
+  it('finds bytes, with ?? for any byte, and says what it cannot read', () => {
+    // sta $d020 / sta $d021 in the demo's start-up code
+    expect(find('8d 20 d0', 'bytes').length).toBeGreaterThan(0);
+    const hits = find('8d ?? d0', 'bytes');
+    expect(hits.every(m => mem[m.start] === 0x8d && mem[m.start + 2] === 0xd0 && m.end === m.start + 3 && m.as === 'bytes')).toBe(true);
+    expect(hits.length).toBeGreaterThan(find('8d 20 d0', 'bytes').length);
+    expect(find('$8d,$20,$d0', 'bytes')).toEqual(find('8d20d0', 'bytes'));
+    expect(findInMemory(mem, ranges, '8d 2', 'bytes')).toMatchObject({ error: expect.stringMatching(/not a byte/) });
+    expect(findInMemory(mem, ranges, '?? ??', 'bytes')).toMatchObject({ error: expect.stringMatching(/at least one byte/) });
+  });
+
+  it('never crosses the end of a loaded range, and stops at the most hits', () => {
+    const m = new Uint8Array(0x10000).fill(0x41), r = [{ start: 0x1000, end: 0x1004 }, { start: 0x1004, end: 0x1008 }];
+    // AAAA AAAA: "AAA" fits twice in each range, never over the end of the first
+    expect(findInMemory(m, r, 'aaa', 'text')).toEqual({ matches: [0x1000, 0x1001, 0x1004, 0x1005].map(a => ({ start: a, end: a + 3, as: 'petscii' })), more: false });
+    const all = findInMemory(m, [{ start: 0, end: 0x10000 }], '41', 'bytes');
+    expect(all).toMatchObject({ more: true });
+    expect('matches' in all && all.matches.length).toBe(MAX_MATCHES);
   });
 });
 
