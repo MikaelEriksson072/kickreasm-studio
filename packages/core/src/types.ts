@@ -274,6 +274,13 @@ export interface BasicInfo {
   file?: number;
 }
 
+/**
+ * Timing code (5.4b): the branch at `branch`, whose offset the store at `by` sets from the timer `timer` (read at
+ * `read`), enters the delay `start`-`end` (exclusive) 0 to `most` bytes in; `enter`: where it goes in the loaded
+ * bytes. `ins`: the delay's instructions, decoded from its start; `cycles`: the fewest and most they take.
+ */
+export interface DelaySled { branch: Addr; by: Addr; read: Addr; timer: Addr; start: Addr; end: Addr; enter: number; most: number; cycles: [number, number]; ins: Addr[] }
+
 /** What the deep analysis did (5.17): its rounds and the problems before (a normal analysis) and after. */
 export interface DeepReport {
   rounds: number;
@@ -396,6 +403,8 @@ export interface AnalysisResult {
   loaders: LoaderFinding[];
   /** the IRQ handlers and the raster lines they run at (5.16) */
   raster: RasterIrq[];
+  /** timing code (5.4b): branches the code points into a delay by a timer */
+  delays: DelaySled[];
   /** what the deep analysis did (`Settings.deepAnalysis`); null without it */
   deep: DeepReport | null;
 }
@@ -456,7 +465,7 @@ export type Line =
   /** `preview`: listing only, the block is shown as code (RenderOptions.dataAsCode) */
   | { k: 'hdr'; a: Addr; blk: number; type: TypeId; text: string; preview?: boolean; excluded?: boolean; binary?: string }
   | { k: 'lbl'; a: Addr; name: string }
-  | { k: 'ins'; a: Addr; n: number; mn: string; ext: ForcedMode; tok: Token[]; cmt: string; ill?: boolean; userCmt?: boolean; preview?: boolean }
+  | { k: 'ins'; a: Addr; n: number; mn: string; ext: ForcedMode; tok: Token[]; cmt: string; ill?: boolean; userCmt?: boolean; preview?: boolean; delay?: boolean }
   | { k: 'dat'; a: Addr; n: number; dir: '.byte' | '.word' | '.text'; tok: Token[]; cmt: string; mn?: string; ill?: boolean; userCmt?: boolean; preview?: boolean }
   | { k: 'dir'; a: Addr; n: number; tok: Token[]; cmt?: string; zp?: Addr; userCmt?: boolean }
   /** `raw`: written as it is (the lines of a block comment); `note`: part of a user Note; `zp`: the note is on the

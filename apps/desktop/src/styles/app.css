@@ -278,6 +278,10 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .edit-pop { position: absolute; left: 150px; z-index: 5; width: min(440px, calc(100% - 170px)); padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--accent); box-shadow: var(--shadow); font-family: var(--font-ui); display: flex; flex-direction: column; gap: 5px; }
 .edit-pop label { font-size: 11px; color: var(--fg-2); }
 /* zero-page variables: a tag on their .label line and in the rename editor, which also gets a warning border */
+/* timing code: the instructions a branch enters part of the way in, to wait (5.4b) */
+.row.delay .src { color: var(--fg-2); }
+.row.delay .gut { background-image: repeating-linear-gradient(180deg, transparent 0 2px, var(--editor) 2px 4px); }
+.zp-tag.delay-tag { color: var(--accent-hi); }
 .zp-tag { display: inline-block; margin-left: 10px; padding: 0 6px; border-radius: 4px; font: 600 10px/16px var(--font-ui); text-transform: uppercase; letter-spacing: 0.05em; color: var(--warn); box-shadow: inset 0 0 0 1px currentColor; vertical-align: 1px; }
 .edit-pop.zp { border-color: var(--warn); }
 .edit-pop label .zp-tag { margin-left: 8px; }

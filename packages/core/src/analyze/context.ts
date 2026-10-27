@@ -1,7 +1,7 @@
 /* Shared mutable state of one analysis run. Every stage in analyze/* reads
  * and writes this object; the order of the stages is fixed in analyze/index. */
 import type {
-  Addr, BasicInfo, EntryKind, FileInput, ImmediateHint, IndirectJump, LogEntry, LogLevel,
+  Addr, BasicInfo, DelaySled, EntryKind, FileInput, ImmediateHint, IndirectJump, LogEntry, LogLevel,
   LohiTable, Override, ProjectInput, Settings, TextEncoding, XRef, XRefKind,
 } from '../types';
 import { DEFAULT_SETTINGS, T } from '../model';
@@ -64,6 +64,9 @@ export interface Ctx {
   lohiTabs: Map<Addr, LohiTable>;
   /** .word tables of code addresses that an indirect JMP goes through: start -> length in bytes, vector, targets */
   wordTables: Map<Addr, { len: number; dest: Addr; targets: Addr[] }>;
+  /** timing code (5.4b): the branches into a delay, and the delays' instructions */
+  delays: Map<Addr, DelaySled>;
+  delayIns: Set<Addr>;
   // deep analysis (5.17); null without it
   deep: Deep | null;
   /** guesses waiting to be traced on trial: code islands, pointer-table targets, interrupt handlers, the load address */
@@ -115,7 +118,7 @@ export function createContext(project: ProjectInput, deep: Deep | null = null): 
     basics: [], insLen: new Uint8Array(0x10000), codeOwner: new Int32Array(0x10000).fill(-1), skip: new Set(), xrefs: new Map(),
     entryKind: new Map(), queue: [],
     ijumps: [], inlineCalls: new Set(), entry: null,
-    ev: emptyEvidence(), lohiTabs: new Map(), wordTables: new Map(),
+    ev: emptyEvidence(), lohiTabs: new Map(), wordTables: new Map(), delays: new Map(), delayIns: new Set(),
     deep: S.deepAnalysis ? deep ?? { port: null, main: 0, written: null, noReturn: new Set() } : null,
     pending: [], rejected: new Map(), cuts: new Map(), flagCut: new Map(), onTrial: false,
   } as unknown as Ctx;

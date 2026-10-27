@@ -721,7 +721,32 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     if (!kr) return needDesktop();
     try { const r = await kr.saveProject({ project, path: projectPath ?? undefined }); if (r) { setPath(r.path); toast(`Project saved to ${r.path}`, 'ok'); } } catch (e) { toast(`Save failed: ${errorText(e)}`, 'err'); }
   };
-  const copyText = async (t: string | undefined) => { if (!t) return; try { await navigator.clipboard.writeText(t); toast('Copied to clipboard', 'ok'); } catch { toast('The clipboard is not available; select the text and copy it manually', 'warn'); } };
+  const copyText = async (t: string | undefined, what = 'Copied to clipboard') => { if (!t) return; try { await navigator.clipboard.writeText(t); toast(what, 'ok'); } catch { toast('The clipboard is not available; select the text and copy it manually', 'warn'); } };
+  /**
+   * The lines of the selection as the source writes them, in order: its instructions and data, the labels and
+   * comment lines inside it, and the header of a block it holds whole. A folded block in it comes along whole.
+   */
+  const selectedLines = (): string[] => {
+    if (!sel || !sel.multi || sel.end <= sel.start) return [];
+    const inside = (a: Addr) => a >= sel.start && a < sel.end;
+    const out: string[] = [];
+    for (const l of R.lines) {
+      if (l.k === 'file' || !inside(l.a)) continue;
+      if (l.k === 'hdr') { const b = A.blocks[l.blk]; if (!b || b.start < sel.start || b.end > sel.end) continue; }
+      // the file head's lines (a .label and the note on it) stand at the load address, not in the program
+      else if ((l.k === 'dir' && !l.n) || (l.k === 'cmt' && l.zp != null)) continue;
+      out.push(lineText(l, S));
+    }
+    while (out.length && !out[0].trim()) out.shift();
+    while (out.length && !out[out.length - 1].trim()) out.pop();
+    return out;
+  };
+  /** Ctrl+C in the listing: the selected lines, else the line at the cursor */
+  const copyLines = () => {
+    const ls = selectedLines();
+    if (ls.length) return void copyText(ls.join('\n'), `Copied ${ls.length} line${ls.length === 1 ? '' : 's'} to the clipboard`);
+    if (curLine) void copyText(lineText(curLine, S).trim());
+  };
   /** the showcase (core/showcase.ts) with its tour in the Bookmarks view. It needs bank tracking: its bitmap logo sits
    *  above a text screen, and only that tells the two $d018 values apart */
   const loadDemo = () => {
@@ -775,6 +800,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     { id: 'start', label: 'Set the program start to the cursor line', run: () => { const a = lineAddr(); if (a != null) setStart(a); } },
     ...(project.entryPoint != null ? [{ id: 'start-clear', label: `Clear the program start $${h4(project.entryPoint)} (Build & Run starts the program with RUN)`, run: () => setStart(null) }] : []),
     { id: 'xrefs', label: 'Show cross-references', key: 'X', run: () => setUi({ bottom: 'xrefs', panelOpen: true }) },
+    { id: 'copy-lines', label: 'Copy the selected lines (or the line at the cursor) as source', key: 'Ctrl+C', run: copyLines },
     { id: 'panel', label: 'Toggle bottom panel', key: 'Ctrl+J', run: () => setUi({ panelOpen: !useUi.getState().panelOpen }) },
     { id: 'verify', label: 'Verify round-trip (re-assemble and compare)', key: 'F7', run: () => void runVerify() },
     { id: 'build', label: 'Build with KickAss.jar & run in VICE', key: 'F5', run: () => void runBuild() },
@@ -816,6 +842,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         const id = map[e.key.toLowerCase()]; if (id) return run(id);
       }
       if (ctrl && (e.key.toLowerCase() === 's' || e.key.toLowerCase() === 'o')) return run(e.key.toLowerCase() === 's' ? 'save' : 'open');
+      // Ctrl+C in the listing copies its lines; text selected with the mouse elsewhere is copied as usual
+      if (ctrl && !e.shiftKey && !typing && !k.modal && !k.editing && e.key.toLowerCase() === 'c' && k.tab === 'listing' && (t?.closest?.('.listing') || !window.getSelection()?.toString())) return run('copy-lines');
       if (e.key === 'F5') return run('build');
       if (e.key === 'F9') return run('quicksave');
       if (e.key === 'F7') return run('verify');
@@ -929,6 +957,11 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         { sep: true },
         { label: 'Show cross-references', key: 'X', run: () => setUi({ bottom: 'xrefs', panelOpen: true }) },
         { label: 'Copy address', run: () => void copyText('$' + h4(l.a ?? cursor ?? 0)) },
+        ...(() => {
+          // in the selection: all its lines; the line itself as well
+          const n = inSel ? selectedLines().length : 0;
+          return n > 1 ? [{ label: `Copy ${n} selected lines`, key: 'Ctrl+C', run: copyLines }] : [];
+        })(),
         { label: 'Copy line', run: () => void copyText(lineText(l, S).trim()) },
       ],
     });

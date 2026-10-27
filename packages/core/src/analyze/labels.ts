@@ -22,6 +22,8 @@ export function makeLabels(ctx: Ctx, cls: Classification, vic: VicEvidence): { l
     if (kind === 'branch' || kind === 'jmp') continue;
     setLabel(addr, kind === 'entry' && addr === entry ? 'start' : `${kindPrefix[kind]}_${h4(addr)}`, kind);
   }
+  // the start of a delay that timing code enters (5.4b)
+  for (const s of ctx.delays.values()) setLabel(s.start, `delay_${h4(s.start)}`, 'delay');
   for (const [to, l] of xrefs) {
     if (!insLen[to] || labels.has(to) || tm[to] === T.MUSIC) continue;
     const fl = l.filter(x => (x.kind === 'branch' || x.kind === 'jump') && x.from !== to);

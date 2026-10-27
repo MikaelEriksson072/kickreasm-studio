@@ -68,8 +68,8 @@ export function evidence(ctx: Ctx): void {
     prevEnd = (pc + insLen[pc]) & 0xffff;
     prevBreak = info.flow === 'jmp' || info.flow === 'jmpi' || info.flow === 'ret' || info.flow === 'brk' || inlineCalls.has(pc);
     if (skip.has(pc)) { reset(); continue; }
-    // data references
-    if (info.access && d.target != null) {
+    // data references (none from a delay's operands, which only take time)
+    if (info.access && d.target != null && !ctx.delayIns.has(pc)) {
       const tgt = d.target;
       const kind = (mode === 'izx' || mode === 'izy') ? 'ptr' : info.access;
       addX(tgt, pc, kind);

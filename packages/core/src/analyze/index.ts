@@ -19,6 +19,7 @@ import { codeIslands, diagnostics, ioLabelNotice, statistics, type CodeIsland } 
 import { findLoaders } from './loaders';
 import { rasterIrqs } from './raster';
 import { deepLog, learn, problemCount } from './deep';
+import { findDelays } from './delay';
 
 export { findBlock } from './classify';
 
@@ -56,12 +57,12 @@ function analyzeOnce(project: ProjectInput, deepIn: Deep | null): [AnalysisResul
   // guesses on trial (settle) and follows both sides of a branch reached some other way after all (releaseFlags)
   const traceAll = () => {
     for (let iter = 0; iter < 8; iter++) {
-      trace(ctx); settle(ctx); evidence(ctx);
+      trace(ctx); settle(ctx); evidence(ctx); findDelays(ctx);
       if (ctx.deep && releaseFlags(ctx)) { iter--; continue; }
       resolveTables(ctx);
       if (!ctx.queue.length && !ctx.pending.length) break;
     }
-    trace(ctx); settle(ctx); evidence(ctx);
+    trace(ctx); settle(ctx); evidence(ctx); findDelays(ctx);
     while (ctx.deep && releaseFlags(ctx)) { trace(ctx); evidence(ctx); }
     warnUnresolvedJumps(ctx);
   };
@@ -117,6 +118,6 @@ function analyzeOnce(project: ProjectInput, deepIn: Deep | null): [AnalysisResul
   return [{
     S, files, mem, owner, insLen, codeOwner, skip, xrefs, entryKind, entry, basics, music: cls.music, vic, gfx: cls.gfxBlocks,
     tm: cls.tm, blocks: cls.blocks, labels, zp, hints, smc, offsetOf: cls.offsetOf, lohiTabs, ijumps, inlineCalls, log, stats, textPtrs, mcfg, loaders, raster,
-    deep: null,
+    delays: [...ctx.delays.values()].sort((x, y) => x.branch - y.branch), deep: null,
   }, ctx];
 }

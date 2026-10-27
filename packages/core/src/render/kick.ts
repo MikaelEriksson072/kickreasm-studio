@@ -3,7 +3,7 @@
  * Kick Assembler export (single source of truth).
  * ===================================================================== */
 import type {
-  Addr, AnalysisResult, Block, BlockKind, ForcedMode, Line, ListingLine, MusicInfo, NumberFormat,
+  Addr, AnalysisResult, Block, BlockKind, DelaySled, ForcedMode, Line, ListingLine, MusicInfo, NumberFormat,
   ProjectInput, RenderLabel, RenderProblem, RenderResult, TextEncoding, Token, ZpVar, ExcludedRange, LoaderPart } from '../types';
 import { kindInfo, TYPE_BY_KEY } from '../model';
 import { ENC, MODE_LEN, OPC } from '../cpu/opcodes';
@@ -82,6 +82,14 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
   for (const f of A.loaders ?? []) for (const p of f.parts) {
     markAt(loaderStarts, p.start, `==== ${f.name}: ${p.what} ====`);
     if (LOADER_SPANS[p.role] && p.end - p.start > 8) markAt(loaderEnds, p.end, `==== end of ${f.name}: ${LOADER_SPANS[p.role]} ====`);
+  }
+  // timing code (5.4b): a comment line above each delay, which takes as long as the branch into it leaves
+  const delayAt = new Map<Addr, DelaySled>(), delayBranch = new Map<Addr, DelaySled>();
+  const timerName = (s: DelaySled) => `${hwSymbol(s.timer)?.text ?? n4(s.timer)} (${n4(s.timer)})`;
+  for (const s of A.delays ?? []) {
+    delayBranch.set(s.branch, s);
+    for (const a of s.ins) delayAt.set(a, s);
+    markAt(loaderStarts, s.start, `delay: the ${kickMnemonic(OPC[mem[s.branch]].mn)} at ${n4(s.branch)} goes 0-${s.most} bytes into it by ${timerName(s)}, so it takes ${s.cycles[1]} down to ${s.cycles[0]} cycles`);
   }
   const marked = (a: Addr) => loaderStarts.has(a) || loaderEnds.has(a);
   /** data and text rows break at notes and loader marks like at labels */
@@ -199,7 +207,8 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
       }
       case 'rel': opTok.push(...addrTokens(d.target!, c)); break;
       case 'zp': case 'zpx': case 'zpy': case 'izx': case 'izy': {
-        const tk = addrTokens(d.v!, c);
+        // a delay's operand only takes time: the number, no label
+        const tk: Token[] = delayAt.has(pc) ? [{ t: 'num', s: n2(d.v!) }] : addrTokens(d.v!, c);
         // A program label may be defined later in the source, so Kick's first pass would pick the
         // 16-bit form: force zero page. KickAss 5.25 rejects `.zp` on `(zp),y` ("Cannot force zeropage
         // mode on an argument of type indirectZeropageY"); that mode has no 16-bit form and needs no suffix.
@@ -211,7 +220,7 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
       }
       case 'abs': case 'abx': case 'aby': case 'ind': {
         if (o.flow === 'jmp' && d.target === pc) { opTok.push({ t: 'p', s: '*' }); break; }
-        const tk = addrTokens(d.v!, Object.assign({}, c, { zpWidth: false }));
+        const tk: Token[] = delayAt.has(pc) ? [{ t: 'num', s: n4(d.v!) }] : addrTokens(d.v!, Object.assign({}, c, { zpWidth: false }));
         if (d.v! < 0x100 && o.mode !== 'ind') { ext = '.abs'; if (tk[0].t === 'num') tk[0].s = n4(d.v!); }
         if (o.mode === 'ind') opTok.push({ t: 'p', s: '(' }, ...tk, { t: 'p', s: ')' });
         else opTok.push(...tk, ...(o.mode === 'abx' ? [{ t: 'p', s: ',x' } as Token] : o.mode === 'aby' ? [{ t: 'p', s: ',y' } as Token] : []));
@@ -224,6 +233,9 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
     }
     const cm: string[] = [];
     if (A.smc.has(pc)) cm.push(`self-modified by ${n4(A.smc.get(pc)!)}`);
+    const into = delayBranch.get(pc);
+    if (into) cm.push(`0-${into.most} bytes into the delay, by ${timerName(into)}`);
+    if (delayAt.has(pc)) cm.push('delay');
     if (o.flow === 'jmpi') { const t = [...A.lohiTabs.values()].find(t => t.dest === d.v && t.code); cm.push(t ? `jump table: ${t.len} targets` : 'indirect jump'); }
     if (A.inlineCalls.has(pc)) cm.push('inline data follows');
     // the register's description, also when the operand is written as the raw address
@@ -241,7 +253,7 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
       }
     }
     if (o.ill) cm.push('undocumented opcode');
-    return { k: 'ins', a: pc, n, mn: o.mn, ill: o.ill, ext, tok: opTok, cmt: cm.join('; ') };
+    return { k: 'ins', a: pc, n, mn: o.mn, ill: o.ill, ext, tok: opTok, cmt: cm.join('; '), ...(delayAt.has(pc) ? { delay: true } : {}) };
   }
 
   function joinList(items: (Token | Token[])[]): Token[] { const out: (Token | Token[])[] = []; items.forEach((it, i) => { if (i) out.push({ t: 'p', s: ', ' }); out.push(it); }); return out.flat(); }

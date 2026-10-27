@@ -343,6 +343,43 @@ medan kö inte tom:
     RTS/RTI/BRK → stopp
 ```
 
+### 8.3b Tidskod (fördröjning)
+
+En stabil raster väntar så många cykler som en timer säger. Ett exempel, från en CIA-tajmad rasterrutin:
+
+```
+        lda $dc06               // CIA 1 timer B, låg byte
+        eor #$07
+        sta smc+1
+smc:    bpl *                   // avståndet 0-7 sätts av koden
+        lda #$a9                // a9 a9 a9 a9 ad a5 ea: varje ingång slutar på samma ställe
+        lda #$a9
+        lda $eaa5
+```
+
+`findDelays()` (`analyze/delay.ts`) körs efter varje evidenspass och känner igen mönstret:
+- en gren vars avståndsbyte en STA/STX/STY skriver;
+- ett värde som i den raka sträckan före kommer från en räknare: CIA 1:s eller 2:s timer A eller B (`$DC04–$DC07`,
+  `$DD04–$DD07`, med speglingar) eller VIC:ens raster (`$D012`), via `AND`/`EOR`/`ORA`/`ADC`/`SBC` med konstanter
+  och överföringar mellan registren;
+- byten efter grenen: det mesta grenen hoppar (`AND`:ens, annars `EOR`:ens konstant, högst 63) är hur långt
+  fördröjningen räcker, och varje ingång 0…n avkodas till instruktioner som bara tar tid (inga hopp och inga
+  skrivningar) och slutar precis vid fördröjningens slut.
+
+Då gäller:
+- **Fördröjningen avkodas från början.** En snapshot kan ha avståndet 5 kvar från senaste avbrottet. Spårningen
+  har då gått in mitt i, men fördröjningen avkodas om från början, och grenen skrivs `bpl delay_0886+5`.
+- **Operanderna tar bara tid.** De ger inga korsreferenser och inga etiketter, som `data_eaa5` eller `zp_ea`, och de
+  skrivs som tal (`lda $eaa5`).
+- **Märkning:** etiketten `delay_xxxx` på början, en kommentarsrad ovanför (*delay: the bpl at $0884 goes 0-7 bytes
+  into it by CIA1_TB_LO ($dc06), so it takes 8 down to 0 cycles*), kommentaren `delay` på varje rad och på grenen
+  *0-7 bytes into the delay, by CIA1_TB_LO ($dc06)*. I listningen är raderna tonade, har en streckad kant och en
+  bricka *delay*. Loggen har en rad per fördröjning.
+
+`AnalysisResult.delays` (`DelaySled`) har grenen, skrivningen, timern, fördröjningens intervall, hur långt grenen går
+i de laddade byten och hur många cykler den kan ta. **Mätt** på 1060 riktiga program: 7 fördröjningar i 6 program,
+alla CIA 1:s timer A med 0–7 byte (8–0 cykler), och alla återskapas byte för byte. **Test:** `test/delay.test.ts`.
+
 ### 8.4 Evidenspass (konstantpropagering)
 
 Efter varje spårning körs ett linjärt pass över instruktionerna i adressordning med en enkel registermodell `A/X/Y = {värde, källa}`:
@@ -819,6 +856,7 @@ assembleras tillbaka byte för byte och att djupanalysen aldrig har fler problem
 | Vänsterkolumn | *Address* / *Line* i listningens verktygsrad, kommandopaletten | Minnesadress (standard) eller radnummer i `.asm`-filen (samma som Kick Assemblers felmeddelanden och källvyn); valet sparas |
 | Markering | dra i listningen eller heatmap, `Shift`+klick/pilar/`PgUp`/`PgDn`/`Home`/`End` | Intervall för mark-as; klick på en blockrubrik tar med hela blocket, dragning förbi kanten rullar listningen |
 | Minneskonfiguration / VIC-bank | högerklick → *Memory configuration ($01)* / *VIC bank*, inspektorn för kodblock | Koden i markeringen (eller från raden till blockets slut) körs med det valda `$01`-värdet eller den valda banken (8.7b); *Detected* tar bort valet |
+| Kopiera rader | `Ctrl+C` i listningen, högerklick → *Copy N selected lines* / *Copy line*, kommandopaletten | Markeringens rader som källkoden skriver dem, i ordning och med indrag: instruktioner och data, etiketter och kommentarsrader inuti den, och rubriken på ett block som markeringen täcker helt. Ett ihopfällt block i markeringen följer med helt. Utan markering kopieras raden vid markören. Text som markerats med musen någon annanstans (loggen, inspektorn) kopieras som vanligt |
 | Ångra / gör om | `Ctrl+Z` / `Ctrl+Y` | Hela projektet; senaste åtgärden visas i tooltip |
 | Kommandopalett | `Ctrl+Shift+P`, `F1` | Alla kommandon sökbara |
 | Verifiera / bygg och kör | `F7` / `F5` | Round-trip / KickAss + VICE |

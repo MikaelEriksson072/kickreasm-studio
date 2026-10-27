@@ -1150,6 +1150,31 @@ test('the installed app comes with unp64, and the unpacker setting points to it'
   });
 });
 
+test('timing code: a delay a timer sets the branch into is marked, and what it reads gets no label', async ({ workDir: work, app, page }) => {
+  // 10 SYS2061, then lda $dc06 / eor #$07 / sta smc+1 / smc: bpl * / lda #$a9 / lda #$a9 / lda $eaa5 / rts, loaded
+  // up to $eaff so that $eaa5 is part of the program
+  const prg = new Uint8Array(2 + 0xeb00 - 0x0801);
+  prg.set([0x01, 0x08]);
+  prg.set([0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x32, 0x30, 0x36, 0x31, 0x00, 0x00, 0x00], 2);
+  prg.set([0xad, 0x06, 0xdc, 0x49, 0x07, 0x8d, 0x16, 0x08, 0x10, 0x00, 0xa9, 0xa9, 0xa9, 0xa9, 0xad, 0xa5, 0xea, 0x60], 2 + 0x080d - 0x0801);
+  const file = join(work, 'stable.prg');
+  writeFileSync(file, prg);
+  await waitForListing(page);
+  await stubDialogs(app, { open: [file] });
+  await page.keyboard.press('Control+o');
+  await expect(toast(page, 'Loaded stable.prg at $0801')).toBeVisible();
+  await goTo(page, '$0815');
+  const rows = listing(page);
+  await expect(rows.locator('.row', { hasText: 'bpl delay_0817' })).toContainText('0-7 bytes into the delay, by CIA1_TB_LO ($dc06)');
+  await expect(rows.locator('.row.k-cmt', { hasText: 'delay: the bpl at $0815 goes 0-7 bytes into it by CIA1_TB_LO ($dc06), so it takes 8 down to 0 cycles' })).toBeVisible();
+  await expect(rows.locator('.row.delay')).toHaveCount(3);
+  await expect(rows.locator('.row.delay .delay-tag')).toHaveCount(3);
+  await expect(rows.locator('.row.delay', { hasText: 'lda $eaa5' })).toBeVisible();
+  await expect(rows.locator('.row', { hasText: 'data_eaa5' })).toHaveCount(0);
+  await page.keyboard.press('F7');
+  await expect(statusBar(page)).toContainText('✓ round-trip verified', { timeout: 90_000 });
+});
+
 test('Problems warns when bank tracking is off and I/O is written as labels, and turns it on', async ({ workDir: work, app, page }) => {
   // a memory dump from $0801 over $d000-$d02f: 10 SYS2061, then lda #$00 / sta $d020 / sta $d021 / rts
   const prg = new Uint8Array(2 + 0xd030 - 0x0801);
@@ -1561,6 +1586,37 @@ test('comment a zero-page variable on its .label line, with the keys, the menu a
     await page.keyboard.press('Control+z');
     await expect(zpRow().locator('.cmt.user')).toHaveText('// screen pointer');
   });
+});
+
+test('Ctrl+C copies the selected lines of the listing as source, and the line at the cursor without one', async ({ app, page }) => {
+  await waitForListing(page);
+  const clipboard = async () => (await app.evaluate(({ clipboard: c }) => c.readText())).replace(/\r\n/g, '\n');
+  // fx_091e is a jump-table routine: lda SID_OSC3 / and #$0f / sta COLOR_RAM+24*40+39 / rts
+  await goTo(page, 'fx_091e');
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
+  await expect(statusBar(page)).toContainText('sel $091e–$0926 (9 B)');
+  await page.keyboard.press('Control+c');
+  // the whole block is selected, so its header comes along
+  await expect(toast(page, 'Copied 6 lines to the clipboard')).toBeVisible();
+  const lines = (await clipboard()).split('\n');
+  expect(lines).toHaveLength(6);
+  expect(lines[0]).toMatch(/^\/\/ ---- Code · fx_091e · \$091e-\$0926 \(9 bytes\) -+$/);
+  expect(lines[1]).toBe('fx_091e:');
+  expect(lines[2]).toMatch(/^ {8}lda SID_OSC3 +\/\/ Voice 3 oscillator output/);
+  expect(lines[3]).toBe('        and #$0f');
+  expect(lines[4]).toMatch(/^ {8}sta COLOR_RAM\+24\*40\+39\b/);
+  expect(lines[5]).toBe('        rts');
+
+  // the context menu inside the selection offers the same
+  await listing(page).locator('.row', { has: page.locator('.adr', { hasText: /^0921$/ }) }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: /Copy 6 selected lines/ }).click();
+  await expect(toast(page, 'Copied 6 lines to the clipboard')).toHaveCount(2);
+
+  // without a selection, the line at the cursor
+  await goTo(page, '$0923');
+  await page.keyboard.press('Control+c');
+  await expect(toast(page, 'Copied to clipboard')).toBeVisible();
+  expect(await clipboard()).toMatch(/^sta COLOR_RAM\+24\*40\+39\b/);
 });
 
 test('the Memory tab shows the program as the VICE monitor does: m, i and ii', async ({ app, page }) => {

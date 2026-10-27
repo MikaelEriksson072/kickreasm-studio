@@ -25,6 +25,8 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   - SID players, by their jump table and note frequency table, exported as a `.sid` that Kick Assembler loads with `LoadSid`;
   - charsets, sprites, bitmaps and screens, from `$d018`, `$dd00` and the sprite pointers;
   - lo/hi pointer tables, sine tables, colour tables and text;
+  - timing code: a branch that a CIA timer or the raster points into a delay (a stable raster), marked as a delay,
+    with no labels for what its instructions only read to take time;
   - routines nothing traced reaches, such as an init that ran before a snapshot was taken;
   - fast loaders: Spindle, Krill's loader, Bitfire, Sparkle, the Covert Bitops loader, and any other one by its drive
     code;
@@ -92,7 +94,8 @@ This writes `KickReasm-Studio-<version>-setup.exe` and a portable `.exe` to `app
    the way it was, the memory map and a preview. `G` goes to an address or label, and `X` lists who references the
    line.
 3. **Fix what the heuristics got wrong.** `N` renames, `;` comments, and `C`, `D`, `W` and `T` mark the selection as
-   code, bytes, words or text. Right-click for everything else. `Ctrl+Z` undoes.
+   code, bytes, words or text. Right-click for everything else. `Ctrl+Z` undoes, and `Ctrl+C` copies the selected
+   lines as source.
 4. **Verify** with `F7`. The status bar says whether the source assembles back to the original bytes.
 5. **Export** the Kick Assembler project with its build scripts (`Ctrl+E`), or **Build & Run** it in VICE (`F5`).
 
