@@ -63,7 +63,7 @@ export const MARK_TYPE: Record<string, BlockKind> = {
 
 export const DEFAULT_SETTINGS: Settings = {
   // analysis
-  illegal: true, detectMusic: true, detectGfx: true, detectText: true, bankTracking: true, snapshotZeroPage: false, codeIslands: true,
+  illegal: true, detectMusic: true, detectGfx: true, detectText: true, bankTracking: true, snapshotZeroPage: false, codeIslands: true, deepAnalysis: false,
   // output
   mnemonicCase: 'lower', hexCase: 'lower', bytesPerRow: 8, indent: 8, commentCol: 40,
   basicUpstart: true, hwInclude: 'import', hwComments: true, musicAsSid: true, gfxBinary: true, addrComments: false, notesFormat: 'html',

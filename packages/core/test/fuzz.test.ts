@@ -12,7 +12,7 @@ const settingsArb: fc.Arbitrary<Partial<Settings>> = fc.record({
   mnemonicCase: fc.constantFrom('lower', 'upper'), hexCase: fc.constantFrom('lower', 'upper'),
   bytesPerRow: fc.constantFrom(4, 8, 16), indent: fc.constantFrom(2, 4, 8), commentCol: fc.constantFrom(32, 40, 48),
   basicUpstart: fc.boolean(), hwInclude: fc.constantFrom('import', 'inline', 'none'), hwComments: fc.boolean(),
-  musicAsSid: fc.boolean(), gfxBinary: fc.boolean(), addrComments: fc.boolean(), bankTracking: fc.boolean(), codeIslands: fc.boolean(),
+  musicAsSid: fc.boolean(), gfxBinary: fc.boolean(), addrComments: fc.boolean(), bankTracking: fc.boolean(), codeIslands: fc.boolean(), deepAnalysis: fc.boolean(),
 }, { requiredKeys: [] }) as fc.Arbitrary<Partial<Settings>>;
 
 const overrideArb = fc.record({

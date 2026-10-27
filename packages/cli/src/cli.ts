@@ -21,6 +21,8 @@ Usage:
 
 Options:
   --set key=value   override a setting (repeatable), e.g. --set hwInclude=inline --set bytesPerRow=16
+  --deep            deep analysis: slower, analyses again until the problems are at a minimum
+                    (the same as --set deepAnalysis=true)
   --kickass [jar]   also assemble with the real Kick Assembler (default: auto-detect / KICKASS_JAR)
   --java <path>     Java executable used for --kickass (default: java)
 `;
@@ -71,7 +73,7 @@ function analyseCmd(p: Project, io: Io, json: boolean) {
   const packing = A.files.map((_, i) => detectPacking(A, i));
   if (json) {
     io.out(JSON.stringify({
-      entry: A.entry, stats: { ...A.stats, illegalList: undefined }, log: A.log,
+      entry: A.entry, stats: { ...A.stats, illegalList: undefined }, deep: A.deep, log: A.log,
       packing: packing.map(k => k && { verdict: k.verdict, signature: k.signature, entropy: +k.entropy.toFixed(2), packedShare: +k.packedShare.toFixed(2), codeBytes: k.codeBytes, decruncher: k.decruncher, reasons: k.reasons }),
       blocks: A.blocks.map(b => ({ start: b.start, end: b.end, type: b.type, conf: b.conf, reason: b.reason, user: b.user, props: b.props })),
       labels: Object.fromEntries([...A.labels].map(([a, l]) => [`$${h4(a)}`, l.name])),
@@ -127,6 +129,7 @@ function builtinVerify(p: Project, io: Io) {
 
 export async function main(argv: string[], io: Io): Promise<number> {
   const { cmd, inputs, flags, sets } = parse(argv);
+  if (flags.has('deep')) sets.push(['deepAnalysis', 'true']);
   try {
     switch (cmd) {
       case 'analyse': case 'analyze':

@@ -45,7 +45,12 @@ export function evidence(ctx: Ctx): void {
     }
     if (loaded(dest)) wordPtrs.add(dest);
     const vk = VECTORS[dest];
-    if (vk && loaded(value)) { let vs = ctx.ev.vectors.get(value); if (!vs) ctx.ev.vectors.set(value, vs = new Set()); vs.add(dest); enqueue(value, vk); L('ok', `${vk.toUpperCase()} vector ${$4(dest)} set to ${$4(value)} at ${$4(lo.src!)}`, lo.src!, 'entry'); }
+    if (vk && loaded(value)) {
+      let vs = ctx.ev.vectors.get(value); if (!vs) ctx.ev.vectors.set(value, vs = new Set()); vs.add(dest);
+      // the KERNAL calls through $0314-$0319 with its ROM banked in, so a handler at $e000-$ffff is its own routine
+      if (ctx.deep && dest < 0x0400 && value >= 0xe000) L('info', `${vk.toUpperCase()} vector ${$4(dest)} set to ${$4(value)} at ${$4(lo.src!)}: the KERNAL ROM's own routine, so the RAM below is not traced`, lo.src!, 'deep');
+      else { enqueue(value, vk); L('ok', `${vk.toUpperCase()} vector ${$4(dest)} set to ${$4(value)} at ${$4(lo.src!)}`, lo.src!, 'entry'); }
+    }
     else if (loaded(value)) ptrTargets.set(value, dest);
   };
   for (const pc of starts) {

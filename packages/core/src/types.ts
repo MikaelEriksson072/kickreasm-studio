@@ -62,6 +62,9 @@ export interface Settings {
   snapshotZeroPage: boolean;
   /** data nothing traced reaches that decodes as a routine (6+ instructions ending in RTS, RTI or JMP) is code */
   codeIslands: boolean;
+  /** deep analysis: slower, re-analyses until the problems are at a minimum (guesses are traced on trial, calls into
+   * ROM, self-modified jump targets and branches with known flags are not followed) */
+  deepAnalysis: boolean;
   // output
   mnemonicCase: 'lower' | 'upper';
   hexCase: 'lower' | 'upper';
@@ -271,6 +274,21 @@ export interface BasicInfo {
   file?: number;
 }
 
+/** What the deep analysis did (5.17): its rounds and the problems before (a normal analysis) and after. */
+export interface DeepReport {
+  rounds: number;
+  /** problems (log warnings, errors and hints) of the normal analysis and of the deep one */
+  before: number;
+  after: number;
+  /** guesses (code islands, pointer targets, the load address) that tracing showed to lead into problems */
+  rejected: number;
+  /** calls and jumps not followed: into ROM, through a self-modified operand, past a routine that never returns */
+  cuts: number;
+  /** conditional branches whose flags the instruction before sets, so one side is never taken */
+  branches: number;
+  ms: number;
+}
+
 /** An IRQ handler and the raster line it runs at (5.16). */
 export interface RasterIrq {
   handler: Addr;
@@ -378,6 +396,8 @@ export interface AnalysisResult {
   loaders: LoaderFinding[];
   /** the IRQ handlers and the raster lines they run at (5.16) */
   raster: RasterIrq[];
+  /** what the deep analysis did (`Settings.deepAnalysis`); null without it */
+  deep: DeepReport | null;
 }
 
 export type LoaderId = 'spindle' | 'krill' | 'bitfire' | 'sparkle' | 'covert' | 'fastloader' | 'tape' | 'kernal';

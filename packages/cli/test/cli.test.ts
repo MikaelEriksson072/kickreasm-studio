@@ -21,6 +21,10 @@ describe('kickreasm CLI', () => {
     expect(c.lines.join('\n')).toMatch(/\$1000-\$[0-9a-f]{4} {2}Music \(SID\)/);
 
     c = capture(dir);
+    expect(await main(['analyse', 'demo.prg', '--deep'], c.io)).toBe(0);
+    expect(c.lines.join('\n')).toMatch(/^\[ok {2}\] Deep analysis: \d+ → \d+ problems? in \d rounds?/m);
+
+    c = capture(dir);
     expect(await main(['verify', 'demo.prg', '--set', 'hwInclude=inline'], c.io)).toBe(0);
     expect(c.lines[0]).toMatch(/^OK {3}demo\.asm: 12287\/12287 bytes identical/);
 

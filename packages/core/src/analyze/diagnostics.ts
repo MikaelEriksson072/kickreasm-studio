@@ -6,6 +6,7 @@ import { OPC, type OpcodeInfo } from '../cpu/opcodes';
 import { decode } from '../cpu/decode';
 import { hwSymbol, isIO } from '../c64/symbols';
 import { $4, now } from '../util/hex';
+import { trial } from './trace';
 
 /**
  * Without bank tracking an access to I/O inside the loaded bytes (a memory dump over $d000-$dfff) names the RAM byte
@@ -21,17 +22,19 @@ export function ioLabelNotice(ctx: Ctx, labels: Map<Addr, LabelInfo>): void {
   L('warn', `Bank tracking is off, so the code's accesses to ${io.length} I/O address${io.length === 1 ? '' : 'es'} inside the loaded bytes are written as labels (${shown}). Turn on Settings → Analysis → Follow the memory configuration ($01) and VIC bank to write them as registers.`, io[0], 'banks');
 }
 
-/** A routine in a data block that nothing traced reaches: where it starts, its instructions and the last one. */
-export interface CodeIsland { at: Addr; n: number; last: string }
+/** A routine in a data block that nothing traced reaches: where it starts and ends, its instructions and the last one. */
+export interface CodeIsland { at: Addr; end: Addr; n: number; last: string }
 
 /**
  * 5.13 code islands: the data blocks that start with a routine. After fill (3+ equal bytes) and bytes the code uses as
  * data, at one of the next 8 addresses: at least 6 documented instructions ending in RTS, JMP or (in a handler that
  * acknowledges its interrupt) RTI, with no BRK, all inside the block, every branch landing in it (after the start) or
  * on traced code, no JSR/JMP into the middle of a traced instruction or into a player (but for its init and play),
- * and not 1541 drive code. User blocks are the user's word and stay as they are.
+ * and not 1541 drive code. User blocks are the user's word and stay as they are. A deep analysis (`left`: the starts
+ * it left out) looks for routines all through the block and lets their branches leave it, as each one is traced on
+ * trial (5.17).
  */
-export function codeIslands(ctx: Ctx, blocks: Block[], music: MusicInfo[] = []): CodeIsland[] {
+export function codeIslands(ctx: Ctx, blocks: Block[], music: MusicInfo[] = [], left?: (a: Addr) => boolean): CodeIsland[] {
   const { mem, insLen, codeOwner, xrefs } = ctx;
   const out: CodeIsland[] = [];
   const asData = (a: Addr) => (xrefs.get(a) || []).some(x => x.kind === 'read' || x.kind === 'write' || x.kind === 'rmw');
@@ -44,7 +47,8 @@ export function codeIslands(ctx: Ctx, blocks: Block[], music: MusicInfo[] = []):
       const o = OPC[mem[p]];
       if (o.ill || o.jam || o.flow === 'brk' || p + o.len > e) return null;
       const t = decode(mem, p).target;
-      if (o.flow === 'br' && !(t! >= s && t! < e) && !insLen[t!]) return null;
+      // a deep analysis traces the routine on trial, branches out of the block too
+      if (o.flow === 'br' && !(t! >= s && t! < e) && !insLen[t!] && !left) return null;
       if ((o.flow === 'jsr' || o.flow === 'jmp') && codeOwner[t!] >= 0 && !insLen[t!]) return null;
       // into a player other than by its init and play (a copy of the player's code, say)
       if ((o.flow === 'jsr' || o.flow === 'jmp') && music.some(m => t! >= m.start && t! < m.end && t !== m.init && t !== m.play)) return null;
@@ -54,7 +58,7 @@ export function codeIslands(ctx: Ctx, blocks: Block[], music: MusicInfo[] = []):
       if (o.flow === 'ret' || o.flow === 'jmp' || o.flow === 'jmpi') { last = o; break; }
     }
     // an interrupt handler acknowledges its interrupt; $40 (RTI) ends many a table
-    return last && n >= 6 && drive < 2 && (last.mn !== 'RTI' || ack) ? { at: s, n, last: last.mn } : null;
+    return last && n >= 6 && drive < 2 && (last.mn !== 'RTI' || ack) ? { at: s, end: p, n, last: last.mn } : null;
   };
   for (const b of blocks) {
     if (b.type !== 'data' || b.user || b.end - b.start < 12) continue;
@@ -62,6 +66,15 @@ export function codeIslands(ctx: Ctx, blocks: Block[], music: MusicInfo[] = []):
     let z = 0; while (s + z < b.end && mem[s + z] === mem[s]) z++;
     if (z >= 3) s += z;
     while (s < b.end && asData(s)) s++;
+    if (left) {
+      for (let a = s; a + 6 <= b.end;) {
+        let f = 0; while (a + f < b.end && mem[a + f] === mem[a]) f++;
+        if (f >= 3) { a += f; continue; }
+        const r = left(a) || asData(a) ? null : routine(a, b.end);
+        if (r) { out.push(r); a = r.end; } else a++;
+      }
+      continue;
+    }
     for (let k = 0; k < 8 && s + k < b.end; k++) {
       const r = routine(s + k, b.end);
       if (r) { out.push(r); break; }
@@ -71,7 +84,15 @@ export function codeIslands(ctx: Ctx, blocks: Block[], music: MusicInfo[] = []):
 }
 
 export function diagnostics(ctx: Ctx, blocks: Block[]): void {
-  const { mem, L } = ctx;
+  const { mem, L, deep, rejected } = ctx;
+  // a deep analysis traces the bytes on trial: what runs into a problem is data, and needs no hint (5.17)
+  const data = (b: Block) => {
+    if (!deep) return false;
+    for (const a of rejected.keys()) if (a >= b.start && a < b.end && a < b.start + 16) return true;
+    const why = trial(ctx, b.start, 'guess');
+    if (why) rejected.set(b.start, { kind: 'guess', why });
+    return !!why;
+  };
   for (const b of blocks) {
     if (b.type !== 'data' || b.end - b.start < 12) continue;
     let p = b.start, n = 0, end = false;
@@ -81,7 +102,7 @@ export function diagnostics(ctx: Ctx, blocks: Block[]): void {
       n++; p += o.len;
       if (o.flow === 'ret' || o.flow === 'jmp') { end = true; break; }
     }
-    if (end && n >= 6) { b.hint = 'code'; L('hint', `Possible unreached code at ${$4(b.start)} (${n} valid instructions ending in ${OPC[mem[p - OPC[mem[p - 1]].len]]?.mn || 'RTS'}). Select it and press C to disassemble.`, b.start, 'data'); }
+    if (end && n >= 6 && !data(b)) { b.hint = 'code'; L('hint', `Possible unreached code at ${$4(b.start)} (${n} valid instructions ending in ${OPC[mem[p - OPC[mem[p - 1]].len]]?.mn || 'RTS'}). Select it and press C to disassemble.`, b.start, 'data'); }
   }
   const entropy = (s: Addr, e: Addr) => { const c = new Uint32Array(256); for (let i = s; i < e; i++) c[mem[i]]++; let H = 0; const n = e - s; for (const k of c) if (k) { const p = k / n; H -= p * Math.log2(p); } return H; };
   for (const b of blocks) b.entropy = entropy(b.start, b.end);

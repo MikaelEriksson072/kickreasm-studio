@@ -1,5 +1,5 @@
 /* Bottom panel: analysis log, problems, cross-references, raster IRQs, statistics, build output. */
-import { decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, type Addr, type AnalysisResult, type RasterIrq, type RenderResult, type Settings } from '@kickreasm/core';
+import { decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, type Addr, type AnalysisResult, type DeepReport, type RasterIrq, type RenderResult, type Settings } from '@kickreasm/core';
 import { Icon, LVL_ICON } from '../lib/icons';
 import { cx, fmtBytes, GROUP_LABEL, GROUP_ORDER, groupOfType } from '../lib/util';
 import type { BottomTab } from '../store/ui';
@@ -20,6 +20,26 @@ export function LogList({ items, onNavigate, empty }: { items: UiProblem[]; onNa
         </div>
       ))}
     </div>
+  );
+}
+
+/** The Problems tab: the deep analysis (on or off, and what it did) over the list. */
+export function ProblemsPanel({ items, onNavigate, deep, on, busy, onDeep }: { items: UiProblem[]; onNavigate: (a: Addr) => void; deep: DeepReport | null; on: boolean; busy: boolean; onDeep: (on: boolean) => void }) {
+  const s = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+  return (
+    <>
+      <div className="problems-head">
+        <label className="check" title="Slower: traces every guess on trial and keeps it only when it runs into no problem, does not follow calls into ROM or through operands the code writes, decides branches by the flags before them, and analyses again until the problems are at a minimum">
+          <input type="checkbox" checked={on} onChange={e => onDeep(e.target.checked)} aria-label="Deep analysis" /><span>Deep analysis</span>
+        </label>
+        <span className="muted small" role="status" aria-label="Deep analysis result">
+          {on && deep ? `${deep.before} → ${s(deep.after, 'problem')} in ${s(deep.rounds, 'round')}, ${(deep.ms / 1000).toFixed(1)} s · the Log tells what it left out`
+            : on ? (busy ? 'Analysing…' : '')
+              : 'Slower: tests every guess and analyses again until the problems are at a minimum'}
+        </span>
+      </div>
+      <LogList items={items} onNavigate={onNavigate} empty="No problems found." />
+    </>
   );
 }
 

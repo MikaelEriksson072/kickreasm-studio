@@ -58,7 +58,7 @@ export const toolchainSettingsSchema = z.object({
 });
 
 export const settingsSchema = toolchainSettingsSchema.partial().extend({
-  illegal: z.boolean(), detectMusic: z.boolean(), detectGfx: z.boolean(), detectText: z.boolean(), bankTracking: z.boolean(), snapshotZeroPage: z.boolean(), codeIslands: z.boolean(),
+  illegal: z.boolean(), detectMusic: z.boolean(), detectGfx: z.boolean(), detectText: z.boolean(), bankTracking: z.boolean(), snapshotZeroPage: z.boolean(), codeIslands: z.boolean(), deepAnalysis: z.boolean(),
   mnemonicCase: z.enum(['lower', 'upper']), hexCase: z.enum(['lower', 'upper']),
   bytesPerRow: z.number().int().min(1).max(64), indent: z.number().int().min(0).max(16), commentCol: z.number().int().min(0).max(160),
   basicUpstart: z.boolean(), hwInclude: z.enum(['import', 'inline', 'none']), hwComments: z.boolean(),

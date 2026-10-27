@@ -717,6 +717,61 @@ Ett klick på raden går till rutinen, ett klick på en adress dit. Demot ger en
 `irq_08b7`, satt av huvudkoden via `$0314`. **Test:** `test/raster.test.ts`: en kedja av tre med bit 8, en rutin som
 sätter sin egen nästa rad, en rad ur en tabell, demot och en snapshots rutin som ingen spårad kod installerar.
 
+### 8.11e Djupanalys
+
+**Djupanalysen** (`packages/core/src/analyze/deep.ts`, `Settings.deepAnalysis`, av som standard) byter hastighet mot
+noggrannhet. Den slås på med kryssrutan **Deep analysis** överst i fliken Problems eller i *Settings → Analysis → Deep
+analysis (slower)*, och gäller projektet. Målet är så få problem som möjligt i Problems (loggens varningar, fel och
+tips), utan att något döljs: varje beslut står i loggen (kategori `deep`).
+
+Först görs en vanlig analys, som ger antalet problem att jämföra med. Sedan görs hela analysen om i **varv**:
+- **Gissningar spåras på prov.** En kodö (8.11), ett mål i en pekartabell, en IRQ-, NMI- eller BRK-rutin som koden
+  installerar och laddadressen utan BASIC-rad spåras först i en kopia av spårningsläget (`trial()` i `trace.ts`). Den
+  behålls bara om spårningen inte går in i något problem: JAM, BRK, ett hopp in i en instruktion, överlapp, data som
+  användaren markerat, eller ett indirekt hopp via en pekare som ingen kod skriver. Annars blir den kvar som data, och
+  loggen säger varför (*The routine-like bytes at $5001 (and 37 more starts up to $5152) stay data: traced on trial,
+  they run into a problem (BRK at $6a68 ends the code path)*). Kodöar söks i hela datablocket, inte bara i början, och
+  deras grenar får gå ut ur blocket, eftersom provet ändå fäller det som leder fel. Ett tips *Possible unreached code*
+  ges inte för byte som spårats på prov och gått in i ett problem.
+- **Indirekta hopp via konstanter.** Skriver koden en konstant adress till pekaren som en `JMP (ind)` går genom, är
+  adressen ett mål (spårat på prov), och hoppet varnas inte för som okänt.
+- **Grenar med kända flaggor.** `CLC`, `SEC` och `CLV` sätter C och V, `LDA`/`LDX`/`LDY` med en konstant sätter Z och N,
+  och instruktioner som inte rör flaggorna (`STA`, `PHA`, `SEI`, `NOP` …) behåller dem. En gren efter dem tar bara den
+  sida flaggorna ger: efter `lda #$a9 / sta $6497 / bne` spåras inte byten efter `BNE`. Nås sträckan från något annat
+  håll (ett hopp in i den, en BIT-skip, en ingångspunkt) eller skrivs instruktionen av kod, följs båda sidorna igen.
+- **`$01` genom stacken och variabler.** Minneskonfigurationen (8.7b) följs också genom `PHA`/`PLA` (de två översta
+  värdena) och genom variabler som koden bara skriver med `STA`/`STX`/`STY` (`lda $01 / sta save … lda save / sta $01`).
+  Så försvinner tipset *$01 is written … with a value the analysis cannot follow* för den vanliga IRQ-rutinen
+  `lda $01 / pha / lda #$35 / sta $01 … pla / sta $01`.
+
+Det ett varv lär sig använder nästa varv redan när det spårar:
+- **ROM:** en `JSR` eller `JMP` till ett mål som är ROM eller I/O i varje konfiguration instruktionen kan köras med
+  följs inte in i RAM:et under (*The JSR at $c88a to $ffe4 reaches the KERNAL ROM there, so the RAM below it is not
+  traced*). Ny kod antas köras med huvudkodens konfigurationer. En vektor i `$0314`–`$0319` som pekar på `$e000`–`$ffff`
+  är KERNAL:ens egen rutin, för KERNAL:en anropar den med sin ROM inkopplad (`$ea31`).
+- **Självmodifierad adress:** en `JSR` eller `JMP` vars operand koden skriver har sitt mål satt vid körning och följs
+  inte (*The code at $b07b writes the address of the JSR at $b08c, so its target $b345 is set at run time*). En väg
+  som når en instruktion som koden skriver och som nu är BRK eller JAM stannar där, med en rad i loggen i stället för
+  en varning.
+- **Rutinen finns inte än:** ingen rutin börjar med BRK eller JAM, så en `JSR` eller `JMP` dit följs inte: koden läggs
+  dit vid körning, av en uppackare eller en kopieringsslinga (*The JSR at $080d goes to $0900, which holds $00: the
+  routine is put there at run time*). Det gäller inte en gissning på prov: där fäller det gissningen.
+- **Rutiner som aldrig återvänder:** når alla vägar i en rutin bara loopar, utan `RTS`, `RTI` eller `JMP (ind)`, spåras
+  inte byten efter en `JSR` dit.
+
+Varven slutar när nästa varv skulle besluta likadant (samma snitt i varvets kod, samma huvudkonfiguration), efter högst
+6. Resultatet är djupanalysens, utom när den vanliga analysen har färre problem: då är det den vanliga, med en rad om
+det. `AnalysisResult.deep` (`DeepReport`) har varv, problem före och efter, gissningar som lämnats, snitt, grenar och
+tid; Problems visar *150 → 0 problems in 3 rounds, 1.5 s · the Log tells what it left out*. Det differentiella testet
+kör utan djupanalys, och den vanliga analysen är oförändrad.
+
+**Mätt** på 1060 riktiga program ur referensarkivet: 4 054 problem blir 620, och 733 program i stället för 341 har
+inga problem alls. 105 av de 620 är *very high entropy* (packade program, som ska packas upp först). 7 % mer blir kod,
+alla 1060 återskapas byte för byte, och analysen tar i snitt 4–5 gånger så lång tid (som mest drygt 2 s).
+Användarens snapshot (en meny vid `$c800` med ett spel i minnet) går från 150 problem till 0 på 1,5 s. **Test:**
+`test/deep.test.ts`: ett exempel per regel, att den vanliga analysen har problemen och djupanalysen inte, att allt
+assembleras tillbaka byte för byte och att djupanalysen aldrig har fler problem; fuzz-testet slår på den slumpvis.
+
 ## 9. Symboldatabas
 
 | Kategori | Område | Namnexempel |
@@ -1220,7 +1275,7 @@ tom inställning behålls.
 | Sidopanel | **Explorer**: filer, monterad disk (13.5), programstart och minneskarta (64 KB-remsa och segmentlista). **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Exomizer (13.8) |
 | Editor | Flikar: **Listing** (interaktiv, virtualiserad; vänsterkolumnen visar adress eller radnummer), **Graphics** (allt minne som tecken, sprites eller bitmappar, 14.5), **Memory** (minnet som VICE-monitorns `m`, `i` och `ii`, 14.6), **main.asm** (Monaco), **SPEC.md** |
 | Inspektor | **Memory map** (256 × 256 heatmap, lägen Type/Bytes/Refs, zoom till laddade sidor), **Block** (intervall, evidens, konfidens, typ, etikett, kommentar), **Preview** (sprite/chars/bitmap, multicolor, text, musik- och rutininfo) |
-| Bottenpanel | Analysis log, Problems, Cross-references, Raster IRQs (8.11d), Statistics, Build output |
+| Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Statistics, Build output |
 | Statusrad | CPU, filer, markörens adress/etikett/blocktyp, markering, analystid, verifieringsstatus |
 
 Paneler storleksändras med drag och mins per användare. Under 900 px bredd blir sidopanel och inspektor utdragbara lådor.

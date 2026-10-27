@@ -368,6 +368,8 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .panel-toggle { width: 26px; height: 26px; align-self: center; margin-right: 4px; }
 .icon.flip { transform: rotate(180deg); }
 .loglist { font-size: 12.5px; }
+.problems-head { display: flex; align-items: center; gap: 12px; padding: 4px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.problems-head .check { margin: 0; }
 .logrow { display: flex; align-items: center; gap: 8px; padding: 3px 12px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
 .logrow:hover { background: var(--row-hover); }
 .lvl-icon { color: var(--fg-3); }

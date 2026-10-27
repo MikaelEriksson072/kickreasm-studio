@@ -29,6 +29,11 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   - fast loaders: Spindle, Krill's loader, Bitfire, Sparkle, the Covert Bitops loader, and any other one by its drive
     code;
   - packed programs, which the bundled unp64 unpacks with one click.
+- **A deep analysis that works the problems down.** Tick *Deep analysis* in the Problems tab. Every guess (a routine
+  nothing traced reaches, a pointer-table target, an interrupt handler) is then traced on trial and kept only when it
+  leads to no problem. Calls into ROM are not followed into the RAM below, and `$01` is followed through the stack.
+  It analyses again until nothing changes, and the log says what it left out. On 1060 real programs the problems fall
+  from 4054 to 620, at four to five times the analysis time.
 - **A list of all raster IRQs.** Every interrupt handler appears with the raster line it runs at (`$d012`, and bit 8
   from `$d011`), who sets it and where.
 - **A Graphics tab.** It shows all 64 KB as characters, sprites, bitmaps, screens or a font per character row. You
@@ -91,7 +96,8 @@ This writes `KickReasm-Studio-<version>-setup.exe` and a portable `.exe` to `app
 4. **Verify** with `F7`. The status bar says whether the source assembles back to the original bytes.
 5. **Export** the Kick Assembler project with its build scripts (`Ctrl+E`), or **Build & Run** it in VICE (`F5`).
 
-The bottom panel holds the analysis log, problems, cross-references, the raster IRQs, statistics and the build output.
+The bottom panel holds the analysis log, problems (with the *Deep analysis* switch), cross-references, the raster IRQs,
+statistics and the build output.
 
 ### Command line
 
@@ -102,6 +108,7 @@ pnpm kickreasm analyse game.prg
 ```
 
 `analyse`, `verify [--kickass]`, `export -o <folder>` and `demo` take `.prg` files or saved projects (`.krproj.json`).
+`--deep` runs the deep analysis.
 
 ## Project layout
 

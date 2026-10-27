@@ -7,7 +7,9 @@
  * they acknowledge their interrupt at VIC or a CIA, to the configurations with I/O. A snapshot's program goes on
  * with the snapshot's $01, from its PC and from its live interrupt vectors.
  * Code under ROM or I/O can only run with RAM there, which narrows the state. BankZones (the user's
- * word) replace the state inside their range and flow on from there. */
+ * word) replace the state inside their range and flow on from there. A deep analysis (5.17) also follows values
+ * through the stack (`lda $01 / pha … pla / sta $01`) and through variables code only stores to (`lda $01 /
+ * sta save … lda save / sta $01`). */
 import type { Ctx } from './context';
 import type { Addr, MemConfigInfo } from '../types';
 import { CLOBBER_A, OPC, SHIFT_MN } from '../cpu/opcodes';
@@ -27,10 +29,19 @@ const bit = (v: number) => 1 << (v & 7);
 const each = (m: number, f: (v: number) => number) => { let r = 0; for (let v = 0; v < 8; v++) if (m & (1 << v)) r |= bit(f(v)); return r; };
 const eachBank = (m: number, f: (v: number) => number) => { let r = 0; for (let v = 0; v < 8; v++) if (m & (1 << v)) r |= 1 << (f(v) & 3); return r; };
 const andMask = (a: number, x: number) => { let r = 0; for (let i = 0; i < 8; i++) if (a & (1 << i)) for (let j = 0; j < 8; j++) if (x & (1 << j)) r |= bit(i & j); return r; };
+// the top two values pushed (deep analysis): depth (0-2) | top << 2 | second << 10; nothing is known below them
+const depthOf = (st: number) => st & 3, topOf = (st: number) => (st >> 2) & 0xff, secondOf = (st: number) => (st >> 10) & 0xff;
+const push = (st: number, m: number) => Math.min(depthOf(st) + 1, 2) | (m << 2) | (topOf(st) << 10);
+const pop = (st: number) => depthOf(st) ? (depthOf(st) - 1) | (secondOf(st) << 2) : 0;
+const mergeStack = (o: number, n: number) => {
+  const d = Math.min(depthOf(o), depthOf(n));
+  return d | (d >= 1 ? (topOf(o) | topOf(n)) << 2 : 0) | (d >= 2 ? (secondOf(o) | secondOf(n)) << 10 : 0);
+};
 
 export function memConfig(ctx: Ctx): MemConfigInfo {
-  const { mem, insLen, skip, entryKind, inlineCalls, project, L } = ctx;
-  const P = new Uint8Array(N), B = new Uint8Array(N), RA = new Uint8Array(N), RX = new Uint8Array(N), RY = new Uint8Array(N);
+  const { mem, insLen, skip, entryKind, inlineCalls, project, L, loaded } = ctx;
+  const deep = !!ctx.deep;
+  const P = new Uint8Array(N), B = new Uint8Array(N), RA = new Uint8Array(N), RX = new Uint8Array(N), RY = new Uint8Array(N), ST = new Int32Array(N);
   const seen = new Uint8Array(N), queued = new Uint8Array(N);
   const forcedPort = new Uint8Array(N), forcedVic = new Uint8Array(N);
   for (const z of project.bankZones || []) {
@@ -45,15 +56,31 @@ export function memConfig(ctx: Ctx): MemConfigInfo {
   // a BIT-skip byte is a 1-byte "instruction" here, but the CPU runs the whole BIT
   const nextOf = (n: number) => (n + (skip.has(n) ? OPC[mem[n]].len : insLen[n])) & 0xffff;
   const work: number[] = [];
-  const join = (n: number, p: number, b: number, a: number, x: number, y: number) => {
+  const join = (n: number, p: number, b: number, a: number, x: number, y: number, st = 0) => {
     if (!code(n)) return;
     p = (p & runnable(n)) || runnable(n);
     if (forcedPort[n]) p = forcedPort[n];
     if (forcedVic[n]) b = forcedVic[n];
-    const np = P[n] | p, nb = B[n] | b, na = RA[n] | a, nx = RX[n] | x, ny = RY[n] | y;
-    if (seen[n] && np === P[n] && nb === B[n] && na === RA[n] && nx === RX[n] && ny === RY[n]) return;
-    seen[n] = 1; P[n] = np; B[n] = nb; RA[n] = na; RX[n] = nx; RY[n] = ny;
+    const np = P[n] | p, nb = B[n] | b, na = RA[n] | a, nx = RX[n] | x, ny = RY[n] | y, nst = seen[n] ? mergeStack(ST[n], st) : st;
+    if (seen[n] && np === P[n] && nb === B[n] && na === RA[n] && nx === RX[n] && ny === RY[n] && nst === ST[n]) return;
+    seen[n] = 1; P[n] = np; B[n] = nb; RA[n] = na; RX[n] = nx; RY[n] = ny; ST[n] = nst;
     if (!queued[n]) { queued[n] = 1; work.push(n); }
+  };
+  // a routine starts with nothing known on the stack, and hands back the caller's (at the JSR before the return)
+  const callerStack = (s: Addr) => ST[(s - 3) & 0xffff];
+  // deep analysis: the values stored to a variable (zero page or RAM, bits 0-2), none when also changed some other way
+  const slot = new Uint8Array(N), readers = new Map<Addr, Set<Addr>>();
+  const variable = (at: number) => deep && at >= 2 && (at < 0xd000 || at >= 0xe000);
+  const load = (at: number, n: Addr): number => {
+    if (!variable(at)) return UNKNOWN;
+    let r = readers.get(at); if (!r) readers.set(at, r = new Set()); r.add(n);
+    const v = slot[at] | (loaded(at) ? bit(mem[at]) : 0);
+    return v || UNKNOWN;
+  };
+  const store = (at: number, m: number) => {
+    if (!variable(at) || (slot[at] | m) === slot[at]) return;
+    slot[at] |= m;
+    for (const r of readers.get(at) || []) if (seen[r] && !queued[r]) { queued[r] = 1; work.push(r); }
   };
 
   // the RTS instructions a subroutine can end in (calls inside it are assumed to return)
@@ -111,16 +138,20 @@ export function memConfig(ctx: Ctx): MemConfigInfo {
     while (work.length) {
       const n = work.pop()!;
       queued[n] = 0;
-      let p = P[n], b = B[n], a = RA[n], x = RX[n], y = RY[n];
+      let p = P[n], b = B[n], a = RA[n], x = RX[n], y = RY[n], st = ST[n];
       const next = nextOf(n);
-      if (skip.has(n)) { join(next, p, b, a, x, y); continue; }
+      if (skip.has(n)) { join(next, p, b, a, x, y, st); continue; }
       const o = OPC[mem[n]], d = decode(mem, n), mn = o.mn, mode = o.mode;
       const at = mode === 'zp' || mode === 'abs' ? d.v! : -1;
       const port = at === 1;
       switch (mn) {
-        case 'LDA': a = mode === 'imm' ? bit(d.v!) : port ? p : UNKNOWN; break;
-        case 'LDX': x = mode === 'imm' ? bit(d.v!) : port ? p : UNKNOWN; break;
-        case 'LDY': y = mode === 'imm' ? bit(d.v!) : port ? p : UNKNOWN; break;
+        case 'LDA': a = mode === 'imm' ? bit(d.v!) : port ? p : load(at, n); break;
+        case 'LDX': x = mode === 'imm' ? bit(d.v!) : port ? p : load(at, n); break;
+        case 'LDY': y = mode === 'imm' ? bit(d.v!) : port ? p : load(at, n); break;
+        case 'PHA': case 'PHP': if (deep) st = push(st, mn === 'PHA' ? a : UNKNOWN); break;
+        case 'PLA': a = deep && depthOf(st) ? topOf(st) : UNKNOWN; st = pop(st); break;
+        case 'PLP': st = pop(st); break;
+        case 'TXS': st = 0; break;
         case 'TAX': x = a; break;
         case 'TAY': y = a; break;
         case 'TXA': a = x; break;
@@ -138,6 +169,7 @@ export function memConfig(ctx: Ctx): MemConfigInfo {
           if (at < 0) break; // indexed and indirect stores are not followed
           const r = mn === 'STA' ? a : mn === 'STX' ? x : mn === 'STY' ? y : andMask(a, x);
           if (port) { p = r; changes.set(n, { port: p, via: '$01' }); }
+          else if (variable(at)) store(at, r);
           else if ((at & 0xff0f) === 0xdd00 || (at & 0xff0f) === 0xdd02) {
             // a store to $dd00/$dd02 only reaches CIA 2 where I/O is visible
             const io = ioVisible(p);
@@ -153,32 +185,34 @@ export function memConfig(ctx: Ctx): MemConfigInfo {
         }
         case 'INC': case 'DEC':
           if (port) { p = each(p, v => v + (mn === 'INC' ? 1 : 7)); changes.set(n, { port: p, via: '$01' }); }
+          else if (at >= 0) store(at, UNKNOWN);
           break;
         default:
           if (port && o.access === 'rmw') { p = UNKNOWN; changes.set(n, { port: p, via: '$01' }); }
+          else if (at >= 0 && o.access === 'rmw') store(at, UNKNOWN);
           if (CLOBBER_A.has(mn) || (SHIFT_MN.has(mn) && mode === 'acc')) a = UNKNOWN;
           if (mn === 'TSX' || mn === 'AXS' || mn === 'LAS' || mn === 'LAX') x = UNKNOWN;
       }
       switch (o.flow) {
-        case 'br': join(d.target!, p, b, a, x, y); join(next, p, b, a, x, y); break;
-        case 'jmp': join(d.target!, p, b, a, x, y); break;
+        case 'br': join(d.target!, p, b, a, x, y, st); join(next, p, b, a, x, y, st); break;
+        case 'jmp': join(d.target!, p, b, a, x, y, st); break;
         case 'jsr': {
           const t = d.target!;
           join(t, p, b, a, x, y);
           if (inlineCalls.has(n)) break; // the routine reads data after the call and jumps past it
-          if (!code(t)) { join(next, p, b, UNKNOWN, UNKNOWN, UNKNOWN); break; } // KERNAL or code outside the files
+          if (!code(t)) { join(next, p, b, UNKNOWN, UNKNOWN, UNKNOWN, st); break; } // KERNAL or code outside the files
           const rs = returnsOf(t);
-          if (!rs.length) join(next, p, b, UNKNOWN, UNKNOWN, UNKNOWN);
+          if (!rs.length) join(next, p, b, UNKNOWN, UNKNOWN, UNKNOWN, st);
           for (const r of rs) {
             let s = retSites.get(r);
             if (!s) retSites.set(r, s = new Set());
-            if (!s.has(next)) { s.add(next); if (seen[r]) join(next, P[r], B[r], RA[r], RX[r], RY[r]); }
+            if (!s.has(next)) { s.add(next); if (seen[r]) join(next, P[r], B[r], RA[r], RX[r], RY[r], st); }
           }
           break;
         }
-        case 'ret': if (mn === 'RTS') for (const s of retSites.get(n) || []) join(s, p, b, a, x, y); break;
+        case 'ret': if (mn === 'RTS') for (const s of retSites.get(n) || []) join(s, p, b, a, x, y, callerStack(s)); break;
         case 'jmpi': case 'brk': case 'jam': break;
-        default: join(next, p, b, a, x, y);
+        default: join(next, p, b, a, x, y, st);
       }
     }
   };

@@ -1272,6 +1272,38 @@ test('open a VICE snapshot like a PRG', async ({ app, page }) => {
   });
 });
 
+test('deep analysis from the Problems tab: a snapshot\'s ROM calls are not traced into the RAM below', async ({ app, page }) => {
+  // the snapshot's RAM covers the KERNAL and BASIC ROM: the normal analysis traces their calls into it
+  await waitForListing(page);
+  await stubDialogs(app, { open: [join(repoDir, 'fixtures/vsf/raster-demo.vsf')] });
+  await page.getByRole('button', { name: 'Open PRG…' }).click();
+  await expect(toast(page, 'Loaded raster-demo.prg at $0200')).toBeVisible();
+  const tab = page.getByRole('tab', { name: /Problems/ });
+  await tab.click();
+  await expect(tab.locator('.count')).toHaveText('4');
+  await expect(page.locator('.loglist .logrow', { hasText: 'BRK at $ffd2 ends the code path' })).toBeVisible();
+  const result = page.getByRole('status', { name: 'Deep analysis result' });
+  await expect(result).toContainText('analyses again until the problems are at a minimum');
+
+  await page.getByRole('checkbox', { name: 'Deep analysis' }).check();
+  await expect(result).toHaveText(/^4 → 0 problems in 3 rounds, \d+\.\d s · the Log tells what it left out$/, { timeout: 30_000 });
+  await expect(tab.locator('.count')).toHaveText('0');
+  await expect(page.locator('.bottom-body')).toContainText('No problems found.');
+  await page.getByRole('tab', { name: /Analysis log/ }).click();
+  await expect(page.locator('.loglist .logrow', { hasText: 'The JSR at $088f to $ffd2 reaches the KERNAL ROM there, so the RAM below it is not traced' })).toBeVisible();
+  await page.keyboard.press('F7');
+  await expect(statusBar(page)).toContainText('✓ round-trip verified', { timeout: 90_000 });
+
+  // the setting is the project's, in Settings too; off again, the problems are back
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByRole('tab', { name: 'Analysis', exact: true }).click();
+  await expect(settings.getByLabel('Deep analysis (slower)')).toBeChecked();
+  await settings.getByLabel('Deep analysis (slower)').uncheck();
+  await settings.getByRole('button', { name: 'Save settings' }).click();
+  await expect(tab.locator('.count')).toHaveText('4');
+});
+
 test('the Graphics tab shows memory as characters, sprites or bitmaps, and marks what it finds', async ({ page }) => {
   await waitForListing(page);
   await page.keyboard.press('Control+j');

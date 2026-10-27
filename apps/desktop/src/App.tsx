@@ -25,7 +25,7 @@ import { StatusBar } from './components/StatusBar';
 import { Sidebar } from './components/Sidebar';
 import { Listing } from './components/Listing';
 import { Inspector } from './components/Inspector';
-import { BOTTOM_TABS, BuildPanel, LogList, RasterPanel, StatsPanel, XrefPanel } from './components/BottomPanel';
+import { BOTTOM_TABS, BuildPanel, LogList, ProblemsPanel, RasterPanel, StatsPanel, XrefPanel } from './components/BottomPanel';
 import { SettingsModal } from './components/Settings';
 import { CommandPalette, GotoModal } from './components/CommandPalette';
 import { MergeRangeModal } from './components/MergeRange';
@@ -1080,7 +1080,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
           </div>
           <div className="bottom-body"><ErrorBoundary>
             {bottom === 'log' && <LogList items={A.log} onNavigate={nav} empty="No analysis messages." />}
-            {bottom === 'problems' && <LogList items={problems} onNavigate={nav} empty="No problems found." />}
+            {bottom === 'problems' && <ProblemsPanel items={problems} onNavigate={nav} deep={A.deep} on={!!project.settings.deepAnalysis} busy={busy} onDeep={on => update(on ? 'Deep analysis on' : 'Deep analysis off', d => { d.settings.deepAnalysis = on; })} />}
             {bottom === 'xrefs' && <XrefPanel A={A} R={R} cursor={cursor} onNavigate={nav} S={S} />}
             {bottom === 'irqs' && <RasterPanel A={A} R={R} onNavigate={nav} />}
             {bottom === 'stats' && <StatsPanel A={A} />}

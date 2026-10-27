@@ -36,6 +36,7 @@ export function SettingsModal({ settings, desktop, onSave, onClose }: { settings
           {chk('detectGfx', 'Detect graphics', 'from $d018/$dd00/sprite pointer writes, then sizes and alignment')}
           {chk('detectText', 'Detect text', 'PETSCII printed through KERNAL, screen codes copied to screen RAM')}
           {chk('codeIslands', 'Decode unreached code that reads as a routine', 'data nothing traced reaches becomes code when it is 6+ documented instructions ending in RTS or JMP (no BRK, branches inside it); mark it as data (D) where it is not')}
+          {chk('deepAnalysis', 'Deep analysis (slower)', 'traces every guess (code island, pointer-table target, interrupt handler, load address) on trial and keeps it only when it runs into no problem; does not follow a JSR or JMP into ROM or through an operand the code writes, or past a routine that never returns; decides branches by the flags set before them; and analyses again until the problems are at a minimum. A large snapshot takes a second or two')}
           {chk('bankTracking', 'Follow the memory configuration ($01) and VIC bank', 'names I/O, KERNAL and BASIC accesses only where they are banked in; $dd00 and the $dd02 trick select the VIC bank')}
           {chk('snapshotZeroPage', 'VICE snapshots: include the zero page and the stack', 'opens the RAM from $0002 instead of $0200, for code that runs there (a PC or IRQ handler there is traced). Zero-page variables are then labels of the loaded bytes. Applies to the next snapshot you open')}
         </>}

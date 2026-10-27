@@ -47,13 +47,18 @@ export function resolveTables(ctx: Ctx): number {
       if (t.code) { enqueue(v, vk || 'ptr'); added++; } else ptrTargets.set(v, p.dest);
     }
   }
+  // a deep analysis (5.17): an indirect JMP through a pointer the code sets to a constant goes there (traced on trial)
+  if (ctx.deep) for (const [v, dest] of ptrTargets) if (!insLen[v] && !ctx.rejected.has(v) && ijumps.some(j => j.ptr === dest)) { enqueue(v, 'ptr'); added++; }
   return added;
 }
 
 export function warnUnresolvedJumps(ctx: Ctx): void {
   const { ijumps, lohiTabs, L } = ctx;
+  // a deep analysis knows the code it found through constants written to the pointer
+  const set = new Set<Addr>();
+  if (ctx.deep) for (const [v, dest] of ctx.ev.ptrTargets) if (ctx.insLen[v]) set.add(dest);
   for (const j of ijumps) {
-    if (![...lohiTabs.values()].some(t => t.dest === j.ptr && t.code) && ![...ctx.wordTables.values()].some(t => t.dest === j.ptr) && !VECTORS[j.ptr])
+    if (![...lohiTabs.values()].some(t => t.dest === j.ptr && t.code) && ![...ctx.wordTables.values()].some(t => t.dest === j.ptr) && !VECTORS[j.ptr] && !set.has(j.ptr))
       L('warn', `Indirect JMP (${$4(j.ptr)}) at ${$4(j.pc)}: target unknown at analysis time`, j.pc, 'code');
   }
 }
