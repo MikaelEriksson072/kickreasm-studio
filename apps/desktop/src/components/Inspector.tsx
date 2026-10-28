@@ -1,8 +1,8 @@
 /* Inspector (right column): memory map, block evidence/type/label/comment (or the zero-page variable whose .label line
  * was clicked: its name and comments), graphics/music/text preview. */
 import { useEffect, useMemo, useState } from 'react';
-import { textEncoding, ALL_BANKS, bankRange, banksOf, describePorts, findBlock, h2, h4, kindInfo, MARK_AS, mergeOverride, OPC, portName, portsOf, portText, type Addr, type AnalysisResult, type Block, type CyclePath, type Project, type RenderResult, FORMATTABLE, type NumberFormat } from '@kickreasm/core';
-import type { TypeGroup } from '@kickreasm/core';
+import { textEncoding, ALL_BANKS, bankRange, banksOf, describePorts, findBlock, h2, h4, kindInfo, MARK_AS, mergeOverride, OPC, portName, portsOf, portText, type Addr, type AnalysisResult, type Block, type CyclePath, type Project, type RenderResult, FORMATTABLE, type NumberFormat } from '@mimir/core';
+import type { TypeGroup } from '@mimir/core';
 import { Icon } from '../lib/icons';
 import { cx, GROUP_LABEL, GROUP_ORDER, groupOfType } from '../lib/util';
 import type { Sel } from '../lib/types';

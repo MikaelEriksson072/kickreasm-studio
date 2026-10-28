@@ -1,6 +1,6 @@
 /* Command palette (Ctrl+Shift+P / F1) and the "Go to address, label or range" dialog (G / Ctrl+G). */
 import { useEffect, useState } from 'react';
-import type { Addr, RenderResult } from '@kickreasm/core';
+import type { Addr, RenderResult } from '@mimir/core';
 import { cx } from '../lib/util';
 import { parseGoto } from '../lib/goto';
 import type { Command } from '../lib/types';

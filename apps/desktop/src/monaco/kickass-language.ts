@@ -1,7 +1,7 @@
 /* Monarch definition for Kick Assembler (spec 14.3): comments, preprocessor, directives, macros,
  * label definitions, documented and undocumented mnemonics, hardware symbols, numbers, strings. */
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api';
-import { OPC, SYM } from '@kickreasm/core';
+import { OPC, SYM } from '@mimir/core';
 
 export const KICKASS = 'kickass';
 

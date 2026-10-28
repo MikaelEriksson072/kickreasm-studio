@@ -1,12 +1,12 @@
 {
-  "name": "@kickreasm/cli",
+  "name": "@mimir/cli",
   "version": "1.0.0",
   "private": true,
-  "description": "kickreasm analyse | export | verify — batch and CI front end for @kickreasm/core.",
+  "description": "mimir analyse | export | verify — batch and CI front end for @mimir/core.",
   "license": "GPL-3.0-only",
   "type": "module",
   "bin": {
-    "kickreasm": "./dist/index.js"
+    "mimir": "./dist/index.js"
   },
   "scripts": {
     "build": "tsup",
@@ -15,7 +15,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@kickreasm/core": "workspace:*"
+    "@mimir/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

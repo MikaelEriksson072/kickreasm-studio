@@ -2,7 +2,7 @@
  * type. With the cursor in a block the start and the type come from that block, so only the end is needed. Nothing
  * changes until the summary of what is replaced has been confirmed. */
 import { useMemo, useState, type KeyboardEvent } from 'react';
-import { findBlock, h4, kindInfo, markIdOf, MARK_AS, mergeRange, type Addr, type AnalysisResult, type Block, type Override, type RenderResult } from '@kickreasm/core';
+import { findBlock, h4, kindInfo, markIdOf, MARK_AS, mergeRange, type Addr, type AnalysisResult, type Block, type Override, type RenderResult } from '@mimir/core';
 import { parseGoto } from '../lib/goto';
 import { Modal } from './Modal';
 

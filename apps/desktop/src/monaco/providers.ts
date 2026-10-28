@@ -1,6 +1,6 @@
 /* Hover (registers, labels, opcodes) and go-to-definition (Ctrl+click, F12) for Kick sources. */
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api';
-import { findBlock, h4, kindInfo, OPC, SYM, type AnalysisResult, type RenderResult } from '@kickreasm/core';
+import { findBlock, h4, kindInfo, OPC, SYM, type AnalysisResult, type RenderResult } from '@mimir/core';
 import { KICKASS } from './kickass-language';
 
 /** The analysis shown in the editor; SourceView keeps it current. */

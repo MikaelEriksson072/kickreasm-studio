@@ -23,12 +23,12 @@ export function terminalCommand(o: TerminalLaunch): TerminalCommand {
   const env: Record<string, string | undefined> = { ...base };
   const pathKey = Object.keys(base).find(k => k.toUpperCase() === 'PATH') ?? 'PATH';
   if (o.vicePath) env[pathKey] = [(platform === 'win32' ? win32 : posix).dirname(o.vicePath), base[pathKey]].filter(Boolean).join(platform === 'win32' ? ';' : ':');
-  if (o.kickJar) { env.KICKASS_JAR = o.kickJar; env.KICKREASM_JAVA = o.java || 'java'; }
+  if (o.kickJar) { env.KICKASS_JAR = o.kickJar; env.MIMIR_JAVA = o.java || 'java'; }
   if (platform === 'win32') {
     const hint = [o.kickJar && 'kickass <file.asm> runs Kick Assembler', o.vicePath && 'x64sc <file.prg> starts VICE'].filter(Boolean).join(', ');
     const script = [
-      o.kickJar ? 'function global:kickass { & $env:KICKREASM_JAVA -jar $env:KICKASS_JAR @args }' : '',
-      `Write-Host 'KickReasm Studio terminal${hint ? `: ${hint}` : ''}' -ForegroundColor DarkGray`,
+      o.kickJar ? 'function global:kickass { & $env:MIMIR_JAVA -jar $env:KICKASS_JAR @args }' : '',
+      `Write-Host 'Mimir Studio terminal${hint ? `: ${hint}` : ''}' -ForegroundColor DarkGray`,
     ].filter(Boolean).join('; ');
     return { file: 'powershell.exe', args: ['-NoLogo', '-NoExit', '-Command', script], cwd: o.dir, env };
   }
@@ -42,7 +42,7 @@ export function terminalCommand(o: TerminalLaunch): TerminalCommand {
  * reads end of input there and exits; `start` gives it a new console instead. Arguments are quoted, and none may
  * hold a `"` (Windows paths cannot).
  */
-export function windowsStartLine(c: TerminalCommand, title = 'KickReasm Studio'): string {
+export function windowsStartLine(c: TerminalCommand, title = 'Mimir Studio'): string {
   const q = (s: string) => { if (s.includes('"')) throw new Error(`cannot pass ${s} to a terminal`); return /[\s&|<>^()%!,;=]/.test(s) || !s ? `"${s}"` : s; };
   return `/d /c start "${title}" /D ${q(c.cwd)} ${[c.file, ...c.args].map(q).join(' ')}`;
 }

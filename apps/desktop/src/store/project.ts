@@ -2,7 +2,7 @@
  * through `update(label, recipe)` and becomes one undoable step. */
 import { create } from 'zustand';
 import type { Draft } from 'immer';
-import { DEFAULT_SETTINGS, demoProject, deserializeProject, serializeProject, type Project, type SerializedProject } from '@kickreasm/core';
+import { DEFAULT_SETTINGS, demoProject, deserializeProject, serializeProject, type Project, type SerializedProject } from '@mimir/core';
 import { store } from '../lib/util';
 import { commit, commitReplace, initHistory, redo, undo, type History } from './history';
 

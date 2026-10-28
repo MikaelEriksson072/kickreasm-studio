@@ -149,7 +149,7 @@ export interface PackPrefs {
 export interface BankZone { start: Addr; end: Addr; port?: number | null; vicBank?: number | null }
 
 export interface Project {
-  format: 'kickreasm-project';
+  format: 'mimir-project';
   version: 1;
   name: string;
   files: LoadedFile[]; // one or more PRG files
@@ -194,9 +194,13 @@ export interface ProjectInput {
   settings?: Partial<Settings>;
 }
 
-/** On-disk `.krproj.json` form: file bytes are base64. */
+/** On-disk `.mimir.json` form: file bytes are base64. */
+/** The format of projects saved before the program was renamed to Mimir Studio; they still open. */
+export const LEGACY_PROJECT_FORMAT = 'kickreasm-project';
+
 export interface SerializedProject {
-  format: 'kickreasm-project';
+  /** `kickreasm-project`: saved before the program was called Mimir Studio (read, never written) */
+  format: 'mimir-project' | typeof LEGACY_PROJECT_FORMAT;
   version: 1;
   name: string;
   /** `vsf`: the snapshot the file was opened from (base64), missing in project files from before snapshots were kept */

@@ -84,7 +84,7 @@ const c1541 = vice ? join(dirname(vice), process.platform === 'win32' ? 'c1541.e
 
 describe.skipIf(!c1541 || !existsSync(c1541))(`VICE's c1541 (${c1541 ?? 'not found'})`, () => {
   it('reads disks c1541 writes, and c1541 reads disks makeD64 writes', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'kickreasm-d64-'));
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-d64-'));
     try {
       const demo = makeDemo().prg, small = bytes(300, 5);
       await writeFile(join(dir, 'demo.prg'), demo);

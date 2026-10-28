@@ -1,4 +1,4 @@
-import type { Addr, D64Image, KickProblem, LogLevel, VerifyResult } from '@kickreasm/core';
+import type { Addr, D64Image, KickProblem, LogLevel, VerifyResult } from '@mimir/core';
 
 /** The mounted .d64: its directory is listed in the Explorer, and a copy goes into VICE's drive 8 on Build & Run. */
 export interface MountedDisk { name: string; path: string | null; bytes: Uint8Array; img: D64Image }

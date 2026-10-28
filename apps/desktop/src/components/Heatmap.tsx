@@ -1,9 +1,9 @@
 /* Memory heatmap (inspector, 256 × 256, one pixel per byte) and the sidebar's 64 KB strip. */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { findBlock, h2, h4, kindInfo, type Addr, type AnalysisResult } from '@kickreasm/core';
+import { findBlock, h2, h4, kindInfo, type Addr, type AnalysisResult } from '@mimir/core';
 import { cssVar, GROUP_ORDER, groupOfType, hexRgb } from '../lib/util';
 import type { Sel } from '../lib/types';
-import type { TypeGroup } from '@kickreasm/core';
+import type { TypeGroup } from '@mimir/core';
 
 export type Rgb = [number, number, number];
 export interface CanvasColors { g: Record<TypeGroup, Rgb>; empty: Rgb; accent: Rgb; heat: Rgb; fg: Rgb }

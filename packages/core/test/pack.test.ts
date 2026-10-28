@@ -115,7 +115,7 @@ const EXO = findExomizer([process.env.EXOMIZER || '', process.platform === 'win3
 
 describe.skipIf(!EXO)('the real Exomizer', () => {
   const inDir = async (fn: (dir: string) => Promise<void>) => {
-    const dir = await mkdtemp(join(tmpdir(), 'kickreasm-pack-'));
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-pack-'));
     try { await fn(dir); } finally { await rm(dir, { recursive: true, force: true }); }
   };
   const demo = makeDemo();
@@ -196,6 +196,6 @@ describe.skipIf(!EXO || !vice)('a packed program in real VICE', () => {
 });
 
 async function inTemp(fn: (dir: string) => Promise<void>) {
-  const dir = await mkdtemp(join(tmpdir(), 'kickreasm-pack-vice-'));
+  const dir = await mkdtemp(join(tmpdir(), 'mimir-pack-vice-'));
   try { await fn(dir); } finally { await rm(dir, { recursive: true, force: true }); }
 }

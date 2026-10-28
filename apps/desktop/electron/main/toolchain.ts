@@ -2,8 +2,8 @@
  * through a shell, using the executables from the main-process settings store. */
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import type { KickProblem, ToolchainSettings } from '@kickreasm/core';
-import { canIdentify, identifyPacker, launchTerminal, launchVice, runExomizer, runKickAssembler, runUnpacker, splitArgs } from '@kickreasm/core/node';
+import type { KickProblem, ToolchainSettings } from '@mimir/core';
+import { canIdentify, identifyPacker, launchTerminal, launchVice, runExomizer, runKickAssembler, runUnpacker, splitArgs } from '@mimir/core/node';
 import { rm } from 'node:fs/promises';
 import type { BuildRequest, BuildResult, IdentifyResponse, PackRequest, PackResponse, RunRequest, RunResult, TerminalOpenResult, UnpackRequest, UnpackResponse } from '../../shared/ipc';
 import { createBuildFolder } from './project-fs';

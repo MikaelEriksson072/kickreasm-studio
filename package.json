@@ -1,5 +1,5 @@
 {
-  "name": "kickreasm-studio",
+  "name": "mimir-studio",
   "private": true,
   "description": "Re-assemble Commodore 64 PRG files into clean, byte-exact Kick Assembler projects.",
   "license": "GPL-3.0-only",
@@ -8,11 +8,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "pnpm --filter @kickreasm/desktop dev",
+    "dev": "pnpm --filter @mimir/desktop dev",
     "build": "pnpm -r --workspace-concurrency=1 build",
     "test": "pnpm -r --workspace-concurrency=1 test",
     "typecheck": "pnpm -r --workspace-concurrency=1 typecheck",
-    "kickreasm": "pnpm --filter @kickreasm/cli start"
+    "mimir": "pnpm --filter @mimir/cli start"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

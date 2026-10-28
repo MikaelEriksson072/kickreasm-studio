@@ -1,6 +1,6 @@
 /* Folding in the listing: a folded block shows only its header line. The view keeps each line's number in its
  * .asm file, and the header of a folded block stands for every address of the block (cursor, scrolling, keys). */
-import type { Addr, Block, ListingLine } from '@kickreasm/core';
+import type { Addr, Block, ListingLine } from '@mimir/core';
 import { fileLineNumbers } from './lines';
 
 export interface ListingView {

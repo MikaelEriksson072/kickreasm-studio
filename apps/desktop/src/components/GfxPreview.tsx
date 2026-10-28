@@ -1,6 +1,6 @@
 /* Graphics preview: sprites, charset, bitmap (hires or multicolor). */
 import { useEffect, useMemo, useRef } from 'react';
-import type { Addr } from '@kickreasm/core';
+import type { Addr } from '@mimir/core';
 import { C64, hexRgb } from '../lib/util';
 
 export type GfxMode = 'sprite' | 'chars' | 'bitmap';

@@ -1,5 +1,5 @@
-import { kindInfo, typeInfo, type BlockKind, type RenderResult } from '@kickreasm/core';
-import type { TypeGroup } from '@kickreasm/core';
+import { kindInfo, typeInfo, type BlockKind, type RenderResult } from '@mimir/core';
+import type { TypeGroup } from '@mimir/core';
 
 export const ROW = 20;
 

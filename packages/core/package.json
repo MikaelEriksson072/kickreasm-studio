@@ -1,5 +1,5 @@
 {
-  "name": "@kickreasm/core",
+  "name": "@mimir/core",
   "version": "1.0.0",
   "private": true,
   "description": "6502/6510 disassembly, C64 memory heuristics, Kick Assembler generation and byte-exact round-trip verification. Pure TypeScript, no DOM.",

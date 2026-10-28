@@ -130,7 +130,7 @@ export const DEVIATIONS: Deviation[] = [
     edits: [
       { find: '  sei\n  jsr $e544\n  jsr init_screen\n', replace: '  jsr $e544\n  jsr init_screen\n  sei\n' },
       { find: '  lda #$32\n  sta $d012\n', replace: '  lda #$62\n  sta $d012\n' },
-      { find: 'scrolltext: .text "HELLO FROM THE KICKREASM DEMO: 6502 + C64 = FUN"', replace: 'scrolltext: .text "HELLO FROM THE KICKREASM STUDIO DEMO!   ENJOY!!"' },
+      { find: 'scrolltext: .text "HELLO FROM THE MIMIR DEMO: 6502 + C64 = FUN    "', replace: 'scrolltext: .text "HELLO FROM THE MIMIR STUDIO DEMO!       ENJOY!!"' },
     ],
   },
   {

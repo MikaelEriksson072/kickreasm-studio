@@ -2,7 +2,7 @@
  * The Explorer's sections are cards that fold up (the user's choice is kept), each with what it holds in a few words
  * beside its title. */
 import { useMemo, useState } from 'react';
-import { h2, h4, hwSymbol, kindInfo, overwritesSystemArea, parseVsf, SYSTEM_AREA, type Addr, type AnalysisResult, type D64File, type LoaderPart, type PackingInfo, type Project, type RenderResult, type SymbolRef } from '@kickreasm/core';
+import { h2, h4, hwSymbol, kindInfo, overwritesSystemArea, parseVsf, SYSTEM_AREA, type Addr, type AnalysisResult, type D64File, type LoaderPart, type PackingInfo, type Project, type RenderResult, type SymbolRef } from '@mimir/core';
 import { Icon } from '../lib/icons';
 import { parseGoto } from '../lib/goto';
 import { cx, fmtBytes, groupOfKind } from '../lib/util';

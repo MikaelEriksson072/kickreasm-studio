@@ -1,6 +1,6 @@
 /* Per-user UI preferences, persisted in localStorage. */
 import { create } from 'zustand';
-import type { MonitorMode } from '@kickreasm/core';
+import type { MonitorMode } from '@mimir/core';
 import { store } from '../lib/util';
 
 export type Theme = 'dark' | 'light';

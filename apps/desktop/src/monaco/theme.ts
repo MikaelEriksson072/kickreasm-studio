@@ -11,7 +11,7 @@ export function applyMonacoTheme(monaco: typeof Monaco, dark: boolean): void {
     const [r, g, b, a = 1] = m[1].split(',').map(x => parseFloat(x));
     return '#' + [r, g, b, Math.round(a * 255)].map(x => Math.round(x).toString(16).padStart(2, '0')).join('');
   };
-  monaco.editor.defineTheme('kickreasm', {
+  monaco.editor.defineTheme('mimir', {
     base: dark ? 'vs-dark' : 'vs', inherit: true,
     rules: [
       { token: 'comment', foreground: c('--syn-comment'), fontStyle: 'italic' },
@@ -32,5 +32,5 @@ export function applyMonacoTheme(monaco: typeof Monaco, dark: boolean): void {
       'scrollbarSlider.background': hx('--scroll'), 'minimap.background': hx('--editor'),
     },
   });
-  monaco.editor.setTheme('kickreasm');
+  monaco.editor.setTheme('mimir');
 }

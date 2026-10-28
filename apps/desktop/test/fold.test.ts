@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyze, demoProject, findBlock, lineText, render } from '@kickreasm/core';
+import { analyze, demoProject, findBlock, lineText, render } from '@mimir/core';
 import { foldLines } from '../src/lib/fold';
 import { fileLineNumbers } from '../src/lib/lines';
 

@@ -3,7 +3,7 @@
 import {
   DEFAULT_PACK, packArgs, packFileName, packImage, packInputs, packOutName, packParts, rangeCover, shellWord,
   type AnalysisResult, type FileInput, type PackPart, type PackPrefs, type Project,
-} from '@kickreasm/core';
+} from '@mimir/core';
 
 /** How a project is packed until the user changes something: the whole build, self-extracting, started where
  *  Build & Run starts it (the SYS of the BASIC line, else the program start). */

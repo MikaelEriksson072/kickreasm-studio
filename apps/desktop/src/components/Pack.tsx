@@ -2,7 +2,7 @@
  * self-extracting program (sfx) or as crunched data for your own decruncher (mem). The view sits in the sidebar, so the
  * listing beside it shows the blocks you choose. Its settings are kept in the project; Pack builds, verifies and packs. */
 import { useEffect, useState, type KeyboardEvent } from 'react';
-import { editRanges, extraProblem, h2, h4, kindInfo, mergeRanges, packProblem, rangeCover, type Addr, type AnalysisResult, type PackPrefs, type Project, type RenderResult } from '@kickreasm/core';
+import { editRanges, extraProblem, h2, h4, kindInfo, mergeRanges, packProblem, rangeCover, type Addr, type AnalysisResult, type PackPrefs, type Project, type RenderResult } from '@mimir/core';
 import type { PackResponse } from '../../shared/ipc';
 import { Icon } from '../lib/icons';
 import { SideSection } from './SideSection';

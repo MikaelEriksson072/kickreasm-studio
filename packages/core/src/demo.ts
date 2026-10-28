@@ -204,13 +204,13 @@ fx_lo: .byte <fx_none,<fx_spin,<fx_flash,<fx_key
 fx_hi: .byte >fx_none,>fx_spin,>fx_flash,>fx_key
 colors: .byte $06,$0e,$03,$01,$03,$0e,$06,$00,$09,$08,$07,$01,$07,$08,$09,$00
 .encoding "petscii_upper"
-title: .text "KICKREASM STUDIO DEMO"
+title: .text "MIMIR STUDIO DEMO    "
 .byte $0d,$00
 message: .text "RE-ASSEMBLE ME INTO KICK ASSEMBLER!"
 .byte $0d,$00
 .encoding "screencode_upper"
 // 40 characters per screen row: the text breaks after "DEMO!"
-scrolltext: .text "HELLO FROM THE KICKREASM STUDIO DEMO!   ENJOY!!"
+scrolltext: .text "HELLO FROM THE MIMIR STUDIO DEMO!       ENJOY!!"
 .byte $00
 sine:
 ${rows(sine)}

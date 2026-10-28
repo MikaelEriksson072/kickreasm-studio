@@ -10,7 +10,7 @@ import { canIdentify, findUnp64, identifyPacker, pickUnpacked, runUnpacker, unpa
 import { FAKE_UNP64, fakePack, keyStream } from './helpers/fake-packer';
 
 const inDir = async (fn: (dir: string) => Promise<void>) => {
-  const dir = await mkdtemp(join(tmpdir(), 'kickreasm-unpack-'));
+  const dir = await mkdtemp(join(tmpdir(), 'mimir-unpack-'));
   try { await fn(dir); } finally { await rm(dir, { recursive: true, force: true }); }
 };
 

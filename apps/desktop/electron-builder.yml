@@ -1,11 +1,11 @@
-# Windows packaging (spec 3). `pnpm --filter @kickreasm/desktop package` runs `electron-vite build`
+# Windows packaging (spec 3). `pnpm --filter @mimir/desktop package` runs `electron-vite build`
 # and then electron-builder, which writes an NSIS installer and a portable exe to release/<version>/.
 # The packaged app is out/ (main, preload, renderer) plus the production dependencies (zod);
-# @kickreasm/core is bundled into out/ by electron-vite.
-appId: studio.kickreasm.desktop
-productName: KickReasm Studio
-executableName: KickReasm Studio
-copyright: Copyright © 2026 KickReasm Studio
+# @mimir/core is bundled into out/ by electron-vite.
+appId: studio.mimir.desktop
+productName: Mimir Studio
+executableName: Mimir Studio
+copyright: Copyright © 2026 Mimir Studio
 
 directories:
   output: release/${version}
@@ -29,6 +29,8 @@ extraResources:
     to: exomizer
 
 win:
+  # build/icon.ico: the Mimir Studio logo, drawn from build/icon.svg by scripts/make-icons.cjs
+  icon: build/icon.ico
   target:
     - target: nsis
       arch: [x64]
@@ -41,8 +43,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: KickReasm Studio
-  artifactName: KickReasm-Studio-${version}-setup.${ext}
+  shortcutName: Mimir Studio
+  artifactName: Mimir-Studio-${version}-setup.${ext}
 
 portable:
-  artifactName: KickReasm-Studio-${version}-portable.${ext}
+  artifactName: Mimir-Studio-${version}-portable.${ext}

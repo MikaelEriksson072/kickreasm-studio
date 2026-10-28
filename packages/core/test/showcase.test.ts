@@ -61,12 +61,12 @@ describe('the showcase', () => {
     expect(tour.length).toBe(15);
     for (const a of tour) expect(PA.owner[a], `$${a.toString(16)}`).toBeGreaterThanOrEqual(0);
     expect(p.bookmarks[0x0801].title).toBe('Welcome to the showcase');
-    const src = R.files['kickreasm-showcase.asm'] as string;
+    const src = R.files['mimir-showcase.asm'] as string;
     expect(src).toMatch(/\.word fx_wave\n\s+\.word fx_circle\n\s+\.word fx_bounce\n/);
     expect(src).toMatch(/\/\/ set by setup_screen from crow_lo\/crow_hi\n\.label row_ptr = \$fb +\/\/ a colour RAM row of the info lines/);
     expect(src).toMatch(/\/\/ VIC bank 1: \$4000-\$7fff/);
     expect(src).toMatch(/\/\/ line 20: bars in the top border, then the logo in VIC bank 1\nirq_top:/);
-    expect(src).toContain('// KICKREASM in the demo font: 160 x 64 multicolor pixels');
+    expect(src).toContain('// MIMIR in the demo font: 160 x 64 multicolor pixels');
   });
 
   it('needs bank tracking to tell the logo bitmap from the text charset (a split screen)', () => {

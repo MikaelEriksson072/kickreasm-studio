@@ -1,7 +1,7 @@
 /* Cycle counting (spec 10.1): the cycles of each instruction in the listing, and in the inspector the cycles of the
  * selected range or the block at the cursor along one path, with the branches the user marks as taken. */
 import { useMemo } from 'react';
-import { h4, instructionCycles, kickMnemonic, cycleText, type Addr, type AnalysisResult, type CyclePath, type CycleStep, type ListingLine, type RenderResult } from '@kickreasm/core';
+import { h4, instructionCycles, kickMnemonic, cycleText, type Addr, type AnalysisResult, type CyclePath, type CycleStep, type ListingLine, type RenderResult } from '@mimir/core';
 import { cx } from '../lib/util';
 
 export interface CycleView {

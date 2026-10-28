@@ -1,4 +1,4 @@
-import { ALL_PORTS, describePorts, h4, kindInfo, portName, portsOf, type Addr, type AnalysisResult, type Block } from '@kickreasm/core';
+import { ALL_PORTS, describePorts, h4, kindInfo, portName, portsOf, type Addr, type AnalysisResult, type Block } from '@mimir/core';
 import { Icon } from '../lib/icons';
 import { cx, fmtBytes } from '../lib/util';
 import type { Sel } from '../lib/types';

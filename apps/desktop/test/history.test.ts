@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { demoProject } from '@kickreasm/core';
+import { demoProject } from '@mimir/core';
 import { commit, commitReplace, HISTORY_LIMIT, initHistory, redo, undo } from '../src/store/history';
 
 describe('patch-based undo/redo', () => {

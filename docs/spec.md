@@ -1,4 +1,4 @@
-# KickReasm Studio — teknisk specifikation
+# Mimir Studio — teknisk specifikation
 
 <p class="lead">En professionell arbetsmiljö för att analysera Commodore 64-program (<code>.prg</code>) och återskapa dem som ren, strukturerad och kompilerbar Kick Assembler-källkod — med byte-exakt verifiering och direkt koppling till VICE.</p>
 
@@ -6,7 +6,7 @@
 
 ## 1. Sammanfattning
 
-KickReasm Studio är en desktop-applikation (Electron + React + TypeScript + Tailwind CSS) med ett mörkt, IDE-inspirerat gränssnitt. Den har tre huvudsyften:
+Mimir Studio är en desktop-applikation (Electron + React + TypeScript + Tailwind CSS) med ett mörkt, IDE-inspirerat gränssnitt. Den har tre huvudsyften:
 
 1. **Djupgående analys.** Laddade PRG-filer disassembleras och varje byte i C64-minnet klassificeras som kod, grafik (bitmap, teckensnitt, sprites, skärmmatris), musik (SID), tabeller, text eller övrig data.
 2. **Intelligent symbol- och adresshantering.** Hårdvaruregister (VIC-II, SID, CIA 1/2), KERNAL-rutiner, vektorer och systemvariabler får läsbara namn. Användaren döper om etiketter, kommenterar och ändrar blocktyper interaktivt, och allt slår igenom överallt direkt.
@@ -46,7 +46,7 @@ Fyra designprinciper bär hela arkitekturen:
 | Styling | **Tailwind CSS 3.4** med designtokens som CSS-variabler | Snabb, konsekvent styling. Tokens (`--bg`, `--accent`, `--g-code` …) mappas i `tailwind.config` så att mörkt/ljust tema byts i ett ställe. |
 | Editor | **Monaco 0.45+** | Samma motor som VS Code: egen Kick Assembler-språkdefinition, hover, gå-till-definition, minimap, sök. |
 | State | **Zustand** + **Immer** (patches för undo/redo) | Lättviktigt, selektorer utan onödiga omritningar, patch-baserad historik. |
-| Analys | **@kickreasm/core** i en **Web Worker** via **Comlink** | Ren TypeScript utan DOM. Körs i worker (UI blockeras aldrig), i Node för tester och CLI. |
+| Analys | **@mimir/core** i en **Web Worker** via **Comlink** | Ren TypeScript utan DOM. Körs i worker (UI blockeras aldrig), i Node för tester och CLI. |
 | Bygg | **electron-vite**, **electron-builder** | Snabb HMR i utveckling, signerade installationsfiler för Windows/macOS/Linux. |
 | Test | **Vitest**, **Playwright for Electron**, **fast-check** | Enhetstester, end-to-end i den riktiga appen, egenskapsbaserade tester för disassembler och round-trip. |
 
@@ -68,7 +68,7 @@ Fyra designprinciper bär hela arkitekturen:
 <text x="52" y="215" class="dg-s">Listning (virtualiserad) · Monaco (kickass)</text>
 <text x="52" y="233" class="dg-s">Heatmap · grafikförhandsvisning · xrefs</text>
 <rect x="20" y="320" width="330" height="92" rx="10" class="dg-box"/>
-<text x="38" y="348" class="dg-t">Analysworker · @kickreasm/core</text>
+<text x="38" y="348" class="dg-t">Analysworker · @mimir/core</text>
 <text x="38" y="372" class="dg-s">decode · trace · evidens · musik/VIC</text>
 <text x="38" y="391" class="dg-s">klassificering · render (Kick) · verify</text>
 <rect x="398" y="110" width="140" height="110" rx="10" class="dg-box"/>
@@ -78,7 +78,7 @@ Fyra designprinciper bär hela arkitekturen:
 <text x="414" y="196" class="dg-s">IPC-API)</text>
 <rect x="586" y="40" width="190" height="230" rx="10" class="dg-box"/>
 <text x="602" y="68" class="dg-t">Huvudprocess</text>
-<text x="602" y="96" class="dg-s">Projekt-FS (.krproj)</text>
+<text x="602" y="96" class="dg-s">Projekt-FS (.mimir)</text>
 <text x="602" y="118" class="dg-s">Inställningar</text>
 <text x="602" y="140" class="dg-s">Toolchain-runner</text>
 <text x="602" y="162" class="dg-s">VICE monitor-klient</text>
@@ -113,7 +113,7 @@ Fyra designprinciper bär hela arkitekturen:
 | **Huvudprocess** (Node) | Fönster, menyer, filsystem (öppna/spara projekt, exportera), inställningar (`electron-store`), starta KickAss och VICE via `child_process.spawn` (utan shell), VICE binary monitor (TCP), fil-watcher för exporterade projekt. | Tolka analysresultat eller rita UI. |
 | **Preload** | Exponera ett smalt, typat API (`window.kr`) via `contextBridge`. Validerar argument. | Exponera `ipcRenderer` eller Node-API direkt. |
 | **Renderer** | Hela UI:t, store, Monaco, kortkommandon. Skickar `Project` till worker och tar emot resultat. | Röra filsystemet eller starta processer. |
-| **Analysworker** | Kör `@kickreasm/core`: `analyze()`, `render()`, `verify()`. Ren beräkning, deterministisk. | Ha sidoeffekter eller I/O. |
+| **Analysworker** | Kör `@mimir/core`: `analyze()`, `render()`, `verify()`. Ren beräkning, deterministisk. | Ha sidoeffekter eller I/O. |
 
 ### 4.2 Säkerhet
 
@@ -146,14 +146,14 @@ Etiketter och kommentarer påverkar bara `render()`, inte `analyze()`, så omdö
 ## 5. Kodbas och katalogstruktur
 
 ```
-kickreasm-studio/
+mimir-studio/
 ├─ apps/desktop/
 │  ├─ electron/
 │  │  ├─ main/index.ts            fönster, meny, livscykel
 │  │  ├─ main/ipc.ts              registrering av IPC-kanaler (allowlist)
 │  │  ├─ main/toolchain.ts        KickAss- och VICE-körning, felparsning
 │  │  ├─ main/vice-monitor.ts     binary monitor-protokoll (TCP 6502)
-│  │  ├─ main/project-fs.ts       öppna/spara .krproj, exportera projektmapp
+│  │  ├─ main/project-fs.ts       öppna/spara .mimir, exportera projektmapp
 │  │  └─ preload/index.ts         contextBridge → window.kr
 │  └─ src/                        renderer
 │     ├─ App.tsx
@@ -172,7 +172,7 @@ kickreasm-studio/
 │  ├─ src/render/{lines.ts, kick.ts, include.ts}
 │  ├─ src/verify/{kick-subset-assembler.ts, verify.ts}
 │  └─ test/{opcodes.test.ts, trace.test.ts, roundtrip.test.ts, fuzz.test.ts}
-├─ packages/cli/                  kickreasm analyse|export|verify (Node, för CI och batch)
+├─ packages/cli/                  mimir analyse|export|verify (Node, för CI och batch)
 ├─ fixtures/{prg/, golden/}       testkorpus + förväntade .asm
 └─ docs/
 ```
@@ -185,7 +185,7 @@ Prototypens sektioner motsvarar dessa filer: `1. OPCODE TABLE` → `cpu/opcodes.
 type Addr = number;                       // 0x0000–0xffff
 
 interface Project {
-  format: 'kickreasm-project'; version: 1;
+  format: 'mimir-project'; version: 1;
   name: string;
   files: LoadedFile[];                    // en eller flera PRG
   overrides: Override[];                  // ordnad lista, senare vinner
@@ -900,7 +900,7 @@ Statusraden visar totalen. Markerade brancher är visningsläge och sparas inte 
 ### 11.1 Filens struktur
 
 ```
-// raster-demo.prg — re-assembled by KickReasm Studio
+// raster-demo.prg — re-assembled by Mimir Studio
 // load $0801-$37ff (12287 bytes) · entry start · Kick Assembler 5.x
 
 #import "include/c64-hardware.asm"
@@ -981,7 +981,7 @@ raster-demo/
 ├─ build.bat / build.sh         KickAss + VICE med inställningarnas sökvägar, eller användarens egen version
 ├─ README.md
 ├─ NOTES.html                   bokmärken och kommentarer med koden runt dem (bara när det finns några; eller NOTES.txt)
-├─ raster-demo.krproj.json      projektet (kan öppnas igen)
+├─ raster-demo.mimir.json      projektet (kan öppnas igen)
 ├─ original/raster-demo.prg     indata
 └─ out/raster-demo.prg          verifierad om-assemblerad PRG
 ```
@@ -1151,11 +1151,11 @@ från disken i riktiga VICE.
 
 **Terminal** i titelraden (och kommandopaletten) öppnar ett terminalfönster i mappen du arbetar i: den senast
 exporterade Kick Assembler-mappen, annars projektfilens mapp, annars mappen där en dialog senast valde något (PRG,
-disk, projekt), annars hemmappen. På Windows är det PowerShell, startat med `cmd /d /c start "KickReasm Studio" /D
+disk, projekt), annars hemmappen. På Windows är det PowerShell, startat med `cmd /d /c start "Mimir Studio" /D
 <mapp> powershell.exe -NoLogo -NoExit -Command …`: `start` ger PowerShell en egen konsol (Windows 11 visar den i
 standardterminalen), medan ett program som appen startar direkt får appens tomma standardhandtag och avslutas.
 VICE:s mapp ligger först i `PATH` (så `x64sc fil.prg` fungerar), och `kickass fil.asm` kör `KickAss.jar` med den
-Java som är inställd (`KICKASS_JAR`, `KICKREASM_JAVA`). macOS öppnar Terminal.app i mappen, Linux `x-terminal-emulator`.
+Java som är inställd (`KICKASS_JAR`, `MIMIR_JAVA`). macOS öppnar Terminal.app i mappen, Linux `x-terminal-emulator`.
 `test/terminal.test.ts` kör samma PowerShell-skript utan `-NoExit` och kontrollerar mappen, `x64sc` och att
 `kickass` bygger en `.prg`.
 
@@ -1518,8 +1518,8 @@ skriver, och textkolumnen bytena själva. E2e-testet går igenom `m`, `i` och `i
 
 **Demo** i Explorer (och *Load the showcase demo* i kommandopaletten) öppnar `showcaseProject()`
 (`packages/core/src/showcase.ts`). Programmet byggs från källkod med verifierarens assembler, liksom `makeDemo()`, och blir
-`kickreasm-showcase.prg` ($0801–$613F). I VICE är det ett litet intro:
-- en multicolor-bitmapslogga (KICKREASM) i VIC-bank 1 ovanför en textskärm i bank 0, med rasterstreck i övre och nedre ramen;
+`mimir-showcase.prg` ($0801–$613F). I VICE är det ett litet intro:
+- en multicolor-bitmapslogga (MIMIR) i VIC-bank 1 ovanför en textskärm i bank 0, med rasterstreck i övre och nedre ramen;
 - åtta multicolor-sprites, en skuggad boll i fyra bilder, som rör sig på tre sätt (SPACE byter, och efter 256 bilder byts det
   av sig självt);
 - en färgvåg, en mjuk scroller och trestämmig musik (Am F C G). RESTORE stänger av och sätter på musiken.

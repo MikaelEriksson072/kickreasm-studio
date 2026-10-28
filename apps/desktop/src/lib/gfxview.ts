@@ -1,6 +1,6 @@
 /* The memory graphics browser (spec 14.5): all 64 KB drawn as characters, sprites, bitmaps or screens, ICU64-style,
  * and pictures made of a font per character row. Pure geometry and drawing, so the view and the tests share them. */
-import { DEMO_FONT, type Addr } from '@kickreasm/core';
+import { DEMO_FONT, type Addr } from '@mimir/core';
 import { C64, hexRgb } from './palette';
 
 /** `fontrows`: a picture of up to 25 character rows, each drawn with its own font (2 KB, the one after the font of the row

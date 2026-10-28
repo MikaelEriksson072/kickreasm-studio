@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Mimir Studio: the rune ᛗ (Mannaz, Mímir's M) on a violet tile, with the eye in Mímir's well -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9a8fff"/>
+      <stop offset="1" stop-color="#3b2f9e"/>
+    </linearGradient>
+    <linearGradient id="eye" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe08a"/>
+      <stop offset="1" stop-color="#ffb627"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.75" y="0.75" width="22.5" height="22.5" rx="5.6" fill="url(#tile)"/>
+  <rect x="0.75" y="0.75" width="22.5" height="22.5" rx="5.6" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="0.6"/>
+  <path d="M7 18.8V5.2l10 7.4M17 18.8V5.2L7 12.6" fill="none" stroke="#f5f3ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="12" cy="16.9" r="1.75" fill="url(#eye)"/>
+</svg>

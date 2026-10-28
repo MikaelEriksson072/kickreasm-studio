@@ -1,6 +1,6 @@
 /* Listing — virtualized, interactive view of the shared line model (spec 6, "one line model, two views"). */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
-import { findBlock, h2, h4, kickMnemonic, kindInfo, lineMove, typeInfo, TOP_LEVEL_DIRECTIVES, type Addr, type AnalysisResult, type Bookmark, type ByteMove, type ListingLine, type Token } from '@kickreasm/core';
+import { findBlock, h2, h4, kickMnemonic, kindInfo, lineMove, typeInfo, TOP_LEVEL_DIRECTIVES, type Addr, type AnalysisResult, type Bookmark, type ByteMove, type ListingLine, type Token } from '@mimir/core';
 import { cx, groupOfKind, groupOfType, ROW } from '../lib/util';
 import { Icon } from '../lib/icons';
 import type { Editing, ScrollReq, Sel } from '../lib/types';

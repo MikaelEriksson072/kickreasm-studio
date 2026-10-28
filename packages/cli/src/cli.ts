@@ -1,4 +1,4 @@
-/* kickreasm analyse | export | verify | demo — batch and CI front end for @kickreasm/core. */
+/* mimir analyse | export | verify | demo — batch and CI front end for @mimir/core. */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,18 +6,18 @@ import { basename, dirname, join, resolve } from 'node:path';
 import {
   analyze, comparePrg, createProject, DEFAULT_SETTINGS, deserializeProject, detectPacking, exportFiles, h4, kindInfo, makeDemo,
   parsePrg, projectNameFor, render, verify, type Project, type SerializedProject, type Settings,
-} from '@kickreasm/core';
-import { findKickAssJar, runKickAssembler, splitArgs, writeVfs } from '@kickreasm/core/node';
+} from '@mimir/core';
+import { findKickAssJar, runKickAssembler, splitArgs, writeVfs } from '@mimir/core/node';
 
 export interface Io { out: (s: string) => void; err: (s: string) => void; cwd: string }
 
-const USAGE = `KickReasm Studio command line
+const USAGE = `Mimir Studio command line
 
 Usage:
-  kickreasm analyse <file.prg | project.krproj.json>... [--json]
-  kickreasm verify  <file.prg | project.krproj.json>... [--kickass [KickAss.jar]] [--java <java>]
-  kickreasm export  <file.prg | project.krproj.json>... -o <folder> [--name <name>] [--force]
-  kickreasm demo    [-o raster-demo.prg]
+  mimir analyse <file.prg | project.mimir.json>... [--json]
+  mimir verify  <file.prg | project.mimir.json>... [--kickass [KickAss.jar]] [--java <java>]
+  mimir export  <file.prg | project.mimir.json>... -o <folder> [--name <name>] [--force]
+  mimir demo    [-o raster-demo.prg]
 
 Options:
   --set key=value   override a setting (repeatable), e.g. --set hwInclude=inline --set bytesPerRow=16
@@ -95,7 +95,7 @@ function analyseCmd(p: Project, io: Io, json: boolean) {
 async function kickCheck(p: Project, io: Io, jar: string, java: string): Promise<boolean> {
   const A = analyze(p);
   const R = render(A, p);
-  const dir = await mkdtemp(join(tmpdir(), 'kickreasm-cli-'));
+  const dir = await mkdtemp(join(tmpdir(), 'mimir-cli-'));
   let ok = true;
   try {
     await writeVfs(dir, R.files);
@@ -174,7 +174,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
         return 2;
     }
   } catch (e) {
-    io.err(`kickreasm: ${(e as Error).message}`);
+    io.err(`mimir: ${(e as Error).message}`);
     return 2;
   }
 }

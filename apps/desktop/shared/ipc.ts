@@ -3,7 +3,7 @@
  * process registers exactly these channels and the preload exposes
  * exactly these functions as `window.kr`.
  * ===================================================================== */
-import type { ExomizerReport, KickProblem, LoadedFile, PackCheck, PackPrefs, Project, ToolchainSettings } from '@kickreasm/core';
+import type { ExomizerReport, KickProblem, LoadedFile, PackCheck, PackPrefs, Project, ToolchainSettings } from '@mimir/core';
 
 export const CHANNELS = {
   projectOpen: 'project:open',

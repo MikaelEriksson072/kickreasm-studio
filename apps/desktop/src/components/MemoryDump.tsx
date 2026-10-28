@@ -7,7 +7,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, typ
 import {
   clipRanges, findBlock, findInMemory, h2, h4, kindInfo, loadedRanges, monitorChar, monitorPrefix, monitorRows, monitorText, MONITOR_ROW, parseMonitorCommand,
   type Addr, type AnalysisResult, type FindAs, type MemoryMatch, type MonitorMode, type MonitorRange, type MonitorRow, type RenderResult,
-} from '@kickreasm/core';
+} from '@mimir/core';
 import { Icon } from '../lib/icons';
 import { OptGroup, ViewModes, type ViewMode } from './ViewModes';
 import { cx, groupOfType, ROW } from '../lib/util';

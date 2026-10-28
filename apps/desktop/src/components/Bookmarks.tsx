@@ -2,7 +2,7 @@
  * double-click goes there in the code. B opens the editor for the bookmark on the cursor line at the top of the list,
  * so the code stays in view beside it. They are kept in the project file, never in the generated source. */
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
-import { h4, type Addr, type AnalysisResult, type Bookmark, type RenderResult } from '@kickreasm/core';
+import { h4, type Addr, type AnalysisResult, type Bookmark, type RenderResult } from '@mimir/core';
 import { Icon } from '../lib/icons';
 import { parseGoto } from '../lib/goto';
 import { cx } from '../lib/util';

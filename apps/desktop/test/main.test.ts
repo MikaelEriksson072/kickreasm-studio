@@ -4,10 +4,11 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { analyze, DEFAULT_PACK, demoProject, deserializeProject, makeD64, render, serializeProject, type SerializedProject, type ToolchainSettings } from '@kickreasm/core';
-import { findKickAssJar, writeVfs } from '@kickreasm/core/node';
+import { analyze, DEFAULT_PACK, demoProject, deserializeProject, LEGACY_PROJECT_FORMAT, makeD64, render, serializeProject, type SerializedProject, type ToolchainSettings } from '@mimir/core';
+import { findKickAssJar, writeVfs } from '@mimir/core/node';
 import { CHANNELS } from '../shared/ipc';
 import { assertEntryName, PathPolicy } from '../electron/main/paths';
+import { bringOldSettings } from '../electron/main/migrate';
 import { RecentFolders } from '../electron/main/recent';
 import { bundledExomizer, bundledUnp64, defaultToolchainSettings, SettingsStore } from '../electron/main/settings';
 import { diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectSchema, runSchema, serializedProjectSchema } from '../electron/main/schemas';
@@ -16,7 +17,7 @@ import { QUICKSAVE_FILE, QuicksaveWatcher, quicksaveFiles, quicksaveInfo, readQu
 import { readDiskImage, readPrgFiles, readProjectFile, writeProjectFile } from '../electron/main/project-fs';
 import { charRomFiles, readCharRom } from '../electron/main/chargen';
 
-const tmp = () => mkdtempSync(join(tmpdir(), 'kickreasm-desktop-test-'));
+const tmp = () => mkdtempSync(join(tmpdir(), 'mimir-desktop-test-'));
 const toolchain = (patch: Partial<ToolchainSettings> = {}): ToolchainSettings => ({ javaPath: 'java', kickJar: '', vicePath: '', outDir: 'out', kickArgs: '-vicesymbols -showmem', viceArgs: '-autostartprgmode 1', unpackerPath: '', unpackerArgs: '{in}', exomizerPath: '', viceQuicksave: '', ...patch });
 
 describe('IPC contract', () => {
@@ -351,21 +352,52 @@ describe('RecentFolders', () => {
   });
 });
 
+describe('settings from before the rename', () => {
+  it('come along once from the old folder into the app\'s own, not into a profile of its own', () => {
+    const appData = tmp(), old = join(appData, '@kickreasm', 'desktop'), now = join(appData, '@mimir', 'desktop');
+    mkdirSync(join(old, 'Local Storage', 'leveldb'), { recursive: true });
+    writeFileSync(join(old, 'settings.json'), '{"kickJar":"C:\\\\C64\\\\KickAss.jar"}');
+    writeFileSync(join(old, 'recent-folders.json'), '{}');
+    writeFileSync(join(old, 'Local Storage', 'leveldb', '000003.log'), 'ui');
+    mkdirSync(join(old, 'Cache'));
+    // a test's own profile is left alone
+    expect(bringOldSettings(appData, join(appData, 'e2e-profile'), '@mimir/desktop')).toEqual([]);
+    expect(bringOldSettings(appData, now, '@mimir/desktop')).toEqual(['settings.json', 'recent-folders.json', 'Local Storage']);
+    expect(readFileSync(join(now, 'settings.json'), 'utf8')).toContain('KickAss.jar');
+    expect(existsSync(join(now, 'Local Storage', 'leveldb', '000003.log'))).toBe(true);
+    expect(existsSync(join(now, 'Cache'))).toBe(false);
+    // once: what the app has saved since stays
+    writeFileSync(join(now, 'settings.json'), '{}');
+    expect(bringOldSettings(appData, now, '@mimir/desktop')).toEqual([]);
+    expect(readFileSync(join(now, 'settings.json'), 'utf8')).toBe('{}');
+  });
+});
+
 describe('project files', () => {
-  it('round-trips a project through .krproj.json', async () => {
-    const path = join(tmp(), 'demo.krproj.json');
+  it('round-trips a project through .mimir.json', async () => {
+    const path = join(tmp(), 'demo.mimir.json');
     const p = { ...demoProject(), labels: { 0x0810: 'main' } };
     await writeProjectFile(path, p);
     const back = await readProjectFile(path);
     expect(back.files[0].bytes).toEqual(p.files[0].bytes);
     expect(back.labels).toEqual({ 2064: 'main' });
-    expect(JSON.parse(readFileSync(path, 'utf8')).format).toBe('kickreasm-project');
+    expect(JSON.parse(readFileSync(path, 'utf8')).format).toBe('mimir-project');
+  });
+
+  it('opens a project saved before the rename (KickReasm Studio, .krproj.json), and saves it as Mimir Studio does', async () => {
+    const dir = tmp(), path = join(dir, 'old.krproj.json');
+    writeFileSync(path, JSON.stringify({ ...serializeProject({ ...demoProject(), name: 'old' }), format: LEGACY_PROJECT_FORMAT }));
+    const back = await readProjectFile(path);
+    expect(back.name).toBe('old');
+    expect(back.format).toBe('mimir-project');
+    await writeProjectFile(join(dir, 'old.mimir.json'), back);
+    expect(JSON.parse(readFileSync(join(dir, 'old.mimir.json'), 'utf8')).format).toBe('mimir-project');
   });
 
   it('rejects files that are not projects', async () => {
     const path = join(tmp(), 'nope.json');
     writeFileSync(path, JSON.stringify({ hello: 1 }));
-    await expect(readProjectFile(path)).rejects.toThrow(/not a KickReasm project/);
+    await expect(readProjectFile(path)).rejects.toThrow(/not a Mimir project/);
   });
 
   it('opens PRGs and VICE snapshots, the snapshot as its RAM from $0200 with its entry points', async () => {

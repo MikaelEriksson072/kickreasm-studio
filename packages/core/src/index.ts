@@ -1,6 +1,6 @@
-/* @kickreasm/core — pure TypeScript, no DOM, no I/O. Runs in the analysis
+/* @mimir/core — pure TypeScript, no DOM, no I/O. Runs in the analysis
  * worker, the renderer, Node tests and the CLI. Node-only helpers that
- * spawn the toolchain live in '@kickreasm/core/node'. */
+ * spawn the toolchain live in '@mimir/core/node'. */
 export * from './types';
 export { T, TYPE_INFO, TYPE_BY_KEY, MARK_AS, MARK_TYPE, DEFAULT_SETTINGS, TOOLCHAIN_KEYS, kindInfo, typeInfo } from './model';
 export type { TypeGroup, TypeInfo, MarkAs } from './model';

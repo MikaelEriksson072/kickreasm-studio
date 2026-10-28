@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-// End-to-end tests against the built Electron app (`out/`); `pnpm --filter @kickreasm/desktop e2e` builds first.
+// End-to-end tests against the built Electron app (`out/`); `pnpm --filter @mimir/desktop e2e` builds first.
 export default defineConfig({
   testDir: './e2e',
   outputDir: './test-results',

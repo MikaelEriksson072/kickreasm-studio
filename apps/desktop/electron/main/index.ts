@@ -3,12 +3,16 @@ import { app, BrowserWindow, Menu, session, shell, type MenuItemConstructorOptio
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CHANNELS } from '../../shared/ipc';
+import { bringOldSettings } from './migrate';
 import { registerIpc } from './ipc';
 import { PathPolicy } from './paths';
 import { ExportWatcher } from './project-fs';
 import { QuicksaveWatcher } from './quicksave';
 import { RecentFolders } from './recent';
 import { SettingsStore } from './settings';
+
+// the settings of KickReasm Studio, as Mimir Studio was called, come along once (before the window opens its storage)
+bringOldSettings(app.getPath('appData'), app.getPath('userData'), app.getName());
 
 const devUrl = process.env.ELECTRON_RENDERER_URL;
 const rendererFile = join(__dirname, '../renderer/index.html');
@@ -18,7 +22,7 @@ const isTrustedUrl = (url: string) => (devUrl ? url.startsWith(devUrl) : url.spl
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1480, height: 920, minWidth: 760, minHeight: 520,
-    show: false, backgroundColor: '#121218', autoHideMenuBar: true, title: 'KickReasm Studio',
+    show: false, backgroundColor: '#121218', autoHideMenuBar: true, title: 'Mimir Studio',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, spellcheck: false,

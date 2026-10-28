@@ -1,5 +1,5 @@
 /* =====================================================================
- * KickReasm Studio — renderer root. The project lives in the Zustand
+ * Mimir Studio — renderer root. The project lives in the Zustand
  * store; analysis and rendering run in a Web Worker; file system and
  * toolchain access go through the typed `window.kr` bridge.
  * ===================================================================== */
@@ -9,7 +9,7 @@ import {
   formatOverride, openC64File, overwritesSystemArea, parseVsf, patchSnapshot, editRanges, showcaseProject, parseD64, parsePrg, projectNameFor, rangeCover, readD64File, projectTextFiles, shellWord, SYSTEM_AREA, TOOLCHAIN_KEYS, validLabel, withId,
   type Addr, type AnalysisResult, type Block, type Bookmark, type BuildScript, type ByteMove, type D64File, type NumberFormat, type Override, type PackingInfo, type PackPrefs, type KickProblem, type ListingLine, type LoadedFile, type Project, type RenderResult,
   type SerializedProject, type Settings, type Token, type ToolchainSettings, type VerifyResult,
-} from '@kickreasm/core';
+} from '@mimir/core';
 import { useProject } from './store/project';
 import { useUi, type Activity } from './store/ui';
 import { useAnalysis, verifyInWorker } from './lib/analysis';
@@ -625,7 +625,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       const f0 = A.files[0];
       const overSystem = !!f0 && overwritesSystemArea(f0.load, f0.bytes.length);
       // the RAM of a snapshot opened before snapshots were kept with the project: it can only start like a PRG
-      if (f0 && (f0.load === 0x0200 || f0.load === 0x0002) && f0.load + f0.bytes.length === 0x10000) toast('This file looks like a VICE snapshot that was opened before KickReasm kept snapshots, so VICE starts it like a PRG: open the .vsf again and Build & Run restarts it as it was', 'warn');
+      if (f0 && (f0.load === 0x0200 || f0.load === 0x0002) && f0.load + f0.bytes.length === 0x10000) toast('This file looks like a VICE snapshot that was opened before Mimir kept snapshots, so VICE starts it like a PRG: open the .vsf again and Build & Run restarts it as it was', 'warn');
       else if (start == null && overSystem) toast(`The program overwrites BASIC's work area ($${h4(SYSTEM_AREA.start)}-$${h4(SYSTEM_AREA.end - 1)}), so RUN cannot start it: set the program start`, 'warn');
       const { pid, via } = await kr.run({ prgPath, labelsPath, start, disk: diskPath });
       const how = start == null ? '' : via === 'monitor'
@@ -811,8 +811,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       { id: 'pack-save', label: `Save the packed ${packRes.name} as…`, run: () => void savePacked() },
     ] : []),
     { id: 'export', label: 'Export Kick Assembler project to a folder…', key: 'Ctrl+E', run: () => void exportProject() },
-    { id: 'save', label: 'Save project (.krproj.json)', key: 'Ctrl+S', run: () => void saveProject() },
-    { id: 'openproj', label: 'Open project (.krproj.json)…', run: () => void openProject() },
+    { id: 'save', label: 'Save project (.mimir.json)', key: 'Ctrl+S', run: () => void saveProject() },
+    { id: 'openproj', label: 'Open project (.mimir.json)…', run: () => void openProject() },
     { id: 'settings', label: 'Settings', key: 'Ctrl+,', run: () => setModal('settings') },
     { id: 'theme', label: 'Toggle light / dark theme', run: () => setUi({ theme: theme === 'dark' ? 'light' : 'dark' }) },
     { id: 'undo', label: `Undo${undoLabel ? ': ' + undoLabel : ''}`, key: 'Ctrl+Z', run: undo },

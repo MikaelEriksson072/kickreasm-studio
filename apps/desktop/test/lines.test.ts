@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyze, demoProject, lineText, makeDemo, parsePrg, render, type ProjectInput } from '@kickreasm/core';
+import { analyze, demoProject, lineText, makeDemo, parsePrg, render, type ProjectInput } from '@mimir/core';
 import { fileLineNumbers } from '../src/lib/lines';
 
 /** every listing line's number must point at exactly that line of its .asm file */

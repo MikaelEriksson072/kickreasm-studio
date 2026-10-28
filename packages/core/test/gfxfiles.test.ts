@@ -42,7 +42,7 @@ describe('.byte source', () => {
 
   it('shapes characters, sprites and bitmaps, and assembles to the same bytes', () => {
     const chars = gfxSource('chars', 'charset_2800', 0x2800, bytes(16));
-    expect(chars).toContain('// charset_2800: $2800-$280f, 16 bytes (2 characters), saved by KickReasm Studio');
+    expect(chars).toContain('// charset_2800: $2800-$280f, 16 bytes (2 characters), saved by Mimir Studio');
     expect(chars).toMatch(/charset_2800:\n {8}\/\/ char 0 at \$2800\n {8}\.byte %00000000\n {8}\.byte %00100101\n/);
     expect(chars).toContain('// char 1 at $2808');
     const sprites = gfxSource('sprites', 'sprite_2000', 0x2000, bytes(128));
@@ -52,7 +52,7 @@ describe('.byte source', () => {
     expect(gfxSource('bitmap', 'bitmap_4000', 0x4000, bytes(640))).toMatch(/\/\/ row 1\n {8}\.byte \$40,/);
     // a screen: a row of 40 screen codes a line; a whole 1 KB has the 24 bytes after it on a line of their own
     const screen = gfxSource('screens', 'screen_0400', 0x0400, bytes(1024, i => i & 0xff));
-    expect(screen).toContain('// screen_0400: $0400-$07ff, 1024 bytes (1 screen), saved by KickReasm Studio');
+    expect(screen).toContain('// screen_0400: $0400-$07ff, 1024 bytes (1 screen), saved by Mimir Studio');
     const rows = screen.split('\n').filter(l => l.includes('.byte'));
     expect(rows).toHaveLength(26);
     expect(rows[0].split(',')).toHaveLength(40);
@@ -70,7 +70,7 @@ describe('.byte source', () => {
 
   it.skipIf(!java)('assembles with the real KickAss.jar to the showcase sprites and charset', async () => {
     const show = parsePrg('s.prg', makeShowcase().prg), at = (a: number, n: number) => show.bytes.subarray(a - show.load, a - show.load + n);
-    const dir = await mkdtemp(join(tmpdir(), 'kickreasm-gfx-'));
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-gfx-'));
     try {
       await writeFile(join(dir, 'sprites.asm'), gfxSource('sprites', 'balls', 0x2000, at(0x2000, 256)));
       await writeFile(join(dir, 'charset.asm'), gfxSource('chars', 'font', 0x2800, at(0x2800, 2048)));

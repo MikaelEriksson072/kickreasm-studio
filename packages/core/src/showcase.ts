@@ -30,16 +30,16 @@ function charset(): number[] {
   return out;
 }
 
-/** The logo: "KICKREASM" in the demo font as a multicolor bitmap of 160 x 64 pixels (8 character rows), a white top
+/** The logo: "MIMIR" in the demo font as a multicolor bitmap of 160 x 64 pixels (8 character rows), a white top
  *  and an outline from the screen matrix ($61: %01 blue, %10 white), the faces from colour RAM. */
 function logo(): { bitmap: number[]; screen: number[]; colors: number[] } {
-  const W = 160, H = 64, text = 'KICKREASM', x0 = 8, y0 = 10, sx = 2, sy = 5;
+  const W = 160, H = 64, text = 'MIMIR', sx = 3, sy = 5, x0 = (W - text.length * 8 * sx) / 2, y0 = 10;
   const face = new Uint8Array(W * H);
   [...text].forEach((c, i) => {
     const g = DEMO_FONT[c];
     for (let gy = 0; gy < 8; gy++) for (let gx = 0; gx < 8; gx++) {
       if (!((parseInt(g.slice(gy * 2, gy * 2 + 2), 16) >> (7 - gx)) & 1)) continue;
-      for (let dy = 0; dy < sy; dy++) for (let dx = 0; dx < sx; dx++) face[(y0 + gy * sy + dy) * W + x0 + i * 16 + gx * sx + dx] = 1;
+      for (let dy = 0; dy < sy; dy++) for (let dx = 0; dx < sx; dx++) face[(y0 + gy * sy + dy) * W + x0 + i * 8 * sx + gx * sx + dx] = 1;
     }
   });
   const px = new Uint8Array(W * H);
@@ -124,8 +124,8 @@ const line40 = (s: string, center = true) => {
   return (' '.repeat(pad) + s).padEnd(40);
 };
 
-const SCROLL = 'WELCOME TO THE KICKREASM STUDIO SHOWCASE!   EVERYTHING HERE IS ONE PRG: A MULTICOLOR BITMAP LOGO IN VIC BANK 1, '
-  + 'A TEXT SCREEN IN BANK 0, EIGHT SPRITES, RASTER BARS IN BOTH BORDERS AND THREE-VOICE MUSIC.   OPEN IT IN KICKREASM STUDIO, '
+const SCROLL = 'WELCOME TO THE NEW MIMIR STUDIO SHOWCASE!   EVERYTHING HERE IS ONE PRG: A MULTICOLOR BITMAP LOGO IN VIC BANK 1, '
+  + 'A TEXT SCREEN IN BANK 0, EIGHT SPRITES, RASTER BARS IN BOTH BORDERS AND THREE-VOICE MUSIC.   OPEN IT IN THE MIMIR STUDIO, '
   + 'RENAME THE LABELS, MARK THE BLOCKS AND EXPORT A KICK ASSEMBLER PROJECT THAT BUILDS THE SAME BYTES...          ';
 
 /** the showcase and the address of each label in its source */
@@ -600,7 +600,7 @@ logo_colors:
 ${rows(L.colors, 20)}
 .encoding "petscii_upper"
 title: .byte $9e
-.text "KICKREASM STUDIO "
+.text "THE MIMIR STUDIO "
 .byte $05
 .text "SHOWCASE"
 .byte $0d,$00
@@ -743,7 +743,7 @@ ${rows(L.screen, 20)}
   const r = assemble({ 'showcase.asm': src }, 'showcase.asm');
   if (r.errors.length || !r.prg) throw new Error('showcase build failed: ' + r.errors.map(e => `${e.line}: ${e.msg}`).join('; '));
   const labels = Object.fromEntries([...r.symbols].filter((e): e is [string, number] => typeof e[1] === 'number'));
-  return { name: 'kickreasm-showcase.prg', prg: r.prg, source: src, labels };
+  return { name: 'mimir-showcase.prg', prg: r.prg, source: src, labels };
 }
 
 /** names the project gives the main routines (the analysis would call them sub_xxxx, irq_xxxx, ptr_xxxx) */
@@ -791,7 +791,7 @@ const TOUR: [string | Addr, string, string][] = [
  */
 export function showcaseProject(settings?: Partial<Settings>): Project {
   const d = makeShowcase();
-  const p = createProject({ name: 'kickreasm-showcase', files: [parsePrg(d.name, d.prg)], settings });
+  const p = createProject({ name: 'mimir-showcase', files: [parsePrg(d.name, d.prg)], settings });
   const at = (l: string | Addr): Addr => {
     if (typeof l === 'number') return l;
     const a = d.labels[l];
@@ -814,6 +814,6 @@ export function showcaseProject(settings?: Partial<Settings>): Project {
     0xfb: { text: 'set by setup_screen from crow_lo/crow_hi' },
   };
   p.notes = notes;
-  p.blockComments = { 0x4000: 'KICKREASM in the demo font: 160 x 64 multicolor pixels', 0x1800: 'a three-voice tune: Am F C G' };
+  p.blockComments = { 0x4000: 'MIMIR in the demo font: 160 x 64 multicolor pixels', 0x1800: 'a three-voice tune: Am F C G' };
   return p;
 }

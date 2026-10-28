@@ -9,8 +9,8 @@ const capture = (cwd: string) => {
   return { lines, io: { out: (s: string) => lines.push(s), err: (s: string) => lines.push(`ERR ${s}`), cwd } };
 };
 
-describe('kickreasm CLI', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'kickreasm-cli-test-'));
+describe('mimir CLI', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mimir-cli-test-'));
 
   it('writes the demo, analyses, verifies and exports it', async () => {
     let c = capture(dir);
@@ -31,11 +31,11 @@ describe('kickreasm CLI', () => {
     c = capture(dir);
     expect(await main(['export', 'demo.prg', '-o', 'out', '--name', 'raster'], c.io)).toBe(0);
     const files = readdirSync(join(dir, 'out'), { recursive: true }).map(String).map(f => f.replace(/\\/g, '/')).sort();
-    expect(files).toEqual(expect.arrayContaining(['demo.asm', 'build.bat', 'build.sh', 'README.md', 'raster.krproj.json', 'include/c64-hardware.asm', 'music/music_1000.sid', 'gfx/charset_3000.bin', 'original/demo.prg', 'out/demo.prg']));
+    expect(files).toEqual(expect.arrayContaining(['demo.asm', 'build.bat', 'build.sh', 'README.md', 'raster.mimir.json', 'include/c64-hardware.asm', 'music/music_1000.sid', 'gfx/charset_3000.bin', 'original/demo.prg', 'out/demo.prg']));
     expect(readFileSync(join(dir, 'out', 'out', 'demo.prg'))).toEqual(readFileSync(join(dir, 'demo.prg')));
 
     c = capture(dir);
-    expect(await main(['analyse', 'out/raster.krproj.json', '--json'], c.io)).toBe(0);
+    expect(await main(['analyse', 'out/raster.mimir.json', '--json'], c.io)).toBe(0);
     expect(JSON.parse(c.lines.join('\n')).entry).toBe(0x0810);
     expect(JSON.parse(c.lines.join('\n')).packing).toEqual([null]);
   });

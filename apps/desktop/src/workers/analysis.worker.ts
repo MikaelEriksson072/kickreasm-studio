@@ -1,8 +1,8 @@
-/* Analysis worker (spec 4.3): runs @kickreasm/core off the UI thread. analyze() only re-runs when
+/* Analysis worker (spec 4.3): runs @mimir/core off the UI thread. analyze() only re-runs when
  * the files, overrides, entries, program start, bank zones or settings changed (the caller bumps `aKey`); labels and comments
  * only re-render, which keeps renames instant. */
 import * as Comlink from 'comlink';
-import { analyze, render, verify, type AnalysisResult, type Project, type RenderOptions, type RenderResult, type VerifyResult } from '@kickreasm/core';
+import { analyze, render, verify, type AnalysisResult, type Project, type RenderOptions, type RenderResult, type VerifyResult } from '@mimir/core';
 
 let current: { aKey: number; A: AnalysisResult } | null = null;
 

@@ -297,7 +297,7 @@ describe('loaders', () => {
     const A = analyze(p), R = render(A, p);
     expect(verify(A, R).ok).toBe(true);
     const text = R.files['loader.asm'] as string;
-    expect(text).toContain('// loader found by KickReasm Studio (the ==== lines mark their parts):\n//   A fast loader (not one of the known ones) (by its traits): reads the serial bus at $dd00 4 times (1-bit)\n');
+    expect(text).toContain('// loader found by Mimir Studio (the ==== lines mark their parts):\n//   A fast loader (not one of the known ones) (by its traits): reads the serial bus at $dd00 4 times (1-bit)\n');
     expect(text).toMatch(/\/\/ ==== A fast loader \(not one of the known ones\): drive command M-W \$0500, 32 bytes into the drive ====\n(\w+:\n)? +\.byte \$4d, \$2d, \$57/);
     expect(text).toContain('// ==== A fast loader (not one of the known ones): code for the 1541:');
     expect(text).toContain('// ==== end of A fast loader (not one of the known ones): its installer ====');

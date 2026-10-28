@@ -3,7 +3,7 @@
  * project keeps the user's version and the export writes it. */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api';
-import { BUILD_SCRIPTS, lineText, type Addr, type AnalysisResult, type BuildScript, type KickProblem, type RenderResult, type Settings, type Vfs } from '@kickreasm/core';
+import { BUILD_SCRIPTS, lineText, type Addr, type AnalysisResult, type BuildScript, type KickProblem, type RenderResult, type Settings, type Vfs } from '@mimir/core';
 import { Icon } from '../lib/icons';
 import type { NavOptions } from '../lib/types';
 import { LineBody } from './Listing';
@@ -57,7 +57,7 @@ export function SourceView({ R, A, S, path, setPath, cursor, onNavigate, theme, 
       monacoRef.current = monaco;
       applyMonacoTheme(monaco, document.documentElement.dataset.theme !== 'light');
       const editor = monaco.editor.create(host.current, {
-        value: '', language: 'kickass', theme: 'kickreasm', readOnly: true, automaticLayout: true, fontFamily: "'JetBrains Mono', ui-monospace, Consolas, monospace",
+        value: '', language: 'kickass', theme: 'mimir', readOnly: true, automaticLayout: true, fontFamily: "'JetBrains Mono', ui-monospace, Consolas, monospace",
         fontSize: 13, lineHeight: 20, minimap: { enabled: true, scale: 1, renderCharacters: false }, scrollBeyondLastLine: false, renderLineHighlight: 'all',
         smoothScrolling: true, padding: { top: 8 }, guides: { indentation: false }, stickyScroll: { enabled: false }, mouseWheelZoom: true,
       });

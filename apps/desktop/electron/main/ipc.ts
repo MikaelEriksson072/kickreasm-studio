@@ -72,7 +72,7 @@ export function registerIpc(deps: IpcDeps): void {
   handle(CHANNELS.projectOpen, projectOpenSchema, async (req, e): Promise<ProjectOpenResult | null> => {
     let path = req.path ? policy.assert(req.path, 'Project file') : null;
     if (!path) {
-      const [picked] = await pick(e, 'project', { title: 'Open KickReasm project', properties: ['openFile'], filters: [{ name: 'KickReasm project', extensions: ['json', 'krproj'] }] });
+      const [picked] = await pick(e, 'project', { title: 'Open Mimir project', properties: ['openFile'], filters: [{ name: 'Mimir project', extensions: ['json'] }] });
       if (!picked) return null;
       path = picked;
       chose(dirname(path), 'project');
@@ -84,8 +84,8 @@ export function registerIpc(deps: IpcDeps): void {
     let path = req.path && policy.isAllowed(req.path) ? req.path : null;
     if (!path) {
       const win = windowOf(e.sender);
-      const start = recent.folder('project'), file = `${req.project.name}.krproj.json`;
-      const options = { title: 'Save KickReasm project', defaultPath: start ? join(start, file) : file, filters: [{ name: 'KickReasm project', extensions: ['json'] }] };
+      const start = recent.folder('project'), file = `${req.project.name}.mimir.json`;
+      const options = { title: 'Save Mimir project', defaultPath: start ? join(start, file) : file, filters: [{ name: 'Mimir project', extensions: ['json'] }] };
       const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options);
       if (r.canceled || !r.filePath) return null;
       path = r.filePath;

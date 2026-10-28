@@ -30,4 +30,5 @@ desktop.ini
 # the original single-file prototype (not needed to build or run; the differential test has its own copy in
 # packages/core/test/reference/)
 prototype-src/
+# (its file still has the name the program had then)
 kickreasm-studio.html

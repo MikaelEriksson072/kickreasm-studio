@@ -645,7 +645,7 @@ describe('bookmarks', () => {
 describe('project helpers', () => {
   it('demoProject() builds a complete Project', () => {
     const p = demoProject();
-    expect(p.format).toBe('kickreasm-project');
+    expect(p.format).toBe('mimir-project');
     expect(p.files[0].id).toBeTruthy();
     expect(p.settings.indent).toBe(8);
   });

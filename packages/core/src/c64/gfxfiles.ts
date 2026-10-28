@@ -58,7 +58,7 @@ export function gfxSource(kind: GfxFileKind | 'bytes', label: string, start: Add
   const end = start + bytes.length - 1;
   const what = kind === 'chars' ? `${Math.ceil(bytes.length / 8)} characters` : kind === 'sprites' ? `${Math.ceil(bytes.length / 64)} sprites`
     : kind === 'bitmap' ? 'a bitmap' : kind === 'screens' ? (n => `${n} screen${n === 1 ? '' : 's'}`)(Math.ceil(bytes.length / 0x400)) : 'data';
-  const out = [`// ${label}: $${h4(start)}-$${h4(end)}, ${bytes.length} bytes (${what}), saved by KickReasm Studio`,
+  const out = [`// ${label}: $${h4(start)}-$${h4(end)}, ${bytes.length} bytes (${what}), saved by Mimir Studio`,
     `// .import source "${label}.asm" puts it where the .pc is, or paste it`, '', `${label}:`];
   const at = (i: number) => h4(start + i);
   if (kind === 'chars') {

@@ -7,7 +7,7 @@ export function makePsid(data: Uint8Array, load: Addr, init: Addr, play: Addr, n
   out.set([0x50, 0x53, 0x49, 0x44], 0);
   be16(4, 2); be16(6, 0x7c); be16(8, 0); be16(0x0a, init); be16(0x0c, play); be16(0x0e, 1); be16(0x10, 1);
   const str = (o: number, s: string) => { for (let i = 0; i < 31 && i < s.length; i++) out[o + i] = s.charCodeAt(i) & 0x7f; };
-  str(0x16, name || 'Ripped music'); str(0x36, '<?>'); str(0x56, 'Ripped with KickReasm Studio');
+  str(0x16, name || 'Ripped music'); str(0x36, '<?>'); str(0x56, 'Ripped with Mimir Studio');
   be16(0x76, 0x14);
   out[0x7c] = load & 0xff; out[0x7d] = load >> 8;
   out.set(data, 0x7e);

@@ -1,4 +1,4 @@
-# KickReasm Studio: development notes
+# Mimir Studio: development notes
 
 How the project is built and tested, what every feature does in the code, the end-to-end tests flow by flow, and the
 deliberate changes from the prototype engine. For what the app is and how to use it, see the [README](../README.md).
@@ -32,22 +32,22 @@ pnpm test
 | `pnpm test` | All Vitest suites: core (round-trip, fast-check fuzz, differential vs. the prototype, real KickAss.jar when installed), CLI, desktop main process |
 | `pnpm typecheck` | `tsc` for every package (main/preload, renderer and the e2e tests separately) |
 | `pnpm build` | CLI bundle (`packages/cli/dist`) and the Electron app (`apps/desktop/out`) |
-| `pnpm kickreasm <cmd>` | CLI from source: `analyse`, `verify [--kickass]`, `export -o <dir>`, `demo` |
-| `pnpm --filter @kickreasm/desktop e2e` | Builds the app and runs the Playwright-for-Electron tests in `apps/desktop/e2e` |
-| `pnpm --filter @kickreasm/desktop package` | Builds the app and packages it for Windows with electron-builder (installer + portable exe in `apps/desktop/release/<version>/`) |
+| `pnpm mimir <cmd>` | CLI from source: `analyse`, `verify [--kickass]`, `export -o <dir>`, `demo` |
+| `pnpm --filter @mimir/desktop e2e` | Builds the app and runs the Playwright-for-Electron tests in `apps/desktop/e2e` |
+| `pnpm --filter @mimir/desktop package` | Builds the app and packages it for Windows with electron-builder (installer + portable exe in `apps/desktop/release/<version>/`) |
 
-`FUZZ_RUNS=5000 pnpm --filter @kickreasm/core test` runs a longer fuzz session.
+`FUZZ_RUNS=5000 pnpm --filter @mimir/core test` runs a longer fuzz session.
 
 ### End-to-end tests (Playwright for Electron)
 
 ```bash
-pnpm --filter @kickreasm/desktop e2e
+pnpm --filter @mimir/desktop e2e
 ```
 
 The script runs `electron-vite build` and then `playwright test`, which starts `out/main/index.js` with
 `_electron.launch` and a fresh `--user-data-dir` per test (no saved settings, no autosaved project, so the demo
 program is loaded). No browser download is needed; the tests use the Electron binary from `node_modules`.
-To rerun them without rebuilding: `pnpm --filter @kickreasm/desktop exec playwright test` (`--debug` opens the
+To rerun them without rebuilding: `pnpm --filter @mimir/desktop exec playwright test` (`--debug` opens the
 Playwright inspector).
 
 | Test | Flow |
@@ -73,16 +73,16 @@ Playwright inspector).
 | bookmarks: notes on addresses, listed by address, a click shows the note and a double-click goes there | `B` on `start` opens the *Add bookmark* editor in the sidebar, titled `start` and focused, with the `jsr CLRSCR` line visible beside it; a click on `jsr sub_0866` and *Cursor line* make the address `$0813`, `Esc` closes it without saving; again on `start` (`$0001` is refused as not loaded), `Ctrl+Enter` saves it and the row gets the margin mark, the activity bar shows 1; right-click → *Add bookmark…* on `sine_09b5`; `Ctrl+B` lists `$0810 Set up`, `$09b5 sine_09b5`, a click shows the whole note and another hides it, a double-click goes to `$09b5`; `F2` / `Shift+F2` go round them; the margin mark opens the note in the list; `B` on the line edits it, *Delete* removes it and `Ctrl+Z` brings it back |
 | fold and unfold blocks | the header button folds `sine_09b5` ('33 lines folded') and unfolds it; `F` folds the block at the cursor, the arrow keys stop on the folded header, `G` to `$09c5` unfolds it; the palette folds every non-code block and unfolds all |
 | exclude a block from the build | right-click on `sine_09b5` → *Exclude block from the build*: the header says *not built*, the listing shows `#if INCLUDE_sine_09b5`, `.label sine_09b5 = $09b5`, `#endif` and `// #define INCLUDE_sine_09b5`; `F7` verifies with '(256 bytes left out of the build)'; the inspector's *Include in the build* puts it back |
-| text in mixed case | the inspector turns `txt_0985` from *Text (screen codes)* into *Text (screen codes, mixed case)*: `.encoding "screencode_mixed"` and `.text "hello from the kickreasm studio demo!   enjoy!!"`, the preview follows, `F7` verifies |
+| text in mixed case | the inspector turns `txt_0985` from *Text (screen codes)* into *Text (screen codes, mixed case)*: `.encoding "screencode_mixed"` and `.text "hello from the mimir studio demo!   enjoy!!"`, the preview follows, `F7` verifies |
 | open a PRG, save and export through stubbed file dialogs | `dialog.showOpenDialog`/`showSaveDialog` are replaced in the main process (`electronApp.evaluate`), then `Ctrl+O` loads `fixtures/prg/raster-demo.prg`, `Ctrl+S` saves the project and `Ctrl+E` verifies and exports it to a temp folder (no `NOTES.html`: nothing to put in it) |
 | the export writes NOTES.html, or NOTES.txt when set, with the bookmarks and comments | a bookmark on `start` (with `<raster>` in its note) and a comment line above it; the export's `NOTES.html` has the title, the escaped note, `raster-demo.asm, line N` for the `jsr CLRSCR` line, the export time and the comment line; the bookmark is not in the `.asm`, the comment is, and README.md names `NOTES.html`; after Settings → *Bookmarks and comments in the export* → NOTES.txt the export writes `NOTES.txt` instead (the note as written, `>` on line N) and README.md names it |
-| the Terminal button opens a terminal in the project folder | `child_process.spawn` is wrapped in the main process so no window opens: before any dialog the terminal starts in the home folder (`cmd.exe` with `start "KickReasm Studio" /D … powershell.exe -NoLogo -NoExit -Command …`), after `Ctrl+E` in the exported folder |
-| edit build.bat in the source view: the export writes it, Restore generated takes it back | the source view says *read-only* for the `.asm` and *Editable* for `build.bat`; typing `rem my own step` at its end makes it *Edited by you*; the export writes that `build.bat` (and keeps it in the `.krproj.json`) while `build.sh` stays generated; *Restore generated* brings the generated script back |
+| the Terminal button opens a terminal in the project folder | `child_process.spawn` is wrapped in the main process so no window opens: before any dialog the terminal starts in the home folder (`cmd.exe` with `start "Mimir Studio" /D … powershell.exe -NoLogo -NoExit -Command …`), after `Ctrl+E` in the exported folder |
+| edit build.bat in the source view: the export writes it, Restore generated takes it back | the source view says *read-only* for the `.asm` and *Editable* for `build.bat`; typing `rem my own step` at its end makes it *Edited by you*; the export writes that `build.bat` (and keeps it in the `.mimir.json`) while `build.sh` stays generated; *Restore generated* brings the generated script back |
 | pack with Exomizer: the whole build or chosen blocks, checked with desfx, saved with a dialog | Settings shows an Exomizer (the installed app's `resources\exomizer\exomizer.exe`); the Pack view shows `exomizer sfx sys -o raster-demo-exo.prg raster-demo.prg`, *Pack* builds, packs and reports *Decrunched by desfx: $0801–… has the same … bytes, and it starts at $0810*, the build output has the command, and *Save as…* (stubbed dialog) writes a PRG loading at `$0801`. *Chosen blocks*: right-click → *Pack block with Exomizer* on `$0810`, a warning that the BASIC line is left out, *Selection* `$0810–$37ff` from *Go to*, a block unticked and ticked again, *Jump to* `$0810` and no effect give `sfx $0810 -n … raster-demo.prg,$0810,15,12272`, packed and checked again; `Ctrl+Z` undoes the effect and the saved project keeps `pack` |
 | a VICE quicksave (Alt+F11 in VICE) opens by itself, F9 opens it again, Ctrl+Z goes back | Settings → *VICE quicksave snapshot* set to a file in the test's folder; the Explorer's *VICE quicksave* section explains Alt+F11, says *None yet* and its *Open the latest quicksave* button is disabled, then shows *Latest: today hh:mm:ss* after the save; `F9` says *No VICE quicksave yet …* with that path; copying `fixtures/vsf/raster-demo.vsf` there opens `quicksave.prg` by itself (*Opened the VICE quicksave from … traced from $08c7, $08b7. Ctrl+Z goes back to the project before*); `Ctrl+Z` brings `raster-demo.prg` back and `Ctrl+Y` the quicksave; with *Open each new one* unticked a new quicksave is only announced and `F9` opens it |
-| the Demo button opens the showcase: every block type and a guided tour in the Bookmarks view | *Demo* loads `kickreasm-showcase.prg` with the toast about the tour; the Bookmarks view lists 15 stops starting with *Welcome to the showcase* and `F2` goes to the next one; the Blocks view has BASIC, Code, Text, Data, Word table, Table, Lo/Hi table, Sprites, Charset, Bitmap, Screen matrix, Music (SID) and Fill; `F7` verifies |
+| the Demo button opens the showcase: every block type and a guided tour in the Bookmarks view | *Demo* loads `mimir-showcase.prg` with the toast about the tour; the Bookmarks view lists 15 stops starting with *Welcome to the showcase* and `F2` goes to the next one; the Blocks view has BASIC, Code, Text, Data, Word table, Table, Lo/Hi table, Sprites, Charset, Bitmap, Screen matrix, Music (SID) and Fill; `F7` verifies |
 | Ctrl+C copies the selected lines of the listing as source, and the line at the cursor without one | `fx_091e` and Shift+Down ×3 (*sel $091e–$0926*): Ctrl+C says *Copied 6 lines to the clipboard*, and the clipboard holds the block header, `fx_091e:`, `lda SID_OSC3` with its comment, `and #$0f`, `sta COLOR_RAM+24*40+39` and `rts`, indented as in the source; right-click in the selection offers *Copy 6 selected lines*; with no selection, Ctrl+C on `$0923` copies `sta COLOR_RAM+24*40+39` |
-| the Memory tab shows the program as the VICE monitor does: m, i and ii | the `$0801` row reads `>C:0801  0b 08 0a 00  9e 32 30 36  34 00 00 00  00 00 00 20   .....2064...... ` and `KICKREAS` shows at `$0941`; a click on `$0810` puts the cursor there (`$0810 = $20 · 32 · %00100000`), → moves to `$0811`, Shift+↓ selects `$0811–$0821`, Esc clears; `m 0985 09a4` selects `txt_0985`, *Copy selection* puts its two rows on the clipboard as VICE writes them; `ii 0985` shows `HELLO FROM THE KICKREASM STUDIO DEMO` (lower case with *Lower case*), `i 0801` 40 bytes a row, `m nowhere` an error; `m 3000 3007` → *Mark as Bytes*, `m 0810` starts a row at `$0810`, and a double-click goes to `$0810` in the listing |
+| the Memory tab shows the program as the VICE monitor does: m, i and ii | the `$0801` row reads `>C:0801  0b 08 0a 00  9e 32 30 36  34 00 00 00  00 00 00 20   .....2064...... ` and `MIMIR ST` shows at `$0941`; a click on `$0810` puts the cursor there (`$0810 = $20 · 32 · %00100000`), → moves to `$0811`, Shift+↓ selects `$0811–$0821`, Esc clears; `m 0985 09a4` selects `txt_0985`, *Copy selection* puts its two rows on the clipboard as VICE writes them; `ii 0985` shows `HELLO FROM THE MIMIR STUDIO DEMO` (lower case with *Lower case*), `i 0801` 40 bytes a row, `m nowhere` an error; `m 3000 3007` → *Mark as Bytes*, `m 0810` starts a row at `$0810`, and a double-click goes to `$0810` in the listing |
 | the Graphics tab draws a font per row | *Font per row*: the codes at `$0400` are not loaded (`not loaded: 0–39`); the block menu next to *Screen codes* lists the Text blocks first and Code last, and picking `$0985 txt_0985 · 48 bytes` sets the field; *Previous block* steps to `$0960`, `$0949`, `$0400` (then it is disabled), *Next block* and the mouse wheel step down again (a typed `$0990` shows *Blocks…*; after `$0985` comes the data at `$092d`); with `txt_0985` and the first font at `$3000` the picture has 22 rows (`skipped $9000, $9800, $d000, $d800`), then 4 (`$3000`, `$3800`, `$4000`, `$4800` in the margin); hovering says `row 0, column 0: char $08 of the font at $3000`; a click selects a row's font (`$3800–$3fff`, then `$3000–$37ff · Charset charset_3000`), *All 4 rows* all of them; row 0 saved as a 320 × 8 PNG; from `$0800` the rows are `$0800`, `$2000`, `$2800`, `$3000` (`skipped $1000, $1800`: the VIC sees the character ROM there), without *Skip where no font can be* `$0800`, `$1000`, `$1800`, `$2000`; a first font at `$1000` starts at `$2000` |
 | the Graphics tab finds screens and saves them like the other graphics | *Screens* draws a screen per 1 KB; the charset can be the C64 ROM (from VICE), the built-in letters, `$3000 charset_3000` or any 2 KB; going to `txt_0985` moves the grid so a screen starts there (offset 389), hovering says `row 0, column 2 of the screen at $0985`, `$0400` says `$d018 = $1x in VIC bank 0`; *Save…* gives .bin (the 1000 bytes), .prg (`$0985`), .png (320 × 200) and .asm (25 rows of 40), *With the sprite pointers (1 KB)* takes 1024 bytes |
 | the Graphics tab saves its selection: bytes, with a load address, a Koala picture, a PNG image and .byte source | the whole charset at `$3000`: *Save…* lists Raw bytes (.bin), Charset with its load address (.64c), Image as shown here (.png) and Kick Assembler source (.asm), `Esc` closes it; the .bin is the 2048 bytes, the .64c starts with `$3000`, the .asm has `charset_3000:` and one binary `.byte` a line (stubbed save dialog, suggested name `charset_3000.bin`); the sprite at `$2000` as a 24 × 21 PNG; the bitmap at `$2000` in multicolour as a 10003-byte Koala picture (`$6000`, screen `$fc`, colour RAM `$01`, black) |
@@ -91,7 +91,7 @@ Playwright inspector).
 | the Explorer's sections say what they hold and fold up, and stay folded | Files says *1 file*, Loaders *none found*, Program start *$0810*; the Loaders title folds the section (`aria-expanded` false, its text gone, the summary kept), it is still folded after Blocks and back, and opens again |
 | loaders: the Explorer names the loader and lists its parts, which the listing and the source mark | the raster demo has none; `fixtures/prg/loader-demo.prg` shows *Spindle (lft)* (2-bit + ATN …) with its installer, two drive commands, `$0c00–$0cff` on the C64 and its drive code at `$3000`; a part goes to the listing, where `// ==== Spindle (lft): resident page (jsr here to load the next part) ====` and the header's *Spindle* mark it; the analysis log names it and `F7` verifies |
 | the Raster IRQs panel lists every IRQ handler with its $d012 and $d011 and goes to it | the demo: *1 raster interrupt, 1 handler*, the row `98 ($062)`, `$62`, `$1b`, `irq_08b7`, `$0836`, *main code via $0314*; clicking `irq_08b7` and `$0836` moves the cursor there |
-| the Memory tab finds text as PETSCII and as screen codes, and bytes, and steps through the hits | `kickreasm` gives *2 matches*; Enter selects `$0949–$0951` (*1 of 2 matches · PETSCII*), Enter again `$0994–$099c` (*screen codes*), Shift+Enter goes back, and 18 bytes are coloured; *Bytes* `8d ?? d0` has hits and *Next match* steps; `8d 2` says *is not a byte* in red; Esc empties the field |
+| the Memory tab finds text as PETSCII and as screen codes, and bytes, and steps through the hits | `mimir` gives *2 matches*; Enter selects `$0949–$094d` (*1 of 2 matches · PETSCII*), Enter again `$0994–$0998` (*screen codes*), Shift+Enter goes back, and 10 bytes are coloured; *Bytes* `8d ?? d0` has hits and *Next match* steps; `8d 2` says *is not a byte* in red; Esc empties the field |
 | the inspector writes a table in binary or decimal and words as numbers, several a row | the colour table at `colors_0939` is *Hex*; *Bin* gives `.byte %00000110, %00001110, %00000011…`, *Bytes per row* 4 gives `.byte %00000110, %00001110, %00000011, %00000001`; `W` makes it words (*Addr*: `.word $0e06`), *Dec* and *Words per row* 4 give `.word 3590, 259, 3587, 6`; `F7` verifies, `Ctrl+Z` twice goes back to `.word $0e06` |
 | the tab row fits a small window: the listing tools lose their labels, then move into the ⋯ menu | at the default size every tool is in the row; at 1366 px *Listing tools* (⋯) holds them and the row does not overflow, *Cycles* is checked in it after a click, and the button closes the menu again; at 1100 px the tabs show only icons and *Graphics* still opens by name |
 | open a VICE snapshot like a PRG | *Open PRG…* (stubbed dialog) on `fixtures/vsf/raster-demo.vsf` (x64sc 3.10, stopped in the demo's raster IRQ) loads `raster-demo.prg` at `$0200`: the toast names the snapshot, the entry points `$08c7` and `$08b7` and the program start `$0810` (from its BASIC line), the Explorer says Build & Run restarts the snapshot as it was taken (PC `$08c7`, `$01 = $37`), `irq_08b7` is code and `F7` verifies; with *include the zero page and the stack* ticked the same snapshot opens at `$0002–$ffff` and `F7` verifies again |
@@ -99,10 +99,10 @@ Playwright inspector).
 | cycle counting: cycles per line, a block's total, and branches taken or not | *Cycles* shows `6` on `inc VIC_IRQ_STATUS`, `4+` on `lda colors_0939,y` and `2/3` on `beq loop_08c2`; the `sub_0866` header counts `$0866–$08ad`: 104 cycles (status bar too); clicking `beq skip_0895`'s `2/3` marks it taken: 95, the skipped lines are dimmed and the inspector's box is ticked; unticking it gives 104 again; *Cycles* off removes the column and the section |
 | timing code: a delay a timer sets the branch into is marked, and what it reads gets no label | a PRG written by the test (`lda $dc06 / eor #$07 / sta smc+1 / bpl * / lda #$a9 / lda #$a9 / lda $eaa5`, loaded up to `$eaff`) shows `bpl delay_0817` with *0-7 bytes into the delay, by CIA1_TB_LO ($dc06)*, the comment line *delay: the bpl at $0815 goes 0-7 bytes into it … 8 down to 0 cycles*, three rows marked *delay*, `lda $eaa5` and no `data_eaa5`; `F7` verifies |
 | Problems warns when bank tracking is off and I/O is written as labels, and turns it on | a dump from `$0801` over `$d000-$d02f` (written by the test) with *Follow the memory configuration* unticked shows `sta …_d020` and a Problems row *Bank tracking is off … 2 I/O addresses … written as labels* (address `$d020`); its *Turn on* button ticks the setting, the row goes away, the listing shows `sta VIC_BORDER_COLOR`, and `Ctrl+Z` brings the row back |
-| the installed app comes with unp64, and the unpacker setting points to it | only with `KICKREASM_E2E_EXE`: `resources\unp64\unp64.exe` and `unp64.txt` are installed, a fresh profile shows that path and `{in}` in Settings, and *Unpack with unp64* turns `packed-demo.prg` back into the demo starting at `$0810` |
+| the installed app comes with unp64, and the unpacker setting points to it | only with `MIMIR_E2E_EXE`: `resources\unp64\unp64.exe` and `unp64.txt` are installed, a fresh profile shows that path and `{in}` in Settings, and *Unpack with unp64* turns `packed-demo.prg` back into the demo starting at `$0810` |
 | a packed PRG is reported and unpacked with an external unpacker | `fixtures/prg/packed-demo.prg` (the demo packed by `fakePack`, a real 6502 decruncher) shows *packed-demo.prg is packed.*, the *packed* badge and a Problems entry; with the unpacker cleared in Settings, *Set up an unpacker…* opens the settings, where it becomes Node with `packages/core/test/helpers/fake-unp64.cjs {in}` (a stand-in that writes and prints like unp64); *Unpack* opens `packed-demo-unpacked.prg` with the start `$0810`, names the packer (FakePack), shows the output, and `F7` verifies |
 | file dialogs open in the folder they were last used in | the stubbed dialogs record their options: the first Open PRG has no start folder, Mount D64 then starts in the PRG's folder, Open PRG again in `fixtures/prg` and Mount D64 in `fixtures/d64`; `recent-folders.json` in the profile holds both for the next start |
-| mount a .d64 and open its PRG files | *Mount D64…* (stubbed dialog) lists `fixtures/d64/kickreasm-demo.d64`: `"KICKREASM DEMO"`, `49 "RASTER DEMO" PRG`, `1 "SPRITE" PRG`, `1 "NOTES" SEQ` (not openable), 613 blocks free; a click opens RASTER DEMO, + adds SPRITE at `$c000`, `F7` verifies; *Eject* removes the disk and keeps the project |
+| mount a .d64 and open its PRG files | *Mount D64…* (stubbed dialog) lists `fixtures/d64/mimir-demo.d64`: `"MIMIR DEMO"`, `49 "RASTER DEMO" PRG`, `1 "SPRITE" PRG`, `1 "NOTES" SEQ` (not openable), 613 blocks free; a click opens RASTER DEMO, + adds SPRITE at `$c000`, `F7` verifies; *Eject* removes the disk and keeps the project |
 
 The e2e tests are not part of `pnpm test`. Build & Run (`F5`) is not covered because it starts VICE. Failures
 attach a screenshot of the window; results go to `apps/desktop/test-results/`.
@@ -110,16 +110,16 @@ attach a screenshot of the window; results go to `apps/desktop/test-results/`.
 ### Windows package (electron-builder)
 
 ```bash
-pnpm --filter @kickreasm/desktop package
+pnpm --filter @mimir/desktop package
 ```
 
 The script runs `electron-vite build` and `electron-builder --win` with `apps/desktop/electron-builder.yml`. It
 writes to `apps/desktop/release/<version>/`:
 
-- `KickReasm-Studio-<version>-setup.exe`: NSIS installer (per user, installation folder can be changed, Start menu
+- `Mimir-Studio-<version>-setup.exe`: NSIS installer (per user, installation folder can be changed, Start menu
   and desktop shortcuts)
-- `KickReasm-Studio-<version>-portable.exe`: single exe that runs without installing
-- `win-unpacked/`: the unpacked app (`KickReasm Studio.exe`)
+- `Mimir-Studio-<version>-portable.exe`: single exe that runs without installing
+- `win-unpacked/`: the unpacked app (`Mimir Studio.exe`)
 
 The installer also contains unp64 2.40 (iAN CooG) in `resources\unp64\`. It comes unchanged from
 `apps/desktop/vendor/unp64` via `extraResources`, with its `unp64.txt` notice. Its license (Exomizer's) allows free
@@ -131,29 +131,37 @@ Exomizer 3.1.1 (Magnus Lind) is in `resources\exomizer\` the same way, from `app
 `LICENSE.txt` (the same non-commercial license). Settings → Toolchain → Exomizer points at it unless another one is set;
 a setting that points at a file that is gone gets the bundled one, and an empty setting is kept.
 
-The package holds `out/` and the production dependencies (only `zod`; `@kickreasm/core` is bundled into `out/` by
+The package holds `out/` and the production dependencies (only `zod`; `@mimir/core` is bundled into `out/` by
 electron-vite, so it is a dev dependency). Electron is taken from `node_modules/electron/dist`. Electron 44 has no install
 script: it fetches its binary the first time it is required, so the package script does `node -e "require('electron')"`
-before electron-builder (a fresh clone has no binary until then). The NSIS tools are downloaded once into the electron-builder cache. The exe is not code-signed and uses the default
-Electron icon. Like `pnpm dev`, the packaged app keeps its settings in `%APPDATA%\@kickreasm\desktop\settings.json`
-(the app name comes from `package.json`); KickAss.jar and x64sc are found the same way as in development.
+before electron-builder (a fresh clone has no binary until then). The NSIS tools are downloaded once into the electron-builder cache. The exe is not code-signed. Its icon is the Mimir Studio logo:
+`apps/desktop/build/icon.svg` is the source, and `npx electron scripts/make-icons.cjs` (in `apps/desktop`) draws it into
+`build/icon.png` and `build/icon.ico` (16-256 px) with Electron's own Chromium; the title bar draws the same logo
+(`src/components/Logo.tsx`). Like `pnpm dev`, the packaged app keeps its settings in
+`%APPDATA%\@mimir\desktop\settings.json` (the app name comes from `package.json`); KickAss.jar and x64sc are found the
+same way as in development.
 
-The e2e tests also run against a packaged app: set `KICKREASM_E2E_EXE` to its exe, for example
-`release/1.0.0/win-unpacked/KickReasm Studio.exe` (relative to `apps/desktop`) or an installed copy, and run
-`pnpm --filter @kickreasm/desktop exec playwright test`.
+The program was called KickReasm Studio before. On its first start, Mimir Studio copies that name's settings once
+from `%APPDATA%\@kickreasm\desktop` (`settings.json`, `recent-folders.json` and the window's preferences in
+`Local Storage`, not the caches; `electron/main/migrate.ts`), and it opens projects saved then (`.krproj.json`, format
+`kickreasm-project`) and saves them as `.mimir.json`.
+
+The e2e tests also run against a packaged app: set `MIMIR_E2E_EXE` to its exe, for example
+`release/1.0.0/win-unpacked/Mimir Studio.exe` (relative to `apps/desktop`) or an installed copy, and run
+`pnpm --filter @mimir/desktop exec playwright test`.
 
 ## Layout
 
 ```
-packages/core    @kickreasm/core: pure TypeScript engine (no DOM, no I/O)
+packages/core    @mimir/core: pure TypeScript engine (no DOM, no I/O)
   src/cpu        opcode table, decoder
   src/c64        symbols, BASIC, PRG, PSID
   src/analyze    memory, trace, evidence, pointers, music, vic, classify, labels, diagnostics
   src/render     line model -> Kick Assembler (kick.ts, lines.ts, include.ts)
   src/verify     Kick-subset assembler, round-trip verify, KickAss output parser
-  src/node       '@kickreasm/core/node': spawn KickAss.jar / x64sc (argv arrays, no shell)
+  src/node       '@mimir/core/node': spawn KickAss.jar / x64sc (argv arrays, no shell)
   test/          Vitest + fast-check; reference/ holds the original prototype engine as an oracle
-packages/cli     kickreasm command line (tsup bundle)
+packages/cli     mimir command line (tsup bundle)
 apps/desktop     Electron app
   electron/main  window, IPC allowlist (zod), path policy, toolchain runner, settings, file watcher
   electron/preload  contextBridge -> window.kr

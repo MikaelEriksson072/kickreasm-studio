@@ -1,6 +1,6 @@
 /* The packed notice: the heuristics' verdict together with what unp64 -i says. */
 import { describe, expect, it } from 'vitest';
-import type { PackingInfo } from '@kickreasm/core';
+import type { PackingInfo } from '@mimir/core';
 import { withIdentified } from '../src/lib/packing';
 
 const h: PackingInfo = { file: 0, verdict: 'maybe', size: 6000, codeBytes: 46, entropy: 6.7, packedShare: 0, decruncher: 0x080d, signature: 'a cruncher', reasons: ['6.70 bits of entropy per byte outside the code'] };

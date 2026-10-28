@@ -1,4 +1,5 @@
 import { Icon } from '../lib/icons';
+import { Logo } from './Logo';
 import { cx } from '../lib/util';
 
 interface TitleBarProps {
@@ -15,7 +16,7 @@ export function TitleBar(p: TitleBarProps) {
   return (
     <header className="titlebar">
       <button className="icon-btn only-narrow" aria-label="Toggle sidebar" onClick={p.onToggleSide}><Icon name="menu" /></button>
-      <div className="brand"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span className="brand-name">KickReasm</span><span className="brand-sub">Studio</span></div>
+      <div className="brand"><Logo className="brand-logo" size={20} /><span className="brand-name">Mimir</span><span className="brand-sub">Studio</span></div>
       <div className="tb-group hide-narrow">
         <button className="btn ghost" onClick={p.onOpen} title="Open PRG files (Ctrl+O)"><Icon name="upload" />Open</button>
         <button className="btn ghost" onClick={p.onSave} title="Save project (Ctrl+S)"><Icon name="download" />Save</button>

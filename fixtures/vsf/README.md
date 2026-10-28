@@ -5,7 +5,7 @@ in its raster IRQ (`$08c7`). At that point the PC is `$08c7`, the IRQ vector `$0
 `$37`. It was made from the repository root with:
 
 ```bash
-x64sc -default -console -sounddev dummy +confirmonexit -moncommands fixtures/vsf/make-raster-demo.mon -initbreak ready
+x64sc -config <a new, empty vice.ini> -default -console -sounddev dummy +confirmonexit -moncommands fixtures/vsf/make-raster-demo.mon -initbreak ready
 ```
 
-It holds RAM and device state only, no ROM images.
+It holds RAM and device state only, no ROM images. `-config` keeps VICE away from your own settings.

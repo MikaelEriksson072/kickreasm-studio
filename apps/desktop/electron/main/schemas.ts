@@ -1,6 +1,6 @@
 /* zod schemas for everything that crosses the IPC boundary or is read from disk (spec 4.2). */
 import { z } from 'zod';
-import { extraProblem, type BlockKind } from '@kickreasm/core';
+import { extraProblem, LEGACY_PROJECT_FORMAT, type BlockKind } from '@mimir/core';
 
 const addr = z.number().int().min(0).max(0x10000);
 const record = z.record(z.string().regex(/^\d+$/), z.string());
@@ -69,9 +69,9 @@ const fileName = z.string().min(1).max(255);
 /** memory configuration / VIC bank the code in a range runs with (null: back to detection) */
 const bankZone = z.object({ start: addr, end: addr, port: z.number().int().min(0).max(255).nullable().optional(), vicBank: z.number().int().min(0).max(3).nullable().optional() });
 
-/** .krproj.json on disk */
+/** .mimir.json on disk (and a .krproj.json saved before the rename) */
 export const serializedProjectSchema = z.object({
-  format: z.literal('kickreasm-project'),
+  format: z.enum(['mimir-project', LEGACY_PROJECT_FORMAT]),
   version: z.literal(1),
   name: z.string().max(255).default('project'),
   // project files from before snapshots were kept have no vsf
@@ -101,7 +101,7 @@ export const serializedProjectSchema = z.object({
 
 /** Project as sent by the renderer (bytes as Uint8Array). */
 export const projectSchema = z.object({
-  format: z.literal('kickreasm-project'),
+  format: z.literal('mimir-project'),
   version: z.literal(1),
   name: z.string().max(255),
   files: z.array(z.object({ id: z.string().max(64), name: fileName, load: addr, bytes: z.instanceof(Uint8Array), vsf: z.instanceof(Uint8Array).optional() })).min(1).max(64),

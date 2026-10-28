@@ -1,8 +1,8 @@
 {
-  "name": "@kickreasm/desktop",
+  "name": "@mimir/desktop",
   "version": "1.0.0",
   "private": true,
-  "description": "KickReasm Studio — Electron desktop IDE for re-assembling C64 PRG files into Kick Assembler projects.",
+  "description": "Mimir Studio — Electron desktop IDE for re-assembling C64 PRG files into Kick Assembler projects.",
   "license": "GPL-3.0-only",
   "main": "./out/main/index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "@fontsource/ibm-plex-sans": "^5.2.0",
     "@fontsource/jetbrains-mono": "^5.2.0",
     "@fontsource/silkscreen": "^5.2.0",
-    "@kickreasm/core": "workspace:*",
+    "@mimir/core": "workspace:*",
     "@playwright/test": "^1.64.1",
     "@types/node": "^22.20.5",
     "@types/react": "^18.3.31",

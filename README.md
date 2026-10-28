@@ -1,8 +1,12 @@
-# KickReasm Studio
+<p align="center"><img src="apps/desktop/build/icon.png" width="112" alt="The Mimir Studio logo: the rune ᛗ with a golden eye"></p>
+
+# Mimir Studio
 
 **Turn Commodore 64 programs back into source code you can read, change and rebuild.**
 
-KickReasm Studio is a desktop IDE for re-assembling C64 software. Open a `.prg`, a `.d64` disk image or a VICE
+*Named after Mímir, who keeps the well of wisdom in Norse myth; the logo is his rune ᛗ with the eye in his well.*
+
+Mimir Studio is a desktop IDE for re-assembling C64 software. Open a `.prg`, a `.d64` disk image or a VICE
 snapshot. The app traces the code, recognises graphics, music, tables and text, and names every hardware register
 and KERNAL routine. You can then rename, comment and re-type anything. It exports a
 [Kick Assembler](http://theweb.dk/KickAssembler/) project that assembles back to **exactly the same bytes**, and starts
@@ -81,10 +85,10 @@ pnpm dev
 ### Build the installer
 
 ```bash
-pnpm --filter @kickreasm/desktop package
+pnpm --filter @mimir/desktop package
 ```
 
-This writes `KickReasm-Studio-<version>-setup.exe` and a portable `.exe` to `apps/desktop/release/<version>/`.
+This writes `Mimir-Studio-<version>-setup.exe` and a portable `.exe` to `apps/desktop/release/<version>/`.
 
 ## How to use it
 
@@ -107,10 +111,10 @@ statistics and the build output.
 The analysis also runs without the app, for batch jobs and CI:
 
 ```bash
-pnpm kickreasm analyse game.prg
+pnpm mimir analyse game.prg
 ```
 
-`analyse`, `verify [--kickass]`, `export -o <folder>` and `demo` take `.prg` files or saved projects (`.krproj.json`).
+`analyse`, `verify [--kickass]`, `export -o <folder>` and `demo` take `.prg` files or saved projects (`.mimir.json`).
 `--deep` runs the deep analysis.
 
 ## Project layout
@@ -130,7 +134,7 @@ pnpm test
 ```
 
 This runs the unit, round-trip, fuzz and differential tests of every package. `pnpm typecheck` type-checks them, and
-`pnpm --filter @kickreasm/desktop e2e` runs the end-to-end tests against the built app.
+`pnpm --filter @mimir/desktop e2e` runs the end-to-end tests against the built app.
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) describes every test.
 
 ## Third-party tools
@@ -146,7 +150,7 @@ not included: install them yourself.
 
 ## License
 
-KickReasm Studio is free software: you can redistribute it and/or modify it under the terms of the
+Mimir Studio is free software: you can redistribute it and/or modify it under the terms of the
 [GNU General Public License, version 3](LICENSE) (GPL-3.0-only). It is distributed in the hope that it will be useful,
 but without any warranty; see the license for details.
 

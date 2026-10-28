@@ -76,7 +76,7 @@ function cases(): Case[] {
 async function assembleWithKick(c: Case) {
   const A = analyze(c.project);
   const R = render(A, c.project);
-  const dir = await mkdtemp(join(tmpdir(), 'kickreasm-it-'));
+  const dir = await mkdtemp(join(tmpdir(), 'mimir-it-'));
   try {
     await writeVfs(dir, R.files);
     const results = [];

@@ -1,6 +1,6 @@
 /* Settings: toolchain (stored by the main process), analysis and Kick Assembler output (stored in the project). */
 import { useState } from 'react';
-import { DEFAULT_SETTINGS, type Settings } from '@kickreasm/core';
+import { DEFAULT_SETTINGS, type Settings } from '@mimir/core';
 import { cx } from '../lib/util';
 import { Modal } from './Modal';
 

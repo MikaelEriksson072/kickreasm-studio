@@ -75,9 +75,9 @@ describe('finding text and bytes', () => {
   const find = (q: string, as: 'text' | 'bytes', lower = false) => { const r = findInMemory(mem, ranges, q, as, lower); if ('error' in r) throw new Error(r.error); return r.matches; };
 
   it('finds text as PETSCII and as screen codes, whatever its case and the character set', () => {
-    // the demo's title in PETSCII at $0949 and its greeting in screen codes at $0985 ("hello from the kickreasm studio demo!")
-    expect(find('kickreasm', 'text')).toEqual([{ start: 0x0949, end: 0x0952, as: 'petscii' }, { start: 0x0994, end: 0x099d, as: 'screen' }]);
-    expect(find('KickReasm Studio', 'text', true).map(m => m.start)).toEqual([0x0949, 0x0994]);
+    // the demo's title in PETSCII at $0949 and its greeting in screen codes at $0985 ("hello from the mimir studio demo!")
+    expect(find('mimir', 'text')).toEqual([{ start: 0x0949, end: 0x094e, as: 'petscii' }, { start: 0x0994, end: 0x0999, as: 'screen' }]);
+    expect(find('Mimir Studio', 'text', true).map(m => m.start)).toEqual([0x0949, 0x0994]);
     expect(find('Hello from', 'text')).toEqual([{ start: 0x0985, end: 0x098f, as: 'screen' }]);
     expect(find('', 'text')).toEqual([]);
     expect(find('no such words', 'text')).toEqual([]);
@@ -108,7 +108,7 @@ const vice = process.env.VICE || findVice();
 
 describe.skipIf(!vice)(`the dump against real VICE (${vice ?? 'not found'})`, () => {
   it('has the rows and hex column x64sc prints for m, and the rows of i and ii', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'kickreasm-monitor-'));
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-monitor-'));
     try {
       const prg = join(dir, 'demo.prg'), log = join(dir, 'mon.log'), cmds = join(dir, 'dump.mon');
       await writeFile(prg, makeDemo().prg);

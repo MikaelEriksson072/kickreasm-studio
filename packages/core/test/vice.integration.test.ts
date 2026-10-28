@@ -52,7 +52,7 @@ describe('VICE command line', () => {
   });
 
   it('picks the start from the PRG and writes the monitor file next to it', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'kickreasm-vice-'));
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-vice-'));
     try {
       const basic = join(dir, 'basic.prg'), dump = join(dir, 'dump.prg'), vs = join(dir, 'dump.vs');
       await writeFile(basic, Uint8Array.from([0x01, 0x08, 0x60]));
@@ -79,7 +79,7 @@ describe.skipIf(!vice)(`real VICE (${vice ?? 'not found'})`, () => {
   it('starts the program at the address it is given, and with RUN otherwise', async () => {
     // 10 SYS2061 → exit $11; the program start set by the user at $0820 → exit $42
     const f = fromSource('start.prg', '.pc = $0801\n.byte $0b,$08,$0a,$00,$9e,$32,$30,$36,$31,$00,$00,$00\n.pc = $080d\n lda #$11\n sta $d7ff\n jmp *\n.pc = $0820\n lda #$42\n sta $d7ff\n jmp *');
-    const dir = await mkdtemp(join(tmpdir(), 'kickreasm-vice-'));
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-vice-'));
     try {
       const prgPath = join(dir, 'start.prg');
       await writeFile(prgPath, prgOf(f));
@@ -97,7 +97,7 @@ describe.skipIf(!vice)(`real VICE (${vice ?? 'not found'})`, () => {
   it('puts the disk in drive 8: the program loads its second part from it', async () => {
     // 10 SYS2061: LOAD"PART2",8,1 through the KERNAL, then jump to it; PART2 (on the disk only) exits with $42
     const f = fromSource('loader.prg', '.pc = $0801\n.byte $0b,$08,$0a,$00,$9e,$32,$30,$36,$31,$00,$00,$00\n.pc = $080d\n lda #5\n ldx #<name\n ldy #>name\n jsr $ffbd\n lda #1\n ldx #8\n ldy #1\n jsr $ffba\n lda #0\n jsr $ffd5\n bcs fail\n jmp $c000\nfail:\n lda #$ee\n sta $d7ff\n jmp *\nname: .byte $50,$41,$52,$54,$32');
-    const dir = await mkdtemp(join(tmpdir(), 'kickreasm-vice-'));
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-vice-'));
     try {
       const prgPath = join(dir, 'loader.prg'), disk = join(dir, 'disk.d64');
       await writeFile(prgPath, prgOf(f));
@@ -113,7 +113,7 @@ describe.skipIf(!vice)(`real VICE (${vice ?? 'not found'})`, () => {
     // zero page, stack and buffers zeroed (the IRQ/BRK/NMI vectors keep their KERNAL values): typing `sys` cannot work
     const f = fromSource('dump.prg', '.pc = $0002\n.byte $00\n.pc = $0314\n.byte $31,$ea,$66,$fe,$47,$fe\n.pc = $0c00\n sei\n lda #$42\n sta $d7ff\n jmp *');
     expect(f.load).toBe(0x0002);
-    const dir = await mkdtemp(join(tmpdir(), 'kickreasm-vice-'));
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-vice-'));
     try {
       const prgPath = join(dir, 'dump.prg');
       await writeFile(prgPath, prgOf(f));
@@ -132,7 +132,7 @@ describe.skipIf(!vice)(`real VICE (${vice ?? 'not found'})`, () => {
     const vsf = new Uint8Array(await readFile(join(__dirname, '../../../fixtures/vsf/raster-demo.vsf')));
     const pc = parseVsf(vsf).cpu!.pc;
     const red = Uint8Array.from([0xa9, 0x02, 0x8d, 0x20, 0xd0, 0x8d, 0x21, 0xd0, 0x4c, (pc + 8) & 0xff, (pc + 8) >> 8]);
-    const dir = await mkdtemp(join(tmpdir(), 'kickreasm-vice-'));
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-vice-'));
     try {
       const shot = async (file: Uint8Array, name: string) => {
         const path = join(dir, `${name}.vsf`), png = join(dir, `${name}.png`);

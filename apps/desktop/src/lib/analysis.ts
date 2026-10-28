@@ -2,14 +2,14 @@
  * whenever the project changes, and only re-renders when just labels or comments changed. */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Comlink from 'comlink';
-import type { AnalysisResult, Project, RenderOptions, RenderResult, VerifyResult } from '@kickreasm/core';
+import type { AnalysisResult, Project, RenderOptions, RenderResult, VerifyResult } from '@mimir/core';
 import type { AnalysisApi } from '../workers/analysis.worker';
 
 let remote: Comlink.Remote<AnalysisApi> | null = null;
 
 export function analysisWorker(): Comlink.Remote<AnalysisApi> {
   if (!remote) {
-    const worker = new Worker(new URL('../workers/analysis.worker.ts', import.meta.url), { type: 'module', name: 'kickreasm-analysis' });
+    const worker = new Worker(new URL('../workers/analysis.worker.ts', import.meta.url), { type: 'module', name: 'mimir-analysis' });
     remote = Comlink.wrap<AnalysisApi>(worker);
   }
   return remote;

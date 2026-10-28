@@ -571,12 +571,12 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
     usedHw.forEach(a => allUsedHw.add(a));
     const head: Line[] = [];
     const end = Math.min(0x10000, f.load + f.bytes.length);
-    head.push({ k: 'cmt', a: f.load, text: `${f.name} — re-assembled by KickReasm Studio` });
+    head.push({ k: 'cmt', a: f.load, text: `${f.name} — re-assembled by Mimir Studio` });
     head.push({ k: 'cmt', a: f.load, text: `load ${n4(f.load)}-${n4(end - 1)} (${end - f.load} bytes)${A.entry != null && fileOf(A.entry) === fi ? ` · entry ${labelAt(A.entry) ? labelAt(A.entry)!.name : n4(A.entry)}` : ''} · Kick Assembler 5.x` });
     // the loaders found in this file (spec 8.11c); their parts are marked where they start and end
     const fileLoaders = (A.loaders ?? []).filter(l => l.parts.some(p => fileOf(p.start) === fi));
     if (fileLoaders.length) {
-      head.push({ k: 'cmt', a: f.load, text: `loader${fileLoaders.length > 1 ? 's' : ''} found by KickReasm Studio (the ==== lines mark their parts):`, mark: true });
+      head.push({ k: 'cmt', a: f.load, text: `loader${fileLoaders.length > 1 ? 's' : ''} found by Mimir Studio (the ==== lines mark their parts):`, mark: true });
       for (const l of fileLoaders) head.push({ k: 'cmt', a: f.load, text: `  ${l.name}${l.sure === 'likely' ? ' (by its traits)' : ''}: ${l.how}`, mark: true });
     }
     if (fileExcluded.length) {

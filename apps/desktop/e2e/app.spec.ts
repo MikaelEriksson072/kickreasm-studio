@@ -12,8 +12,8 @@ const OLD = 'var_092d';
 const NEW = 'sine_pos';
 
 test('shows the analysed demo listing', async ({ app, page }) => {
-  expect(await app.evaluate(({ app: electronApp }) => electronApp.isPackaged), 'packaged app').toBe(!!process.env.KICKREASM_E2E_EXE);
-  await expect(page).toHaveTitle('KickReasm Studio');
+  expect(await app.evaluate(({ app: electronApp }) => electronApp.isPackaged), 'packaged app').toBe(!!process.env.MIMIR_E2E_EXE);
+  await expect(page).toHaveTitle('Mimir Studio');
   await waitForListing(page);
   await expect(page.locator('.welcome')).toContainText('raster-demo.prg is analysed');
   // the cursor starts on the entry point
@@ -24,7 +24,7 @@ test('shows the analysed demo listing', async ({ app, page }) => {
   const text = rows.map(r => r.text).join('\n');
   expect(text).toContain('BasicUpstart2(start)');
   expect(text).toContain('jsr sub_0866');
-  expect(text).toContain('.text "KICKREASM STUDIO DEMO"');
+  expect(text).toContain('.text "MIMIR STUDIO DEMO    "');
   expect(rows.filter(r => r.hdr).length).toBeGreaterThan(10);
 });
 
@@ -548,7 +548,7 @@ test('text in mixed case', async ({ page }) => {
   await waitForListing(page);
   await goTo(page, 'txt_0985'); // screen codes, upper case set
   const rows = async () => (await listingRows(page)).map(r => r.text);
-  expect(await rows()).toContain('.text "HELLO FROM THE KICKREASM STUDIO DEMO!   ENJOY!!"');
+  expect(await rows()).toContain('.text "HELLO FROM THE MIMIR STUDIO DEMO!       ENJOY!!"');
   const type = page.locator('.inspector').getByLabel('Type');
   await expect(type).toHaveValue('textsc');
   await type.selectOption('textscmix');
@@ -556,8 +556,8 @@ test('text in mixed case', async ({ page }) => {
   await expect(headerRow(page, '0985')).toContainText('Text (screen codes, mixed case)');
   const text = await rows();
   expect(text).toContain('.encoding "screencode_mixed"');
-  expect(text).toContain('.text "hello from the kickreasm studio demo!   enjoy!!"');
-  await expect(page.locator('.inspector .text-prev')).toContainText('hello from the kickreasm studio demo');
+  expect(text).toContain('.text "hello from the mimir studio demo!       enjoy!!"');
+  await expect(page.locator('.inspector .text-prev')).toContainText('hello from the mimir studio demo');
   await page.keyboard.press('F7');
   await expect(statusBar(page)).toContainText('✓ round-trip verified', { timeout: 90_000 });
 });
@@ -584,7 +584,7 @@ test('open a PRG, save and export through stubbed file dialogs', async ({ workDi
     await page.getByLabel('Label at $092d').press('Enter');
     await expect(statusBar(page)).toContainText(`$092d · ${NEW}`);
 
-    const file = join(work, 'demo.krproj.json');
+    const file = join(work, 'demo.mimir.json');
     await stubDialogs(app, { save: file });
     await page.keyboard.press('Control+s');
     await expect(toast(page, `Project saved to ${file}`)).toBeVisible();
@@ -596,7 +596,7 @@ test('open a PRG, save and export through stubbed file dialogs', async ({ workDi
     await stubDialogs(app, { open: [out] });
     await page.keyboard.press('Control+e');
     await expect(toast(page, `Exported verified Kick Assembler project to ${out}`)).toBeVisible({ timeout: 90_000 });
-    expect(readdirSync(out)).toEqual(expect.arrayContaining(['raster-demo.asm', 'raster-demo.krproj.json', 'build.bat', 'build.sh', 'include', 'original']));
+    expect(readdirSync(out)).toEqual(expect.arrayContaining(['raster-demo.asm', 'raster-demo.mimir.json', 'build.bat', 'build.sh', 'include', 'original']));
     const asm = readFileSync(join(out, 'raster-demo.asm'), 'utf8');
     expect(asm).toContain(`ldx ${NEW}`);
     expect(asm).not.toContain(OLD);
@@ -607,15 +607,15 @@ test('open a PRG, save and export through stubbed file dialogs', async ({ workDi
 });
 
 test('mount a .d64 and open its PRG files', async ({ app, page }) => {
-  // fixtures/d64/kickreasm-demo.d64 (written with makeD64): "RASTER DEMO" (the demo), "SPRITE" at $c000, "NOTES" (SEQ)
+  // fixtures/d64/mimir-demo.d64 (written with makeD64): "RASTER DEMO" (the demo), "SPRITE" at $c000, "NOTES" (SEQ)
   await waitForListing(page);
-  const files = page.getByRole('list', { name: 'Files on kickreasm-demo.d64' });
+  const files = page.getByRole('list', { name: 'Files on mimir-demo.d64' });
 
   await test.step('Mount D64… lists the directory', async () => {
-    await stubDialogs(app, { open: [join(repoDir, 'fixtures/d64/kickreasm-demo.d64')] });
+    await stubDialogs(app, { open: [join(repoDir, 'fixtures/d64/mimir-demo.d64')] });
     await page.getByRole('button', { name: 'Mount D64…' }).click();
-    await expect(toast(page, 'Mounted kickreasm-demo.d64: "KICKREASM DEMO", 3 files')).toBeVisible();
-    await expect(page.locator('.disk-head')).toContainText('"KICKREASM DEMO"');
+    await expect(toast(page, 'Mounted mimir-demo.d64: "MIMIR DEMO", 3 files')).toBeVisible();
+    await expect(page.locator('.disk-head')).toContainText('"MIMIR DEMO"');
     await expect(files.getByRole('listitem')).toHaveText([/49\s*"RASTER DEMO"\s*PRG/, /1\s*"SPRITE"\s*PRG/, /1\s*"NOTES"\s*SEQ/]);
     await expect(files.getByRole('listitem').nth(2)).toHaveClass(/off/);
     await expect(page.locator('.side-inner')).toContainText('613 blocks free');
@@ -667,7 +667,7 @@ test('the Terminal button opens a terminal in the project folder', async ({ work
     await page.getByRole('button', { name: 'Terminal' }).click();
     await expect(toast(page, `Terminal opened in ${home}`)).toBeVisible();
     expect((await spawned())[0]).toMatchObject({ file: process.platform === 'win32' ? 'cmd.exe' : expect.any(String), cwd: home });
-    if (process.platform === 'win32') expect((await spawned())[0].args[0]).toMatch(/start "KickReasm Studio" \/D .* powershell\.exe -NoLogo -NoExit -Command /);
+    if (process.platform === 'win32') expect((await spawned())[0].args[0]).toMatch(/start "Mimir Studio" \/D .* powershell\.exe -NoLogo -NoExit -Command /);
   });
 
   await test.step('after an export it starts in the exported folder', async () => {
@@ -738,15 +738,15 @@ test('file dialogs open in the folder they were last used in', async ({ app, pag
   await page.keyboard.press('Control+o');
   await expect(toast(page, 'Loaded packed-demo.prg at $0801')).toBeVisible();
   // the disk dialog has no folder of its own yet: it starts where the PRG came from
-  await stubDialogs(app, { open: [join(diskDir, 'kickreasm-demo.d64')] });
+  await stubDialogs(app, { open: [join(diskDir, 'mimir-demo.d64')] });
   await page.getByRole('button', { name: 'Mount D64…' }).click();
-  await expect(toast(page, 'Mounted kickreasm-demo.d64')).toBeVisible();
+  await expect(toast(page, 'Mounted mimir-demo.d64')).toBeVisible();
   await stubDialogs(app, { open: [join(prgDir, 'raster-demo.prg')] });
   await page.keyboard.press('Control+o');
   await expect(toast(page, 'Loaded raster-demo.prg at $0801')).toBeVisible();
-  await stubDialogs(app, { open: [join(diskDir, 'kickreasm-demo.d64')] });
+  await stubDialogs(app, { open: [join(diskDir, 'mimir-demo.d64')] });
   await page.getByRole('button', { name: 'Mount D64…' }).click();
-  await expect(toast(page, 'Mounted kickreasm-demo.d64')).toHaveCount(2);
+  await expect(toast(page, 'Mounted mimir-demo.d64')).toHaveCount(2);
 
   expect(await dialogOptions(app)).toEqual([
     { title: 'Open PRG files', defaultPath: undefined },
@@ -1122,9 +1122,9 @@ test('the export writes NOTES.html, or NOTES.txt when set, with the bookmarks an
 });
 
 test('the installed app comes with unp64, and the unpacker setting points to it', async ({ app, page }) => {
-  // only an installed (packaged) app has resources\unp64: run with KICKREASM_E2E_EXE
-  const installed = process.env.KICKREASM_E2E_EXE;
-  test.skip(!installed, 'needs the installed app (KICKREASM_E2E_EXE)');
+  // only an installed (packaged) app has resources\unp64: run with MIMIR_E2E_EXE
+  const installed = process.env.MIMIR_E2E_EXE;
+  test.skip(!installed, 'needs the installed app (MIMIR_E2E_EXE)');
   const exe = join(dirname(installed!), 'resources', 'unp64', 'unp64.exe');
   expect(existsSync(exe)).toBe(true);
   expect(existsSync(join(dirname(exe), 'unp64.txt'))).toBe(true);
@@ -1429,8 +1429,8 @@ test('edit build.bat in the source view: the export writes it, Restore generated
     await page.getByRole('button', { name: 'Export…', exact: true }).click();
     await expect(toast(page, `Exported verified Kick Assembler project to ${out}`)).toBeVisible({ timeout: 90_000 });
     expect(readFileSync(join(out, 'build.bat'), 'utf8')).toMatch(/\r?\nrem my own step$/);
-    expect(readFileSync(join(out, 'build.sh'), 'utf8')).toContain('# Build script generated by KickReasm Studio');
-    expect(readFileSync(join(out, 'raster-demo.krproj.json'), 'utf8')).toContain('rem my own step');
+    expect(readFileSync(join(out, 'build.sh'), 'utf8')).toContain('# Build script generated by Mimir Studio');
+    expect(readFileSync(join(out, 'raster-demo.mimir.json'), 'utf8')).toContain('rem my own step');
   });
 
   await test.step('the source stays read-only; Restore generated brings the generated script back', async () => {
@@ -1452,7 +1452,7 @@ test('pack with Exomizer: the whole build or chosen blocks, checked with desfx, 
 
   await test.step('Settings points at an Exomizer (the installed app at its own)', async () => {
     await page.getByRole('button', { name: 'Settings' }).click();
-    const installed = process.env.KICKREASM_E2E_EXE;
+    const installed = process.env.MIMIR_E2E_EXE;
     if (installed) await expect(page.locator('#set-exomizerPath')).toHaveValue(join(dirname(installed), 'resources', 'exomizer', 'exomizer.exe'));
     else await expect(page.locator('#set-exomizerPath')).toHaveValue(/exomizer(\.exe)?$/i);
     await page.getByRole('button', { name: 'Cancel' }).click();
@@ -1515,7 +1515,7 @@ test('pack with Exomizer: the whole build or chosen blocks, checked with desfx, 
     await listing(page).click();
     await page.keyboard.press('Control+z');
     await expect(cmd).toHaveText(/ sfx \$0810 -o /);
-    const out = join(work, 'packed.krproj.json');
+    const out = join(work, 'packed.mimir.json');
     await stubDialogs(app, { save: out });
     await page.keyboard.press('Control+s');
     await expect(toast(page, `Project saved to ${out}`)).toBeVisible();
@@ -1632,7 +1632,7 @@ test('the Memory tab shows the program as the VICE monitor does: m, i and ii', a
     expect(await row('0801').textContent()).toBe('>C:0801  0b 08 0a 00  9e 32 30 36  34 00 00 00  00 00 00 20   .....2064...... ');
     // further down, past what the window shows
     await dump.evaluate(el => { el.scrollTop = 200; });
-    await expect(row('0941')).toContainText('KICKREAS');
+    await expect(row('0941')).toContainText('MIMIR ST');
     await dump.evaluate(el => { el.scrollTop = 0; });
   });
 
@@ -1656,7 +1656,7 @@ test('the Memory tab shows the program as the VICE monitor does: m, i and ii', a
     // (the Windows clipboard has \r\n line ends)
     const copied = (await app.evaluate(({ clipboard }) => clipboard.readText())).replace(/\r\n/g, '\n');
     expect(copied.split('\n')).toEqual([
-      '>C:0985  08 05 0c 0c  0f 20 06 12  0f 0d 20 14  08 05 20 0b   ..... .... ... .',
+      '>C:0985  08 05 0c 0c  0f 20 06 12  0f 0d 20 14  08 05 20 0d   ..... .... ... .',
       expect.stringMatching(/^>C:0995 {2}([0-9a-f]{2} ){3}[0-9a-f]{2} {2}/),
     ]);
   });
@@ -1664,9 +1664,9 @@ test('the Memory tab shows the program as the VICE monitor does: m, i and ii', a
   await test.step('ii shows screen codes, in the lower case set too; i shows PETSCII 40 to a row', async () => {
     await command('ii 0985');
     await expect(page.getByRole('button', { name: 'Screen codes (ii)' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(row('0985')).toHaveText(/^\*C:0985 {2}HELLO FROM THE KICKREASM STUDIO DEMO/);
+    await expect(row('0985')).toHaveText(/^\*C:0985 {2}HELLO FROM THE MIMIR STUDIO DEMO/);
     await page.getByText('Lower case', { exact: true }).click();
-    await expect(row('0985')).toHaveText(/^\*C:0985 {2}hello from the kickreasm studio demo/);
+    await expect(row('0985')).toHaveText(/^\*C:0985 {2}hello from the mimir studio demo/);
     await page.getByText('Lower case', { exact: true }).click();
     await command('i 0801');
     await expect(row('0801')).toHaveText(/^>C:0801 {2}\.{5}2064/);
@@ -1716,7 +1716,7 @@ test('the Demo button opens the showcase: every block type and a guided tour in 
     await page.keyboard.press('F7');
     await expect(statusBar(page)).toContainText('✓ round-trip verified', { timeout: 90_000 });
     await page.locator('nav.activity').getByRole('button', { name: 'Explorer' }).click();
-    await expect(page.locator('.file-name')).toHaveText(['kickreasm-showcase.prg']);
+    await expect(page.locator('.file-name')).toHaveText(['mimir-showcase.prg']);
   });
 });
 
@@ -1804,7 +1804,7 @@ test('the Graphics tab saves its selection: bytes, with a load address, a Koala 
     expect([c64[0], c64[1]]).toEqual([0x00, 0x30]);
     expect(c64.subarray(2)).toEqual(at(0x3000, 2048));
     const asm = (await saveAs(/\.asm/, 'font.asm')).toString('utf8');
-    expect(asm).toMatch(/^\/\/ charset_3000: \$3000-\$37ff, 2048 bytes \(256 characters\), saved by KickReasm Studio/);
+    expect(asm).toMatch(/^\/\/ charset_3000: \$3000-\$37ff, 2048 bytes \(256 characters\), saved by Mimir Studio/);
     expect(asm).toMatch(/charset_3000:\n {8}\/\/ char 0 at \$3000\n {8}\.byte %[01]{8}\n/);
   });
 
@@ -1962,7 +1962,7 @@ test('the Graphics tab finds screens: drawn with a charset, the grid starting wh
     const png = await saveAs(/\.png/, 'screen.png');
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([320, 200]);
     const asm = (await saveAs(/\.asm/, 'screen.asm')).toString('utf8');
-    expect(asm).toMatch(/^\/\/ txt_0985: \$0985-\$0d6c, 1000 bytes \(1 screen\), saved by KickReasm Studio/);
+    expect(asm).toMatch(/^\/\/ txt_0985: \$0985-\$0d6c, 1000 bytes \(1 screen\), saved by Mimir Studio/);
     expect(asm.split('\n').filter(l => l.includes('.byte'))).toHaveLength(25);
     await view.getByRole('button', { name: 'With the sprite pointers (1 KB)' }).click();
     await expect(sel).toContainText('$0985–$0d84 (1024 bytes)');
@@ -2235,17 +2235,17 @@ test('the Memory tab finds text as PETSCII and as screen codes, and bytes, and s
   const bar = page.getByLabel('Memory as the VICE monitor shows it').locator('.gfxv-sel');
 
   await test.step('text: the title in PETSCII and the greeting in screen codes, Enter and Shift+Enter step', async () => {
-    await q.fill('kickreasm');
+    await q.fill('mimir');
     await expect(status).toHaveText('2 matches');
     await q.press('Enter');
     await expect(status).toHaveText('1 of 2 matches · PETSCII');
-    await expect(bar).toContainText('$0949–$0951');
+    await expect(bar).toContainText('$0949–$094d');
     await q.press('Enter');
     await expect(status).toHaveText('2 of 2 matches · screen codes');
-    await expect(bar).toContainText('$0994–$099c');
+    await expect(bar).toContainText('$0994–$0998');
     await q.press('Shift+Enter');
     await expect(status).toHaveText('1 of 2 matches · PETSCII');
-    await expect(page.locator('.mon-b.hit, .mon-b.hit-cur')).toHaveCount(18);
+    await expect(page.locator('.mon-b.hit, .mon-b.hit-cur')).toHaveCount(10);
   });
 
   await test.step('bytes: hex pairs with ?? for any byte, and an error for what is no byte', async () => {

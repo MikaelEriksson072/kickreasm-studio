@@ -5,7 +5,7 @@ import { unwatchFile, watchFile, type Stats } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { isVsf, openC64File } from '@kickreasm/core';
+import { isVsf, openC64File } from '@mimir/core';
 import type { QuicksaveEvent, QuicksaveInfo, QuicksaveResult } from '../../shared/ipc';
 import { openedPrg } from './project-fs';
 

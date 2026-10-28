@@ -1,7 +1,7 @@
 /* What the app reports about a packed file: detectPacking()'s verdict together with unp64 -i, when unp64 is the
  * unpacker. unp64 knows hundreds of packers by name, so a file it identifies is packed even when the heuristics
  * missed it, and its name replaces a guess from the file's text. */
-import type { PackingInfo } from '@kickreasm/core';
+import type { PackingInfo } from '@mimir/core';
 import type { IdentifyResponse } from '../../shared/ipc';
 
 export function withIdentified(h: PackingInfo | null, id: IdentifyResponse | undefined, file: { index: number; size: number; entry: number | null }, tool: string): PackingInfo | null {

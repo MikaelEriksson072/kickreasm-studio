@@ -1,11 +1,11 @@
-/* Project files (.krproj.json), PRG input (VICE snapshots too), exported project folders and their file watcher. */
+/* Project files (.mimir.json), PRG input (VICE snapshots too), exported project folders and their file watcher. */
 import { watch, type FSWatcher } from 'node:fs';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { deserializeProject, openC64File, parseD64, serializeProject, withId, type OpenedFile, type OpenOptions, type Project, type SerializedProject, type Settings } from '@kickreasm/core';
+import { deserializeProject, openC64File, parseD64, serializeProject, withId, type OpenedFile, type OpenOptions, type Project, type SerializedProject, type Settings } from '@mimir/core';
 import type { OpenedPrg } from '../../shared/ipc';
-import { writeVfs } from '@kickreasm/core/node';
+import { writeVfs } from '@mimir/core/node';
 import { serializedProjectSchema } from './schemas';
 
 export async function readProjectFile(path: string): Promise<Project> {
@@ -16,7 +16,7 @@ export async function readProjectFile(path: string): Promise<Project> {
     throw new Error(`${basename(path)} is not valid JSON: ${(e as Error).message}`);
   }
   const parsed = serializedProjectSchema.safeParse(json);
-  if (!parsed.success) throw new Error(`${basename(path)} is not a KickReasm project: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}`);
+  if (!parsed.success) throw new Error(`${basename(path)} is not a Mimir project: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}`);
   return deserializeProject(parsed.data as SerializedProject);
 }
 
@@ -48,7 +48,7 @@ export async function readDiskImage(path: string): Promise<{ path: string; name:
 }
 
 export async function createBuildFolder(name: string): Promise<string> {
-  return mkdtemp(join(tmpdir(), `kickreasm-${name || 'build'}-`));
+  return mkdtemp(join(tmpdir(), `mimir-${name || 'build'}-`));
 }
 
 export const writeExportFolder = (dir: string, files: Record<string, string | Uint8Array>) => writeVfs(dir, files);

@@ -1,10 +1,10 @@
 /* Bottom panel: analysis log, problems, cross-references, raster IRQs, statistics, build output. */
-import { decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, type Addr, type AnalysisResult, type DeepReport, type RasterIrq, type RenderResult, type Settings } from '@kickreasm/core';
+import { decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, type Addr, type AnalysisResult, type DeepReport, type RasterIrq, type RenderResult, type Settings } from '@mimir/core';
 import { Icon, LVL_ICON } from '../lib/icons';
 import { cx, fmtBytes, GROUP_LABEL, GROUP_ORDER, groupOfType } from '../lib/util';
 import type { BottomTab } from '../store/ui';
 import type { BuildState, UiProblem } from '../lib/types';
-import type { TypeGroup } from '@kickreasm/core';
+import type { TypeGroup } from '@mimir/core';
 
 export function LogList({ items, onNavigate, empty }: { items: UiProblem[]; onNavigate: (a: Addr) => void; empty: string }) {
   if (!items.length) return <div className="empty">{empty}</div>;

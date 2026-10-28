@@ -3,8 +3,8 @@
  * are validated here and builds always read them from this store. */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { DEFAULT_SETTINGS, TOOLCHAIN_KEYS, type ToolchainSettings } from '@kickreasm/core';
-import { findExomizer, findKickAssJar, findUnp64, findVice } from '@kickreasm/core/node';
+import { DEFAULT_SETTINGS, TOOLCHAIN_KEYS, type ToolchainSettings } from '@mimir/core';
+import { findExomizer, findKickAssJar, findUnp64, findVice } from '@mimir/core/node';
 import { toolchainSettingsSchema } from './schemas';
 
 /** the unp64 the installer puts in resources\unp64 (vendor/unp64), or null: a development build has none */

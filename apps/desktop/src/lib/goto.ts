@@ -1,6 +1,6 @@
 /* What the "Go to" dialog accepts: a hex address, a label, or a range of either ("$2000-$27ff",
  * "sine_09b5..$0ab4"). The end of a range is included, as in the status bar's "sel" item. */
-import type { Addr } from '@kickreasm/core';
+import type { Addr } from '@mimir/core';
 
 export type GotoTarget = { addr: Addr } | { start: Addr; end: Addr } | { error: string };
 

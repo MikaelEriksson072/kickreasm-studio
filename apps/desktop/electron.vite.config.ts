@@ -10,7 +10,7 @@ import type { Plugin } from 'vite';
  */
 function devCsp(): Plugin {
   return {
-    name: 'kickreasm-dev-csp',
+    name: 'mimir-dev-csp',
     apply: 'serve',
     transformIndexHtml(html) {
       return html
@@ -22,8 +22,8 @@ function devCsp(): Plugin {
 
 export default defineConfig({
   main: {
-    // @kickreasm/core is TypeScript source in the workspace: bundle it into the main process
-    plugins: [externalizeDepsPlugin({ exclude: ['@kickreasm/core'] })],
+    // @mimir/core is TypeScript source in the workspace: bundle it into the main process
+    plugins: [externalizeDepsPlugin({ exclude: ['@mimir/core'] })],
     build: { rollupOptions: { input: { index: resolve(__dirname, 'electron/main/index.ts') } } },
   },
   preload: {
