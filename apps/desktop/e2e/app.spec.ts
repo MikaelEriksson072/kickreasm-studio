@@ -619,6 +619,9 @@ test('mount a .d64 and open its PRG files', async ({ app, page }) => {
     await expect(files.getByRole('listitem')).toHaveText([/49\s*"RASTER DEMO"\s*PRG/, /1\s*"SPRITE"\s*PRG/, /1\s*"NOTES"\s*SEQ/]);
     await expect(files.getByRole('listitem').nth(2)).toHaveClass(/off/);
     await expect(page.locator('.side-inner')).toContainText('613 blocks free');
+    // the disk comes right under Files, next to the button that mounted it
+    await expect.poll(() => page.locator('.side-sec').evaluateAll(s => s.map(e => e.getAttribute('aria-label'))))
+      .toEqual(['Files', 'Disk', 'Loaders', 'VICE quicksave', 'Program start', 'Memory map']);
   });
 
   await test.step('a click opens a PRG, + adds one to the project', async () => {

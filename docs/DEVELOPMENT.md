@@ -105,7 +105,7 @@ Playwright inspector).
 | the installed app comes with unp64, and the unpacker setting points to it | only with `MIMIR_E2E_EXE`: `resources\unp64\unp64.exe` and `unp64.txt` are installed, a fresh profile shows that path and `{in}` in Settings, and *Unpack with unp64* turns `packed-demo.prg` back into the demo starting at `$0810` |
 | a packed PRG is reported and unpacked with an external unpacker | `fixtures/prg/packed-demo.prg` (the demo packed by `fakePack`, a real 6502 decruncher) shows *packed-demo.prg is packed.*, the *packed* badge and a Problems entry; with the unpacker cleared in Settings, *Set up an unpacker…* opens the settings, where it becomes Node with `packages/core/test/helpers/fake-unp64.cjs {in}` (a stand-in that writes and prints like unp64); *Unpack* opens `packed-demo-unpacked.prg` with the start `$0810`, names the packer (FakePack), shows the output, and `F7` verifies |
 | file dialogs open in the folder they were last used in | the stubbed dialogs record their options: the first Open PRG has no start folder, Mount D64 then starts in the PRG's folder, Open PRG again in `fixtures/prg` and Mount D64 in `fixtures/d64`; `recent-folders.json` in the profile holds both for the next start |
-| mount a .d64 and open its PRG files | *Mount D64…* (stubbed dialog) lists `fixtures/d64/mimir-demo.d64`: `"MIMIR DEMO"`, `49 "RASTER DEMO" PRG`, `1 "SPRITE" PRG`, `1 "NOTES" SEQ` (not openable), 613 blocks free; a click opens RASTER DEMO, + adds SPRITE at `$c000`, `F7` verifies; *Eject* removes the disk and keeps the project |
+| mount a .d64 and open its PRG files | *Mount D64…* (stubbed dialog) lists `fixtures/d64/mimir-demo.d64`: `"MIMIR DEMO"`, `49 "RASTER DEMO" PRG`, `1 "SPRITE" PRG`, `1 "NOTES" SEQ` (not openable), 613 blocks free, in a *Disk* section right under Files; a click opens RASTER DEMO, + adds SPRITE at `$c000`, `F7` verifies; *Eject* removes the disk and keeps the project |
 
 The e2e tests are not part of `pnpm test`. Build & Run (`F5`) is not covered because it starts VICE. Failures
 attach a screenshot of the window; results go to `apps/desktop/test-results/`.
@@ -191,7 +191,7 @@ fixtures/d64     disk images (mimir-demo.d64, and spindle-demo.d64, a Spindle 3 
   `l "<prg>" 0` and `g <start>` in the monitor. Without a program start such a PRG gets a warning to set one.
   `packages/core/test/vice.integration.test.ts` checks all of this in the real x64sc when it is installed
   (headless, with its own config file, so nothing is written to your `vice.ini`).
-- **Disk images.** Mount D64… (or drop a `.d64`) lists the disk's directory in the Explorer the way the 1541 lists it.
+- **Disk images.** Mount D64… (or drop a `.d64`) lists the disk's directory in the Explorer, right under Files, the way the 1541 lists it.
   Click a PRG to open it, or + to add it to the project. `packages/core/src/c64/d64.ts` reads 35/40/42-track images,
   with or without error bytes, and follows each file's sector chain. While a disk is mounted, Build & Run puts a copy
   of it in VICE's drive 8 (`-8`), so programs that load more parts from disk find them. See spec 13.5.
