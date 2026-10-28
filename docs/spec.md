@@ -1515,6 +1515,12 @@ att man ska hitta grafik med ögonen, som i ICU64. Geometri och ritning ligger i
 visar (*Sprites · 64 bytes each · 8 a row · hires · 2×*). Där står också *Go*-fältet. Under den ligger inställningarna i
 grupper med rubrik: *Fonts* (Font per row), *Layout* (per rad, zoom, förskjutning), *Characters* (Screens) och
 *Colours*. I en smal editor döljs först storlekarna och sedan knapparnas namn (ikonerna och raden bredvid står kvar).
+
+**Samma adresser i alla lägen:** adressen överst i bilden, dit man scrollat eller gått med *Go*, står kvar överst när
+man byter läge, antal per rad eller zoom. Raden med den adressen hamnar överst, och i Bitmaps är det den 8 KB-ruta den
+ligger i. Adressen följer bara ens egen scrollning, så Characters → Bitmaps → Characters hittar samma teckenrad igen.
+Font per row har fonter i stället för adresser och lämnar den orörd. När fliken öppnas visas markören, eller markeringen.
+
 Det finns fem lägen:
 - **Characters:** 8 byte per tecken, 16, 32, 40 (standard, en skärms bredd) eller 64 per rad. Med *Other…* skrivs
   vilket antal som helst från 1 till 128 in. `Enter` eller att lämna fältet tar det, och piltangenterna stegar det. Ett

@@ -4,7 +4,7 @@
  * where no font can be) and the same 40 screen codes. A click selects a cell, Shift+click or a drag more; the selection is the listing's and is marked as Charset,
  * Sprite data, Bitmap or Screen matrix from here, or saved: as bytes, with a load address, as a Koala or Art Studio
  * picture, as a PNG image or as .byte source. */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { artStudioPicture, findBlock, gfxSource, h2, h4, kindInfo, koalaPicture, makePrg, validLabel, type Addr, type AnalysisResult, type BlockKind, type RenderResult } from '@mimir/core';
 import { Icon } from '../lib/icons';
 import { OptGroup, ViewModes, type ViewMode } from './ViewModes';
@@ -120,8 +120,31 @@ export function MemoryGfx({ A, R, cursor, sel, onSelect, onClear, onMark, onShow
   }, [A, L, mc, colors, kind, font]);
 
   const scrollTo = (a: Addr, G: GfxLayout = L) => { const c = cellOf(G, a), el = scroller.current; if (c && el) el.scrollTop = Math.max(0, c.y * zoom - el.clientHeight / 3); };
-  // opening the tab, or another view, shows the cursor (or the selection)
-  useEffect(() => { const a = sel?.multi ? sel.start : cursor; if (a != null) scrollTo(a); }, [kind, cols, zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the address at the top of the picture, where you scrolled to: another view, other columns or another zoom keep it
+  // at the top (a font per row has fonts for rows and leaves it). It only follows your scrolling, so going through
+  // bitmaps (8 KB a row) and back finds the same row again
+  const topAt = useRef<Addr | null>(null), restoring = useRef(false), opened = useRef(false);
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el || restoring.current || kind === 'fontrows') return;
+    topAt.current = Math.min(0xffff, rowAddr(L, Math.floor(el.scrollTop / zoom / (L.cellH + L.gapY))));
+  };
+  useLayoutEffect(() => {
+    const el = scroller.current, top = topAt.current;
+    // opening the tab shows the cursor (or the selection)
+    if (!opened.current || top == null || kind === 'fontrows') {
+      opened.current = true;
+      const a = sel?.multi ? sel.start : cursor;
+      if (a != null) scrollTo(a);
+      return;
+    }
+    const c = cellOf(L, top);
+    if (!c || !el) return;
+    restoring.current = true;
+    el.scrollTop = c.y * zoom;
+    // the scroll event this sets off is not yours
+    requestAnimationFrame(() => requestAnimationFrame(() => { restoring.current = false; }));
+  }, [kind, cols, zoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const point = (e: ReactMouseEvent) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); return { x: (e.clientX - r.left) / zoom, y: (e.clientY - r.top) / zoom }; };
   const anchor = useRef<Addr | null>(null), dragging = useRef(false);
@@ -289,12 +312,12 @@ export function MemoryGfx({ A, R, cursor, sel, onSelect, onClear, onMark, onShow
         </> : kind === 'fontrows' ? <span className="muted">Each row is drawn with its own font, 2 KB after the font of the row above (passing over memory where no font can be), and the same 40 screen codes. Click a row to select its font, Shift+click or drag for more. Dark rows are not loaded.</span>
           : <span className="muted">Click a {NAMES[kind]} to select it, Shift+click or drag for more, then mark it as the graphics it is.{kind === 'screens' ? ' Go to an address and a screen starts there.' : ''} Dark cells are not loaded.</span>}
       </div>
-      <div className="gfxv-scroll" ref={scroller}>
+      <div className="gfxv-scroll" ref={scroller} onScroll={onScroll}>
         <div className="gfxv-inner" style={{ height: L.height * zoom }}>
           <div className="gfxv-gutter" aria-hidden="true">
             {Array.from({ length: L.rows }, (_, r) => {
               const a = rowAddr(L, r), b = a <= 0xffff ? blockAt(a) : null;
-              return <div key={r} className="gfxv-row" style={{ top: r * rowH, height: rowH }}>
+              return <div key={r} className="gfxv-row" data-addr={a <= 0xffff ? h4(a) : undefined} style={{ top: r * rowH, height: rowH }}>
                 <i style={b ? { background: `var(--g-${groupOfKind(b.type)})` } : undefined} />{r % every === 0 && a <= 0xffff && <span>${h4(a)}</span>}
               </div>;
             })}

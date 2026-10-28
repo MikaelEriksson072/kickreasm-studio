@@ -1329,6 +1329,39 @@ test('deep analysis from the Problems tab: a snapshot\'s ROM calls are not trace
   await expect(tab.locator('.count')).toHaveText('4');
 });
 
+test('the Graphics tab keeps the address you scrolled to at the top when the view changes', async ({ page }) => {
+  await waitForListing(page);
+  await page.getByRole('tab', { name: 'Graphics' }).click();
+  const view = page.getByLabel('Memory as graphics'), scroller = view.locator('.gfxv-scroll');
+  // the address of the gutter row at the top of the picture
+  const top = () => scroller.evaluate(el => {
+    const rows = [...el.querySelectorAll<HTMLElement>('.gfxv-row')];
+    return rows.find(r => r.offsetTop <= el.scrollTop + 1 && r.offsetTop + r.offsetHeight > el.scrollTop + 1)?.dataset.addr ?? null;
+  });
+  const mode = (name: string) => view.getByRole('button', { name, exact: true }).click();
+
+  // 40 characters of 8 bytes at zoom 2: a row is 320 bytes and 16 pixels, so 1600 pixels down is $7d00
+  await scroller.evaluate(el => { el.scrollTop = 1600; });
+  await expect.poll(top).toBe('7d00');
+  await mode('Sprites');
+  await expect.poll(async () => { const a = parseInt((await top()) ?? '-1', 16); return a <= 0x7d00 && a > 0x7d00 - 0x800; }).toBe(true);
+  await mode('Bitmaps');
+  await expect.poll(top).toBe('6000');
+  await mode('Screens');
+  await expect.poll(top).toBe('7c00');
+  // back from them all, at the same row as before
+  await mode('Characters');
+  await expect.poll(top).toBe('7d00');
+  await view.getByLabel('Cells per row').selectOption('16');
+  await expect.poll(top).toBe('7d00');
+  // scrolling sets a new one: 16 characters a row are 128 bytes
+  await scroller.evaluate(el => { el.scrollTop = 160; });
+  await expect.poll(top).toBe('0500');
+  await mode('Sprites');
+  await mode('Characters');
+  await expect.poll(top).toBe('0500');
+});
+
 test('the Graphics tab shows memory as characters, sprites or bitmaps, and marks what it finds', async ({ page }) => {
   await waitForListing(page);
   await page.keyboard.press('Control+j');
