@@ -285,6 +285,49 @@ export interface BasicInfo {
  */
 export interface DelaySled { branch: Addr; by: Addr; read: Addr; timer: Addr; start: Addr; end: Addr; enter: number; most: number; cycles: [number, number]; ins: Addr[] }
 
+/** What ends a Spindle part: the condition column of Pefchain's script (`space`, `-`, `stay`, `addr = value`, `@`). */
+export type SpindleCondition =
+  | { kind: 'space' } | { kind: 'drop' } | { kind: 'stay' }
+  | { kind: 'value'; addr: Addr; value: number }
+  /** `@`: the music's interlock at `addr` (pefchain -@) */
+  | { kind: 'sync'; addr: Addr };
+
+/**
+ * A Pefchain effect driver in memory (5.4c): the code Spindle's linker builds from one line of its script. It installs
+ * the part's interrupt, calls its setup, loads, waits for the condition, runs the fadeout and the cleanup and jumps to
+ * the next part's driver. The routines are the part's own (its .efo header); null where it has none.
+ */
+export interface SpindleDriver {
+  /** its part's number in the order the parts run, among the drivers in memory, from 1 (`|` goes on with a part) */
+  part: number;
+  /** its first byte (in the first driver the early setup) and one past its last */
+  start: Addr; end: Addr;
+  /** where the driver before jumps in */
+  front: Addr;
+  /** where a seek to a label, or the next disk side, comes in */
+  side: Addr | null;
+  /** the first driver, which the loader runs once it has loaded the first part; `ownSetup`: the early setup before
+   *  it is the demo's own (pefchain -s), not Spindle's */
+  first: boolean; ownSetup: boolean;
+  prepare: Addr | null; setup: Addr | null; irq: Addr | null; main: Addr | null; fadeout: Addr | null; cleanup: Addr | null;
+  /** the next part's prepare, which this driver calls once it has loaded */
+  prepareNext: Addr | null;
+  condition: SpindleCondition;
+  /** it calls the loader in the resident page */
+  loads: boolean;
+  /** the next driver's front door; how it ends: that driver, the end of the demo, staying, or the next disk side */
+  next: Addr | null;
+  ends: 'next' | 'stop' | 'stay' | 'flip';
+  /** the label it seeks before it jumps back (the script loops, pefchain -L) */
+  seek: number | null;
+  /** its fadeout leaves a label to seek to (the J tag) */
+  jump: boolean;
+  /** `|`: it goes on with the part before; `blank`: Pefchain's blank part, `music` the play routine it calls */
+  extend: boolean; blank: boolean; music: Addr | null;
+  /** in a snapshot: the part that runs (the PC is in its driver, or the IRQ vector points at its interrupt) */
+  running: boolean;
+}
+
 /** What the deep analysis did (5.17): its rounds and the problems before (a normal analysis) and after. */
 export interface DeepReport {
   rounds: number;
@@ -409,6 +452,8 @@ export interface AnalysisResult {
   raster: RasterIrq[];
   /** timing code (5.4b): branches the code points into a delay by a timer */
   delays: DelaySled[];
+  /** Spindle's effect drivers (5.4c), in the order the parts run */
+  spindle: SpindleDriver[];
   /** what the deep analysis did (`Settings.deepAnalysis`); null without it */
   deep: DeepReport | null;
 }

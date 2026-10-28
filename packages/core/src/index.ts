@@ -28,6 +28,7 @@ export { artStudioPicture, ART_STUDIO_LOAD, BITMAP_SIZE, gfxSource, koalaPicture
 export type { PsidInfo } from './c64/psid';
 
 export { analyze, findBlock } from './analyze';
+export { spindleCondition, spindleLabel, spindleName, spindleRoutines, spindleScript } from './analyze/spindle';
 export { render, validLabel, type RenderOptions } from './render/kick';
 export { lineText, kickMnemonic, TOP_LEVEL_DIRECTIVES } from './render/lines';
 export type { LineTextSettings } from './render/lines';

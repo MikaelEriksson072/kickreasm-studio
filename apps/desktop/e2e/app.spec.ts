@@ -2144,6 +2144,50 @@ test('loaders: the Explorer names the loader and lists its parts, which the list
   });
 });
 
+test('the Spindle script: a tab when Pefchain drivers are in memory, a row per script line that goes to its driver', async ({ app, page }) => {
+  await waitForListing(page);
+  await expect(page.getByRole('tab', { name: /Spindle script/ })).toHaveCount(0);
+
+  // fixtures/prg/spindle-demo.prg (packages/core/test/spindle.test.ts): the drivers pefchain 3.1 built for five small
+  // parts, `space`, `f0 = 05`, `| f0 = 20`, `-`, `@` and its blank part that stays
+  await stubDialogs(app, { open: [join(repoDir, 'fixtures/prg/spindle-demo.prg')] });
+  await page.getByRole('button', { name: 'Open PRG…' }).click();
+  await expect(toast(page, 'Loaded spindle-demo.prg at $0400')).toBeVisible();
+  await page.getByRole('tab', { name: /Spindle script/ }).click();
+  await expect(page.getByRole('tab', { name: /Spindle script/ })).toContainText('6');
+  const table = page.getByRole('table', { name: 'Spindle script' });
+  await expect(table.locator('tbody td.script-line')).toHaveText(['part1.pef space', 'part2.pef f0 = 05', '| f0 = 20', 'part3.pef -', 'part4.pef @', '- stay']);
+  await expect(table.locator('tbody tr').nth(1).locator('td').last()).toHaveText('its | line');
+  await expect(table.locator('tbody tr').last().locator('td').last()).toHaveText('the end of the demo');
+
+  await test.step('a row goes to its driver, marked in the listing; a routine goes to the routine', async () => {
+    await table.locator('tbody tr').nth(3).locator('td').first().click();
+    await expect(statusBar(page)).toContainText('$1201 · part3_driver');
+    await expect(listing(page).locator('.row .syn-comment.mark', { hasText: '// ==== Spindle part 3: its driver (script line "part3.pef -") ====' })).toBeVisible();
+    await table.locator('tbody tr').nth(4).getByRole('button', { name: 'part4_fadeout' }).click();
+    await expect(statusBar(page)).toContainText('$1314 · part4_fadeout');
+  });
+
+  await test.step('it copies the script as Pefchain reads it, and the build still verifies', async () => {
+    await page.getByRole('button', { name: 'Copy script' }).click();
+    await expect(toast(page, 'Copied the Spindle script')).toBeVisible();
+    const text = (await app.evaluate(({ clipboard }) => clipboard.readText())).replace(/\r\n/g, '\n');
+    expect(text.split('\n').slice(2, 4)).toEqual([
+      'part1.pef     space      # driver $108c: prepare $1000, setup $1001, irq $1006, fadeout $1013, cleanup $1015; loads',
+      'part2.pef     f0 = 05    # driver $1115: setup $1100, irq $1105, main $1112',
+    ]);
+    await page.keyboard.press('F7');
+    await expect(statusBar(page)).toContainText('✓ round-trip verified', { timeout: 90_000 });
+  });
+
+  await test.step('a program without drivers has no such tab, and the panel goes back to the log', async () => {
+    await page.getByRole('tab', { name: /Spindle script/ }).click();
+    await page.getByRole('button', { name: 'Demo', exact: true }).click();
+    await expect(page.getByRole('tab', { name: /Spindle script/ })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: /Analysis log/ })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
 test('the tab row fits a small window: the listing tools lose their labels, then move into the ⋯ menu', async ({ app, page }) => {
   await waitForListing(page);
   const row = page.locator('main.main > .tabs');

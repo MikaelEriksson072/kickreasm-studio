@@ -407,6 +407,16 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .tbl tbody tr { cursor: pointer; }
 .tbl tbody tr:hover { background: var(--row-hover); }
 .link-cell { color: var(--accent-hi); }
+/* the Spindle script (spec 8.11f): its lines as a table, the running part marked */
+.spindle-head { display: flex; align-items: center; gap: 12px; }
+.spindle-head > span { flex: 1; min-width: 0; }
+.spindle-head .btn { flex: none; }
+.tbl tbody tr.running { background: color-mix(in srgb, var(--ok) 9%, transparent); }
+.tbl tbody tr.running:hover { background: color-mix(in srgb, var(--ok) 15%, transparent); }
+.spindle .pill { margin-left: 6px; }
+.spindle .script-line { white-space: pre; }
+.spindle .routines { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
+.spindle .routine { white-space: nowrap; }
 .kind { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--line); color: var(--fg-2); }
 .kind-call { color: var(--syn-mn); } .kind-write, .kind-rmw { color: var(--syn-ill); } .kind-read { color: var(--syn-hw); } .kind-branch, .kind-jump { color: var(--syn-dir); } .kind-ptr { color: var(--syn-label); }
 

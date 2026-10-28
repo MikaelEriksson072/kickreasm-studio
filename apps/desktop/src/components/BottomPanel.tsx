@@ -1,5 +1,8 @@
-/* Bottom panel: analysis log, problems, cross-references, raster IRQs, statistics, build output. */
-import { decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, type Addr, type AnalysisResult, type DeepReport, type RasterIrq, type RenderResult, type Settings } from '@mimir/core';
+/* Bottom panel: analysis log, problems, cross-references, raster IRQs, the Spindle script, statistics, build output. */
+import {
+  decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, spindleCondition, spindleLabel, spindleName, spindleRoutines, spindleScript,
+  type Addr, type AnalysisResult, type DeepReport, type RasterIrq, type RenderResult, type Settings, type SpindleDriver,
+} from '@mimir/core';
 import { Icon, LVL_ICON } from '../lib/icons';
 import { cx, fmtBytes, GROUP_LABEL, GROUP_ORDER, groupOfType } from '../lib/util';
 import type { BottomTab } from '../store/ui';
@@ -92,6 +95,45 @@ export function RasterPanel({ A, R, onNavigate }: { A: AnalysisResult; R: Render
   );
 }
 
+/** Spindle's effect drivers (spec 8.11f), a row per line of the script they were built from; a row goes to its driver. */
+export function SpindlePanel({ A, R, onNavigate, onCopy }: { A: AnalysisResult; R: RenderResult; onNavigate: (a: Addr) => void; onCopy: (text: string) => void }) {
+  const D = A.spindle;
+  if (!D.length) return <div className="empty">No Spindle effect drivers: Pefchain puts one after each part's code, and the parts of a trackmo are in memory in a VICE snapshot of it.</div>;
+  const link = (a: Addr) => <button className="addr-link" title={`$${h4(a)}`} onClick={e => { e.stopPropagation(); onNavigate(a); }}>{R.labels.get(a)?.name ?? `$${h4(a)}`}</button>;
+  const then = (d: SpindleDriver, i: number) => {
+    if (d.ends === 'stop') return <span className="muted">the end of the demo</span>;
+    if (d.ends === 'stay') return <span className="muted">stays</span>;
+    if (d.ends === 'flip') return <span className="muted">the next disk side</span>;
+    const to = D.find(x => x.front === d.next);
+    if (!to) return <>{link(d.next!)} <span className="muted">not in memory</span></>;
+    if (to === D[i + 1] && to.part === d.part) return <span className="muted">its <span className="mono">|</span> line</span>;
+    return <>{to === D[i + 1] ? 'part' : 'back to part'} {to.part}{d.seek != null && <span className="muted"> · seeks label {h2(d.seek)}</span>}</>;
+  };
+  return (
+    <div className="xref spindle">
+      <div className="xref-head spindle-head">
+        <span>{D.length} Spindle effect driver{D.length === 1 ? '' : 's'} (Pefchain), read back as the script they were built from <span className="muted">· the parts are numbered in the order they run; their file names are not in the program</span></span>
+        <button className="btn small" onClick={() => onCopy(spindleScript(D).join('\n'))}><Icon name="copy" size={14} />Copy script</button>
+      </div>
+      <table className="tbl" aria-label="Spindle script"><thead><tr><th>Part</th><th>Script line</th><th>Driver</th><th>Routines</th><th>Then</th></tr></thead><tbody>
+        {D.map((d, i) => {
+          const label = spindleLabel(d, D);
+          const notes = [d.blank && `blank part${d.music != null ? `, plays $${h4(d.music)}` : ''}`, d.condition.kind === 'sync' && `interlock $${h2(d.condition.addr & 0xff)}`, d.jump && 'fadeout picks a label (J)', d.loads && 'loads'].filter(Boolean);
+          return (
+            <tr key={d.front} className={cx(d.running && 'running')} onClick={() => onNavigate(d.start)}>
+              <td className="mono">{d.part}{d.running && <span className="pill hi">running</span>}</td>
+              <td className="mono script-line">{label != null && <span className="muted">{h2(label)}: </span>}<span className="syn-label">{spindleName(d)}</span> <span>{spindleCondition(d.condition)}</span></td>
+              <td className="mono">{link(d.front)}</td>
+              <td className="routines">{!d.blank && spindleRoutines(d).map(([k, a]) => <span key={k} className="routine"><span className="muted">{k}</span> {link(a)}</span>)}{notes.length > 0 && <span className="muted">{notes.join(' · ')}</span>}</td>
+              <td>{then(d, i)}</td>
+            </tr>
+          );
+        })}
+      </tbody></table>
+    </div>
+  );
+}
+
 const MODE_NAME: Record<string, string> = { imp: 'implied', acc: 'accumulator', imm: 'immediate', zp: 'zero page', zpx: 'zp,x', zpy: 'zp,y', izx: '(zp,x)', izy: '(zp),y', rel: 'relative', abs: 'absolute', abx: 'abs,x', aby: 'abs,y', ind: 'indirect' };
 
 export function StatsPanel({ A }: { A: AnalysisResult }) {
@@ -163,4 +205,4 @@ export function BuildPanel({ build, S, names, stale, busy, onVerify, onRun, onCo
   );
 }
 
-export const BOTTOM_TABS: [BottomTab, string][] = [['log', 'Analysis log'], ['problems', 'Problems'], ['xrefs', 'Cross-references'], ['irqs', 'Raster IRQs'], ['stats', 'Statistics'], ['build', 'Build output']];
+export const BOTTOM_TABS: [BottomTab, string][] = [['log', 'Analysis log'], ['problems', 'Problems'], ['xrefs', 'Cross-references'], ['irqs', 'Raster IRQs'], ['spindle', 'Spindle script'], ['stats', 'Statistics'], ['build', 'Build output']];

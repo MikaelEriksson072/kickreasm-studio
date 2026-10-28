@@ -25,7 +25,7 @@ import { StatusBar } from './components/StatusBar';
 import { Sidebar } from './components/Sidebar';
 import { Listing } from './components/Listing';
 import { Inspector } from './components/Inspector';
-import { BOTTOM_TABS, BuildPanel, LogList, ProblemsPanel, RasterPanel, StatsPanel, XrefPanel } from './components/BottomPanel';
+import { BOTTOM_TABS, BuildPanel, LogList, ProblemsPanel, RasterPanel, SpindlePanel, StatsPanel, XrefPanel } from './components/BottomPanel';
 import { SettingsModal } from './components/Settings';
 import { CommandPalette, GotoModal } from './components/CommandPalette';
 import { MergeRangeModal } from './components/MergeRange';
@@ -982,6 +982,9 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     } } } : l)),
     ...packing.flatMap((p, i) => (p ? [{ lvl: 'warn' as const, msg: `${A.files[i].name} ${p.verdict === 'packed' ? 'is packed' : 'may be packed'}${p.signature ? ` (${p.signature})` : ''}: ${p.reasons.join('; ')}. Unpack it (Unpack with ${unpackerName}) to see the program.`, addr: p.decruncher, cat: 'packing' }] : [])),
   ], [A, R, kickProblems, packing, unpackerName]);
+  // the Spindle script tab is there when the analysis found Spindle's drivers
+  const bottomTabs = BOTTOM_TABS.filter(([k]) => k !== 'spindle' || A.spindle.length > 0);
+  const shownBottom = bottomTabs.some(([k]) => k === bottom) ? bottom : 'log';
   const blk = cursor != null ? findBlock(A.blocks, cursor) : null;
   // cycle counting: the selection, else the code block at the cursor, along the path with the branches marked taken
   const cycleRange = !cycles ? null : sel && sel.multi ? { start: sel.start, end: sel.end } : blk && blk.type === 'code' ? { start: blk.start, end: blk.end } : null;
@@ -1106,18 +1109,19 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         {tab !== 'spec' && panelOpen && <Splitter dir="h" onDrag={d => setUi({ sizes: { ...useUi.getState().sizes, bottom: Math.max(120, Math.min(520, useUi.getState().sizes.bottom - d)) } })} />}
         {tab !== 'spec' && <section className={cx('bottom', !panelOpen && 'collapsed')} aria-label="Panels">
           <div className="tabs small" role="tablist">
-            {BOTTOM_TABS.map(([k, l]) => { const n = k === 'log' ? A.log.length : k === 'problems' ? problems.length : k === 'irqs' ? A.raster.length : null; return (
-              <button key={k} role="tab" aria-selected={bottom === k} className={cx('tab', bottom === k && 'on')} onClick={() => setUi({ bottom: k, panelOpen: true })}>{l}{n != null && <span className={cx('count', k === 'problems' && problems.some(p => p.lvl === 'err') && 'bad')}>{n}</span>}</button>); })}
+            {bottomTabs.map(([k, l]) => { const n = k === 'log' ? A.log.length : k === 'problems' ? problems.length : k === 'irqs' ? A.raster.length : k === 'spindle' ? A.spindle.length : null; return (
+              <button key={k} role="tab" aria-selected={shownBottom === k} className={cx('tab', shownBottom === k && 'on')} onClick={() => setUi({ bottom: k, panelOpen: true })}>{l}{n != null && <span className={cx('count', k === 'problems' && problems.some(p => p.lvl === 'err') && 'bad')}>{n}</span>}</button>); })}
             <span className="grow" />
             <button className="icon-btn panel-toggle" onClick={() => setUi({ panelOpen: !panelOpen })} aria-label={panelOpen ? 'Collapse panel' : 'Expand panel'} title={panelOpen ? 'Collapse panel' : 'Expand panel'}><Icon name="down" size={14} className={panelOpen ? '' : 'flip'} /></button>
           </div>
           <div className="bottom-body"><ErrorBoundary>
-            {bottom === 'log' && <LogList items={A.log} onNavigate={nav} empty="No analysis messages." />}
-            {bottom === 'problems' && <ProblemsPanel items={problems} onNavigate={nav} deep={A.deep} on={!!project.settings.deepAnalysis} busy={busy} onDeep={on => update(on ? 'Deep analysis on' : 'Deep analysis off', d => { d.settings.deepAnalysis = on; })} />}
-            {bottom === 'xrefs' && <XrefPanel A={A} R={R} cursor={cursor} onNavigate={nav} S={S} />}
-            {bottom === 'irqs' && <RasterPanel A={A} R={R} onNavigate={nav} />}
-            {bottom === 'stats' && <StatsPanel A={A} />}
-            {bottom === 'build' && <BuildPanel build={build} S={S} names={R.fileNames} stale={stale} busy={buildBusy} onVerify={() => void runVerify()} onRun={() => void runBuild()} onCopy={t => void copyText(t)} />}
+            {shownBottom === 'log' && <LogList items={A.log} onNavigate={nav} empty="No analysis messages." />}
+            {shownBottom === 'problems' && <ProblemsPanel items={problems} onNavigate={nav} deep={A.deep} on={!!project.settings.deepAnalysis} busy={busy} onDeep={on => update(on ? 'Deep analysis on' : 'Deep analysis off', d => { d.settings.deepAnalysis = on; })} />}
+            {shownBottom === 'xrefs' && <XrefPanel A={A} R={R} cursor={cursor} onNavigate={nav} S={S} />}
+            {shownBottom === 'irqs' && <RasterPanel A={A} R={R} onNavigate={nav} />}
+            {shownBottom === 'spindle' && <SpindlePanel A={A} R={R} onNavigate={nav} onCopy={t => void copyText(t, 'Copied the Spindle script')} />}
+            {shownBottom === 'stats' && <StatsPanel A={A} />}
+            {shownBottom === 'build' && <BuildPanel build={build} S={S} names={R.fileNames} stale={stale} busy={buildBusy} onVerify={() => void runVerify()} onRun={() => void runBuild()} onCopy={t => void copyText(t)} />}
           </ErrorBoundary></div>
         </section>}
       </main>

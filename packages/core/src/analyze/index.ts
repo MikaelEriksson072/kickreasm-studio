@@ -20,6 +20,7 @@ import { findLoaders } from './loaders';
 import { rasterIrqs } from './raster';
 import { deepLog, learn, problemCount } from './deep';
 import { findDelays } from './delay';
+import { findSpindle } from './spindle';
 
 export { findBlock } from './classify';
 
@@ -52,6 +53,7 @@ function analyzeOnce(project: ProjectInput, deepIn: Deep | null): [AnalysisResul
   applyOverrides(ctx); // 5.2
   findBasicStubs(ctx); // 5.3
   seedEntries(ctx); // 5.4
+  ctx.spindle = findSpindle(ctx); // 5.4c: Spindle's effect drivers, entry points too
 
   // 5.4-5.6: trace, gather evidence and resolve tables until no new entry points appear. A deep analysis traces its
   // guesses on trial (settle) and follows both sides of a branch reached some other way after all (releaseFlags)
@@ -118,6 +120,6 @@ function analyzeOnce(project: ProjectInput, deepIn: Deep | null): [AnalysisResul
   return [{
     S, files, mem, owner, insLen, codeOwner, skip, xrefs, entryKind, entry, basics, music: cls.music, vic, gfx: cls.gfxBlocks,
     tm: cls.tm, blocks: cls.blocks, labels, zp, hints, smc, offsetOf: cls.offsetOf, lohiTabs, ijumps, inlineCalls, log, stats, textPtrs, mcfg, loaders, raster,
-    delays: [...ctx.delays.values()].sort((x, y) => x.branch - y.branch), deep: null,
+    delays: [...ctx.delays.values()].sort((x, y) => x.branch - y.branch), spindle: ctx.spindle, deep: null,
   }, ctx];
 }

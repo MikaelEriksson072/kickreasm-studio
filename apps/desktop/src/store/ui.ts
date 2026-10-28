@@ -5,7 +5,7 @@ import { store } from '../lib/util';
 
 export type Theme = 'dark' | 'light';
 export type EditorTab = 'listing' | 'source' | 'spec' | 'gfx' | 'mem';
-export type BottomTab = 'log' | 'problems' | 'xrefs' | 'irqs' | 'stats' | 'build';
+export type BottomTab = 'log' | 'problems' | 'xrefs' | 'irqs' | 'spindle' | 'stats' | 'build';
 export type Activity = 'explorer' | 'blocks' | 'symbols' | 'bookmarks' | 'pack';
 export interface Sizes { side: number; insp: number; bottom: number }
 /** what the listing's left column shows: the memory address of the line, or its line number in the .asm file */

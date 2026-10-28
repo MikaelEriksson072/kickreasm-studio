@@ -810,6 +810,79 @@ Användarens snapshot (en meny vid `$c800` med ett spel i minnet) går från 150
 `test/deep.test.ts`: ett exempel per regel, att den vanliga analysen har problemen och djupanalysen inte, att allt
 assembleras tillbaka byte för byte och att djupanalysen aldrig har fler problem; fuzz-testet slår på den slumpvis.
 
+### 8.11f Spindle-skriptet (Pefchain)
+
+Spindle (lft) länkar en trackmo med **Pefchain** efter ett skript: en rad per del med delens `.pef`-fil och villkoret
+som avslutar den (`space`, `-` för direkt, `stay`, `adress = värde`, `@` för musikens interlock), `|` för att fortsätta
+delen innan, `-` som namn för Pefchains tomma del och `NN:` för en etikett att söka till. Skriptet finns inte på disken.
+Pefchain gör varje rad till en **driver**, ungefär 48 byte kod direkt efter delens kod: den installerar delens avbrott,
+anropar dess setup, anropar laddaren och nästa dels prepare, väntar på villkoret, kör fadeout och cleanup och hoppar
+till nästa driver. `findSpindle()` (`packages/core/src/analyze/spindle.ts`) läser tillbaka driverna i minnet till
+skriptets rader (`AnalysisResult.spindle`, `SpindleDriver`), direkt efter startpunkterna (8.2).
+
+- **Koden** är den Spindle 3.0 och 3.1 skriver (`pefchain.c`: `generate_drivers` och rutinerna den anropar,
+  MIT-licens; `template/earlysetup.s` och `seek.s`, public domain). Den är kontrollerad mot driverna som
+  `pefchain -v -v` skrev ut för egna testdelar. Spindle 2 bygger andra drivers, som inte läses.
+- **Var de hittas:**
+  - sidodörrar (`lda #$4c / sta zp / pla / sta zp+1 / pla / sta zp+2 / jsr zp`), där en sökning eller nästa
+    disksida kommer in. Den första drivern har den tidiga setupen före och `clc / bcc` förbi sidodörren;
+  - framdörrar som sätter `$fffe/$ffff` och gör `lsr $d019 / cli`;
+  - de drivers som de hoppar till.
+- **Krav:** hela drivern måste följa Pefchains mönster till slutet: `jmp` till nästa, `clc / bcc *`, ett söksprång
+  till nästa disksida, eller en del som stannar. En framdörr som bara gör det vilken kod som helst gör (installerar ett
+  avbrott, anropar och hoppar) räknas bara när den hoppar till en driver.
+- **Vad som läses:**
+  - delens rutiner (prepare, setup, irq, main, fadeout, cleanup) och villkoret;
+  - nästa dels prepare;
+  - om den laddar (`jsr` till laddarens residenta sida, `$0200` om inget annat syns);
+  - nästa driver, och etiketten den söker innan den hoppar tillbaka (`-L`);
+  - J-taggen (delens fadeout väljer en etikett);
+  - Pefchains tomma del (dess avbrott och setup, och musiken den spelar);
+  - `|`.
+- **Ett ensamt anrop** som kan vara både delens cleanup och nästa dels prepare blir cleanup när det ligger närmare
+  under den här drivern än under nästa.
+- **Ordning och nummer:** delarna står i den ordning de körs, och den första driverns kedja kommer först. `|` behåller
+  sin dels nummer. I en snapshot är den del som kör *running*: PC:n är i dess driver, eller IRQ-vektorn pekar på dess
+  avbrott.
+- **Startpunkter:** driverna är ingångar (`entry`). I en snapshot är driverna för delarna före den som kör gissningar
+  (`guess`, som djupanalysen spårar på prov), eftersom senare delar kan ha laddat över deras rutiner.
+- **Etiketter** heter efter delen:
+  - `spindle_start` för den tidiga setupen;
+  - `part2_driver` (`part2_driver2` för `|`) och `part2_seek` för sidodörren;
+  - `part2_prepare`, `part2_setup`, `part2_irq`, `part2_main`, `part2_fadeout` och `part2_cleanup`.
+- **Källkoden:**
+  - filhuvudet har skriptet som kommentarer;
+  - en `====`-rad markerar varje driver med sin skriptrad (*the early setup and the first driver*, *its driver*,
+    *a driver that goes on with it*);
+  - fler `====`-rader visar var sidodörren och framdörren är.
+
+Bottenpanelens flik **Spindle script** (med antal) finns bara när analysen hittat drivers. Den har en rad per skriptrad:
+- **Part**;
+- **Script line**: namnet (`partN.pef` är påhittat, eller `|` eller `-`) och villkoret, med etiketten `01:` före när
+  en loop visar den;
+- **Driver**;
+- **Routines**: klickbara etiketter, och *loads*, *blank part*, *interlock* eller J;
+- **Then**: nästa del, *its | line*, *back to part 1 · seeks label 01*, *the end of the demo*, *stays*, *the next disk
+  side*, eller en adress som inte är i minnet.
+
+Ett klick på raden går till drivern, ett klick på en rutin dit. **Copy script** kopierar skriptet som text, så som
+Pefchain läser det, med drivern och rutinerna efter `#`.
+
+**Mätt:**
+- inga drivers i de 1078 programmen i testkorpusen, och ungefär 2 ms per program;
+- en VICE-snapshot av en trackmo som `pefchain` 3.1 byggt av fem egna testdelar gav alla sex drivers, med rätt villkor,
+  rutiner och del som kör.
+
+**Test:** `test/spindle.test.ts` innehåller:
+- driverna pefchain skrev för fem skript: alla villkor, `|`, den tomma delen, etiketter, J, en loop och sista delen på
+  en disksida;
+- skriptet som text;
+- etiketter, markeringar och byte-exakt bygge;
+- en snapshot;
+- kod som installerar ett avbrott som en driver gör men inte är en.
+
+`fixtures/prg/spindle-demo.prg` är minnet från det första skriptet.
+
 ## 9. Symboldatabas
 
 | Kategori | Område | Namnexempel |
@@ -1314,7 +1387,7 @@ tom inställning behålls.
 | Sidopanel | **Explorer**: filer, loaders, VICE-quicksave, monterad disk (13.5), programstart och minneskarta (64 KB-remsa och segmentlista), var och en ett kort vars rubrik fäller ihop det (valet sparas per användare, `sideClosed`) med vad det rymmer bredvid rubriken (*1 file*, *none found*, quicksavens tid, startadressen, antal block). *Demo* och *+* (lägg till en PRG) står i Files rubrik; hjälptexterna är en rad, resten står i knapparnas tips. Pack-vyns sektioner är likadana kort. **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Exomizer (13.8) |
 | Editor | Flikar: **Listing** (interaktiv, virtualiserad; vänsterkolumnen visar adress eller radnummer), **Graphics** (allt minne som tecken, sprites eller bitmappar, 14.5), **Memory** (minnet som VICE-monitorns `m`, `i` och `ii`, 14.6), **main.asm** (Monaco), **SPEC.md** |
 | Inspektor | **Memory map** (256 × 256 heatmap, lägen Type/Bytes/Refs, zoom till laddade sidor), **Block** (intervall, evidens, konfidens, typ, etikett, kommentar), **Preview** (sprite/chars/bitmap, multicolor, text, musik- och rutininfo) |
-| Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Statistics, Build output |
+| Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Spindle script (när det finns, 8.11f), Statistics, Build output |
 | Statusrad | CPU, filer, markörens adress/etikett/blocktyp, markering, analystid, verifieringsstatus |
 
 Paneler storleksändras med drag och mins per användare. Under 900 px bredd blir sidopanel och inspektor utdragbara lådor.

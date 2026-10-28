@@ -13,6 +13,7 @@ import { textEncoding } from '../c64/text';
 import { ALL_BANKS, ALL_PORTS, areaAt, bankRange, banked, banksOf, describePorts, portsOf, reaches, reachesForName } from '../c64/memconfig';
 import { makePsid } from '../c64/psid';
 import { findBlock } from '../analyze/classify';
+import { spindleCondition, spindleName, spindleScript } from '../analyze/spindle';
 import { h4 } from '../util/hex';
 import { kickMnemonic, lineText } from './lines';
 import { hardwareInclude } from './include';
@@ -90,6 +91,12 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
     delayBranch.set(s.branch, s);
     for (const a of s.ins) delayAt.set(a, s);
     markAt(loaderStarts, s.start, `delay: the ${kickMnemonic(OPC[mem[s.branch]].mn)} at ${n4(s.branch)} goes 0-${s.most} bytes into it by ${timerName(s)}, so it takes ${s.cycles[1]} down to ${s.cycles[0]} cycles`);
+  }
+  // Spindle's effect drivers (5.4c): where each starts, with its line of the script, and where its doors are
+  for (const d of A.spindle ?? []) {
+    markAt(loaderStarts, d.start, `==== Spindle part ${d.part}: ${d.first ? 'the early setup and the first driver' : d.extend ? 'a driver that goes on with it' : 'its driver'} (script line "${spindleName(d)} ${spindleCondition(d.condition)}") ====`);
+    if (d.side != null && d.side !== d.start) markAt(loaderStarts, d.side, `==== Spindle part ${d.part}: a seek or the next disk side comes in here ====`);
+    if (d.front !== d.start) markAt(loaderStarts, d.front, `==== Spindle part ${d.part}: the part before jumps in here ====`);
   }
   const marked = (a: Addr) => loaderStarts.has(a) || loaderEnds.has(a);
   /** data and text rows break at notes and loader marks like at labels */
@@ -578,6 +585,11 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
     if (fileLoaders.length) {
       head.push({ k: 'cmt', a: f.load, text: `loader${fileLoaders.length > 1 ? 's' : ''} found by Mimir Studio (the ==== lines mark their parts):`, mark: true });
       for (const l of fileLoaders) head.push({ k: 'cmt', a: f.load, text: `  ${l.name}${l.sure === 'likely' ? ' (by its traits)' : ''}: ${l.how}`, mark: true });
+    }
+    // the Spindle script, in the file with the first driver
+    if (A.spindle?.length && fileOf(A.spindle[0].start) === fi) {
+      head.push({ k: 'cmt', a: f.load, text: 'Spindle effect drivers found by Mimir Studio (the ==== lines mark them), as the script they were built from:', mark: true });
+      for (const t of spindleScript(A.spindle)) head.push({ k: 'cmt', a: f.load, text: t && `  ${t}`, mark: true });
     }
     if (fileExcluded.length) {
       head.push({ k: 'cmt', a: f.load, text: 'blocks left out of the build; remove the // in front of a #define to build it again:' });

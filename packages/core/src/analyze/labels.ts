@@ -16,6 +16,21 @@ export function makeLabels(ctx: Ctx, cls: Classification, vic: VicEvidence): { l
   // `start` is the program start: the BASIC SYS target, unless the user set another one
   const userStart = ctx.project.entryPoint != null && loaded(ctx.project.entryPoint);
   for (const b of basics) if (b.sys != null && (!userStart || b.sys === entry)) setLabel(b.sys, 'start', 'entry');
+  // Spindle's drivers and the routines they call (5.4c), named after their part
+  const code = (a: Addr | null): a is Addr => a != null && loaded(a) && insLen[a] > 0;
+  // a name once: a routine read wrongly must not name a second address the same
+  const named = new Set<string>();
+  const name = (a: Addr, n: string) => { if (!named.has(n) && !labels.has(a)) { named.add(n); setLabel(a, n, 'spindle'); } };
+  for (const [i, d] of ctx.spindle.entries()) {
+    // `|` goes on with its part: a second driver of it
+    const n = `part${d.part}`, more = ctx.spindle.slice(0, i).filter(x => x.part === d.part).length;
+    if (d.first && d.start !== d.front) name(d.start, 'spindle_start');
+    name(d.front, more ? `${n}_driver${more + 1}` : `${n}_driver`);
+    if (d.side != null) name(d.side, `${n}_seek`);
+    for (const [k, a] of [['prepare', d.prepare], ['setup', d.setup], ['irq', d.irq], ['main', d.main], ['fadeout', d.fadeout], ['cleanup', d.cleanup]] as const) if (code(a)) name(a, `${n}_${k}`);
+    const next = ctx.spindle.find(x => x.front === d.next);
+    if (next && code(d.prepareNext)) name(d.prepareNext, `part${next.part}_prepare`);
+  }
   const kindPrefix: Partial<Record<EntryKind, string>> = { entry: 'entry', irq: 'irq', nmi: 'nmi', brk: 'brk', user: 'code', sub: 'sub', ptr: 'fx', guess: 'code' };
   for (const [addr, kind] of [...entryKind].sort((x, y) => PRI[y[1]] - PRI[x[1]])) {
     if (!insLen[addr] || tm[addr] === T.MUSIC) continue;
