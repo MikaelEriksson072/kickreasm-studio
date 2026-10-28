@@ -278,6 +278,8 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .loader-parts li { display: flex; gap: 8px; align-items: baseline; color: var(--fg-2); }
 .loader-parts button { border: 0; background: none; padding: 0; color: var(--accent-hi); cursor: pointer; font-size: 12px; }
 .loader-parts button:hover { text-decoration: underline; }
+.loader-parts li.outside .mono { color: var(--fg-3); white-space: nowrap; }
+.loader .side-hint { margin: 4px 0 0; }
 .link { cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
 .link:hover { text-decoration-color: currentColor; }
 .row.hdr { font: 12px/20px var(--font-ui); color: var(--fg-2); gap: 8px; border-top: 1px solid var(--line); background: var(--panel); }
@@ -417,6 +419,12 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .spindle .script-line { white-space: pre; }
 .spindle .routines { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
 .spindle .routine { white-space: nowrap; }
+.spindle + .spindle { border-top: 1px solid var(--line); }
+.spindle tbody tr.job-first td { border-top: 1px solid var(--line); }
+.spindle td .pill { margin-left: 6px; }
+.disk-spindle { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; color: var(--fg-2); }
+.disk-spindle > span { flex: 1; min-width: 0; }
+.disk-spindle .btn { flex: none; }
 .kind { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--line); color: var(--fg-2); }
 .kind-call { color: var(--syn-mn); } .kind-write, .kind-rmw { color: var(--syn-ill); } .kind-read { color: var(--syn-hw); } .kind-branch, .kind-jump { color: var(--syn-dir); } .kind-ptr { color: var(--syn-label); }
 

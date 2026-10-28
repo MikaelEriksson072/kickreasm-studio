@@ -705,8 +705,13 @@ beror på var koden ligger finns med, och `..` står för valfri byte:
 | Spindle 2 (lft) | `ldx $dd00 / sty $dd00 / eor tabell,x` (`AE 00 DD 8C 00 DD 5D`), de två fasta sidorna `$0c00–$0dff` (läst ur spin.exe i 2.3) |
 | Krill's loader (Krill/Plush) | `ora $dcc9,x / stx $dd02 / ror / ror / ldx #$3f / sax` och `adc $dd00 / stx $dd02 / iny / beq` (v194, hal-c64-c128.inc); installationen skickar `"M-E" $020b "KRILL."` |
 | Bitfire (Bitbreaker/Oxyron) | `adc $dd00 / stx $dd02 / lsr / lsr / dey / cpy #$01`, `ora $dd00 / stx $dd02 / ror / ror / ldx #$3f / sax` (resident.asm), och den äldre `ldy #$37 / lda $dcc9,y / sty $dd02` |
-| Sparkle (Sparta/OMG) | `lda $dd00 / sty $dd00 / lsr / lsr / dex / nop / ldy #$c0 / ora $dd00 / sty $dd00` och `and $dd00 / sta $dd00 / ora #0 / sta buffer,x / bvc` (sl.asm); texten "sparkle" |
+| Sparkle (Sparta/OMG) | `lda $dd00 / sty $dd00 / lsr / lsr / dex / nop / ldy #$c0 / ora $dd00 / sty $dd00` och `and $dd00 / sta $dd00 / ora #0 / sta buffer,x / bvc` (sl.asm), i en senare version `inx` och `ora #1`; texten "sparkle" |
 | Covert Bitops loader (Cadaver) | badline-väntan `lda $d011 / clc / sbc $d012 / and #$07 / beq` följd av `lda #$10 / ora $dd00 / sta $dd00` (v3 loader.s), och `M-W` lagrat baklänges (`"W-M"`) |
+
+**I en VICE-snapshot** som öppnats från `$0200` (13.7) finns nollsidan och stacken bara i snapshoten. Sparkle har sin
+mottagarloop i stacken (`$0160`). En känd loaders mönster (inte de fasta sidorna) söks därför också i snapshotens
+`$0000–$01ff`. Delen som hittas där har `outside`: Explorer visar den utan länk, som *not opened*, och säger att
+*VICE snapshots: include the zero page and the stack* i Settings → Analysis tar med den nästa gång snapshoten öppnas.
 
 Den klassiska 2-bitsloopen `lda $dd00 / lsr / lsr / eor $dd00 …` finns i Covert Bitops-loadern men också i många äldre
 loaders. Ensam ger den därför bara en okänd loader, med loopen beskriven. Ett namn ensamt, till exempel "KRILL." eller
@@ -1240,6 +1245,51 @@ inställningarna säger något annat. `test/d64.test.ts` läser diskar som VICE:
 och validera diskar som `makeD64` skrivit; `test/vice.integration.test.ts` kör ett program som laddar sin andra del
 från disken i riktiga VICE.
 
+### 13.5b Spindle 3-diskar (Spins laddskript)
+
+Spin, Spindles diskbyggare, läser ett laddskript med ett stycke per laddaranrop (ett **jobb**). Varje rad i ett stycke
+är en bit: filen som laddas, dess adress, offset och längd. `NN:` är en etikett att söka till. Skriptet finns inte på
+disken, men jobben gör det: Spin packar varje jobb och lägger det i omgångar av sektorer som drivkoden läser i vilken
+ordning som helst. `readSpindleDisk()` (`packages/core/src/c64/spindle-disk.ts`) läser omgångarna och packar upp dem
+till varje jobbs bitar (`SpindleDisk`, `SpindleJob`, `SpindleChunk`). Filnamnen finns inte på disken.
+
+Formatet är Spindle 3.0:s och 3.1:s (`disk.c`, `pack.c` och `stage1.s`, MIT-licens):
+- **Spår 18** har startprogrammet (18/8, 18/18, 18/9, 18/15), drivkoden och, i 18/17 på byte 253, den första
+  kedjeposten. I 18/6 ligger söktabellen med etiketterna, baklänges.
+- **En kedjepost** är 3 byte: flaggor (`$80` nytt jobb, `$40` nästa spår, `$20` sidans slut) och en bit per
+  sektornummer (0–4 i första byten, 5–12 och 13–20 i de andra) för sektorerna i nästa omgång. En av dem har nästa post
+  på byte 253.
+- **En sektors första byte** är dess nummer, med `$40` när den har nästa post och `$80` när en enda enhet fyller den.
+  Utfyllnadskopior av en sektor har samma nummer. Resten är poster uppifrån och ned: postens byte, sedan dess längd.
+- **En enhet** är en destination (höga byten först) och en länk som uppackaren använder, sedan delar:
+  `11llllll` och l+1 byte som de är, `10llllhh oooooooo` en kopia av l+3 byte från o+1 byte högre, och `0ooooooo` en
+  kopia av 2 byte från o byte högre. Byten är omkastade för den seriella bussen (`scramble_bits`).
+- **Andra poster:** 2 byte är kedjehuvuden. 3 byte med `$4c` är ett hopp som laddaren gör efter jobbet (Pefchains
+  sidodörr). En enhet till laddarens sida är en ändring av laddaren (shadow-RAM under I/O).
+
+Kopiorna kommer från högre adresser, så ett jobb packas upp från sin högsta byte och nedåt. **Startprogrammet** ger
+adressen det fortsätter på efter jobb 1 (`spin -e`) och laddarens sida (`-r`). Spår 18 ger sidans och nästa sidas
+knackkod (`-m`, `-n`), när en trackmo har flera sidor. Disken räknas som en Spindle 3-disk när startprogrammet har
+början av Spindle 3:s residenta sida och hela kedjan går att följa till slutet.
+
+**I appen:**
+- Explorer säger om en monterad disk *Spindle 3 disk: N jobs the loader reads, not files*, med knappen **Load script**.
+- Bottenpanelens flik **Spindle script** finns också då. Den visar laddskriptet med en rad per bit: jobb (och dess
+  etiketter), adresser, längd, ett filnamn (`job02_1000.bin`, påhittat) och anmärkningar (*then jumps to $307a*,
+  *loads under I/O*).
+- Ett klick på raden öppnar biten som en PRG på dess adress, och **+** lägger till den i projektet.
+- **Copy script** kopierar skriptet så som Spin läser det, med flaggorna för `spin` i en kommentar.
+- Har snapshoten också Pefchain-drivers (8.11f) står de under laddskriptet.
+
+**Mätt:**
+- de diskar `spin` och `pefchain` 3.1 byggde av Spindles exempel och egna testdelar: varje bit är byte för byte lik
+  sin fil;
+- Mojos fyra sidor (33–39 jobb var) och Memento Moris sida 1 (16 jobb): ingen kopia saknar sin källa, och de
+  uppackade jobben stämmer med RAM i VICE-snapshots tagna vid laddaranropen.
+
+En Sparkle-disk känns inte igen som en Spindle-disk. **Test:** `test/spindle-disk.test.ts`, med diskar som
+`test/helpers/spindle-disk.ts` skriver på samma sätt som Spindle. `fixtures/d64/spindle-demo.d64` är en av dem.
+
 ### 13.6 Terminal
 
 **Terminal** i titelraden (och kommandopaletten) öppnar ett terminalfönster i mappen du arbetar i: den senast
@@ -1407,7 +1457,7 @@ tom inställning behålls.
 | Sidopanel | **Explorer**: filer, loaders, VICE-quicksave, monterad disk (13.5), programstart och minneskarta (64 KB-remsa och segmentlista), var och en ett kort vars rubrik fäller ihop det (valet sparas per användare, `sideClosed`) med vad det rymmer bredvid rubriken (*1 file*, *none found*, quicksavens tid, startadressen, antal block). *Demo* och *+* (lägg till en PRG) står i Files rubrik; hjälptexterna är en rad, resten står i knapparnas tips. Pack-vyns sektioner är likadana kort. **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Exomizer (13.8) |
 | Editor | Flikar: **Listing** (interaktiv, virtualiserad; vänsterkolumnen visar adress eller radnummer), **Graphics** (allt minne som tecken, sprites eller bitmappar, 14.5), **Memory** (minnet som VICE-monitorns `m`, `i` och `ii`, 14.6), **main.asm** (Monaco), **SPEC.md** |
 | Inspektor | **Memory map** (256 × 256 heatmap, lägen Type/Bytes/Refs, zoom till laddade sidor), **Block** (intervall, evidens, konfidens, typ, etikett, kommentar), **Preview** (sprite/chars/bitmap, multicolor, text, musik- och rutininfo) |
-| Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Spindle script (när det finns, 8.11f), Statistics, Build output |
+| Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Spindle script (Pefchain-drivers, 8.11f, och en Spindle 3-disks laddskript, 13.5b, när de finns), Statistics, Build output |
 | Statusrad | CPU, filer, markörens adress/etikett/blocktyp, markering, analystid, verifieringsstatus |
 
 Paneler storleksändras med drag och mins per användare. Under 900 px bredd blir sidopanel och inspektor utdragbara lådor.

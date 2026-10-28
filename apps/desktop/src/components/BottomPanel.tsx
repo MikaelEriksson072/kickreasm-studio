@@ -1,12 +1,12 @@
 /* Bottom panel: analysis log, problems, cross-references, raster IRQs, the Spindle script, statistics, build output. */
 import {
-  decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, spindleCondition, spindleLabel, spindleName, spindleRoutines, spindleScript,
-  type Addr, type AnalysisResult, type DeepReport, type RasterIrq, type RenderResult, type Settings, type SpindleDriver,
+  decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, spinChunkName, spindleCondition, spindleLabel, spindleName, spindleRoutines, spindleScript, spinScript,
+  type Addr, type AnalysisResult, type DeepReport, type RasterIrq, type RenderResult, type Settings, type SpindleChunk, type SpindleDriver, type SpindleJob,
 } from '@mimir/core';
 import { Icon, LVL_ICON } from '../lib/icons';
 import { cx, fmtBytes, GROUP_LABEL, GROUP_ORDER, groupOfType } from '../lib/util';
 import type { BottomTab } from '../store/ui';
-import type { BuildState, UiProblem } from '../lib/types';
+import type { BuildState, MountedDisk, UiProblem } from '../lib/types';
 import type { TypeGroup } from '@mimir/core';
 
 export function LogList({ items, onNavigate, empty }: { items: UiProblem[]; onNavigate: (a: Addr) => void; empty: string }) {
@@ -95,10 +95,59 @@ export function RasterPanel({ A, R, onNavigate }: { A: AnalysisResult; R: Render
   );
 }
 
+interface SpindlePanelProps {
+  A: AnalysisResult; R: RenderResult;
+  /** the mounted disk: its load script when it is a Spindle 3 disk */
+  disk: MountedDisk | null;
+  onNavigate: (a: Addr) => void; onCopy: (text: string, what: string) => void;
+  /** open a job's chunk as a PRG (`add`: add it to the project) */
+  onOpenChunk: (j: SpindleJob, c: SpindleChunk, add: boolean) => void;
+}
+
+/** The Spindle script tab: a mounted Spindle 3 disk's load script (Spin's jobs), and the effect drivers in memory. */
+export function SpindlePanel({ A, R, disk, onNavigate, onCopy, onOpenChunk }: SpindlePanelProps) {
+  if (!A.spindle.length && !disk?.spindle) return <div className="empty">No Spindle script: a Spindle 3 disk holds the jobs its load script lists, and a VICE snapshot of a trackmo linked with Pefchain holds its effect drivers.</div>;
+  return (
+    <>
+      {disk?.spindle && <SpinDiskSection disk={disk} onCopy={onCopy} onOpenChunk={onOpenChunk} />}
+      {A.spindle.length > 0 && <DriversSection A={A} R={R} onNavigate={onNavigate} onCopy={onCopy} />}
+    </>
+  );
+}
+
+/** A Spindle 3 disk's jobs (spec 13.5b), a row per chunk; a row opens the chunk as a PRG at its address, + adds it. */
+function SpinDiskSection({ disk, onCopy, onOpenChunk }: { disk: MountedDisk; onCopy: (text: string, what: string) => void; onOpenChunk: (j: SpindleJob, c: SpindleChunk, add: boolean) => void }) {
+  const d = disk.spindle!;
+  const chunks = d.jobs.reduce((n, j) => n + j.chunks.length, 0);
+  const notes = (j: SpindleJob) => [j.jump != null && `then jumps to $${h4(j.jump)}`, j.shadow && 'loads under I/O', j.missing > 0 && `${j.missing} bytes could not be decrunched`].filter(Boolean).join(' · ');
+  return (
+    <div className="xref spindle">
+      <div className="xref-head spindle-head">
+        <span>Load script of {disk.name} (Spin, Spindle 3): {d.jobs.length} job{d.jobs.length === 1 ? '' : 's'}, {chunks} chunk{chunks === 1 ? '' : 's'} <span className="muted">· a job is a loader call{d.start != null ? `; after job 1 the boot program goes to $${h4(d.start)}` : ''}{d.next != null ? '; then the next disk side' : ''}; the file names are not on the disk</span></span>
+        <button className="btn small" onClick={() => onCopy(spinScript(d, disk.name).join('\n'), 'Copied the load script')}><Icon name="copy" size={14} />Copy script</button>
+      </div>
+      <table className="tbl" aria-label="Spindle load script"><thead><tr><th>Job</th><th>Loads</th><th>Bytes</th><th>File</th><th>Notes</th><th /></tr></thead><tbody>
+        {d.jobs.flatMap(j => j.chunks.map((c, k) => {
+          const name = spinChunkName(j, c);
+          return (
+            <tr key={`${j.n}-${c.start}`} className={cx(k === 0 && 'job-first')} title={`Open ${name} as a PRG at $${h4(c.start)}`} onClick={() => onOpenChunk(j, c, false)}>
+              <td className="mono">{k === 0 && <>{j.n}{j.labels.map(l => <span key={l} className="pill">{h2(l)}:</span>)}</>}</td>
+              <td className="mono">${h4(c.start)}–${h4(c.end - 1)}</td>
+              <td className="mono">{c.end - c.start}</td>
+              <td className="mono">{name}</td>
+              <td className="muted">{k === 0 && notes(j)}</td>
+              <td><button className="icon-btn" title={`Add ${name} to this project`} aria-label={`Add ${name} to this project`} onClick={e => { e.stopPropagation(); onOpenChunk(j, c, true); }}><Icon name="plus" size={13} /></button></td>
+            </tr>
+          );
+        }))}
+      </tbody></table>
+    </div>
+  );
+}
+
 /** Spindle's effect drivers (spec 8.11f), a row per line of the script they were built from; a row goes to its driver. */
-export function SpindlePanel({ A, R, onNavigate, onCopy }: { A: AnalysisResult; R: RenderResult; onNavigate: (a: Addr) => void; onCopy: (text: string) => void }) {
+function DriversSection({ A, R, onNavigate, onCopy }: { A: AnalysisResult; R: RenderResult; onNavigate: (a: Addr) => void; onCopy: (text: string, what: string) => void }) {
   const D = A.spindle;
-  if (!D.length) return <div className="empty">No Spindle effect drivers: Pefchain puts one after each part's code, and the parts of a trackmo are in memory in a VICE snapshot of it.</div>;
   const link = (a: Addr) => <button className="addr-link" title={`$${h4(a)}`} onClick={e => { e.stopPropagation(); onNavigate(a); }}>{R.labels.get(a)?.name ?? `$${h4(a)}`}</button>;
   const then = (d: SpindleDriver, i: number) => {
     if (d.ends === 'stop') return <span className="muted">the end of the demo</span>;
@@ -113,7 +162,7 @@ export function SpindlePanel({ A, R, onNavigate, onCopy }: { A: AnalysisResult; 
     <div className="xref spindle">
       <div className="xref-head spindle-head">
         <span>{D.length} Spindle effect driver{D.length === 1 ? '' : 's'} (Pefchain), read back as the script they were built from <span className="muted">· the parts are numbered in the order they run; their file names are not in the program</span></span>
-        <button className="btn small" onClick={() => onCopy(spindleScript(D).join('\n'))}><Icon name="copy" size={14} />Copy script</button>
+        <button className="btn small" onClick={() => onCopy(spindleScript(D).join('\n'), 'Copied the Spindle script')}><Icon name="copy" size={14} />Copy script</button>
       </div>
       <table className="tbl" aria-label="Spindle script"><thead><tr><th>Part</th><th>Script line</th><th>Driver</th><th>Routines</th><th>Then</th></tr></thead><tbody>
         {D.map((d, i) => {

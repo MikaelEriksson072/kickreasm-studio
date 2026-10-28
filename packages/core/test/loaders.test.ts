@@ -4,8 +4,8 @@
  * the marks in the source. The programs below are those loops (illegal opcodes as .byte), with a BASIC start that
  * reaches them where the loader is called. */
 import { describe, expect, it } from 'vitest';
-import { analyze, demoProject, makeShowcase, parsePrg, render, verify, type LoaderFinding, type ProjectInput } from '../src';
-import { fromSource } from './helpers/programs';
+import { analyze, demoProject, makeShowcase, openC64File, parsePrg, render, verify, type LoaderFinding, type ProjectInput } from '../src';
+import { fromSource, snapshotOf } from './helpers/programs';
 
 const BASIC = '.pc = $0801\n.byte $0b,$08,$0a,$00,$9e,$32,$30,$36,$31,$00,$00,$00\n.pc = $080d\n';
 const project = (src: string): ProjectInput => ({ name: 'loader', files: [fromSource('loader.prg', BASIC + src)] });
@@ -253,6 +253,20 @@ describe('loaders', () => {
     expect(inst.map(x => [x.id, x.parts.map(p => p.role)])).toEqual([['krill', ['command', 'text']]]);
     // the name alone is any text
     expect(loaders(' rts\n.pc = $2000\n .byte $4b,$52,$49,$4c,$4c,$2e\n')).toEqual([]);
+  });
+
+  it('know Sparkle in the stack of a snapshot, which opens from $0200 without it', () => {
+    // a later Sparkle: inx for dex, ora #$01 for ora #$00
+    const later = SPARKLE.replace(' dex\n', ' inx\n').replace('lastbits: ora #$00', 'lastbits: ora #$01');
+    expect(ids(later)).toEqual(['sparkle']);
+    const vsf = snapshotOf(`.pc = $c000\n jsr $0160\n jmp $c000\n${later.replace(' jsr rcv\n rts\n', '')}`, 0xc000);
+    const open = (zeroPage: boolean) => { const o = openC64File('s.vsf', vsf, { zeroPage }); return analyze({ name: 's', files: [o], entries: o.entries }).loaders; };
+    const [out] = open(false);
+    expect(out).toMatchObject({ id: 'sparkle', sure: 'match' });
+    expect(out.parts).toEqual([{ start: 0x0160, end: 0x0193, role: 'resident', what: 'receive loop (lda $dd00 / sty $dd00), in the stack, which this snapshot is opened without', outside: true }]);
+    // opened with the zero page and the stack, the loop is in the listing like any part
+    const [inside] = open(true);
+    expect(inside.parts.map(p => [p.start, p.role, !!p.outside])).toEqual([[0x0160, 'resident', false]]);
   });
 
   it('know Bitfire, Sparkle and the Covert Bitops loader by their loops', () => {

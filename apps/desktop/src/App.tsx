@@ -6,9 +6,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   bankRange, buildScripts, comparePrg, createProject, cyclePath, d64FileName, detectPacking, makePrg, mergeOverride, portName, portText, deserializeProject, exportFiles, findBlock, h2, h4, kindInfo, lineMove, lineText, MARK_AS, MARK_TYPE, moveBlockKeys,
-  formatOverride, openC64File, overwritesSystemArea, parseVsf, patchSnapshot, editRanges, showcaseProject, parseD64, parsePrg, projectNameFor, rangeCover, readD64File, projectTextFiles, shellWord, SYSTEM_AREA, TOOLCHAIN_KEYS, validLabel, withId,
+  formatOverride, openC64File, overwritesSystemArea, parseVsf, patchSnapshot, editRanges, showcaseProject, parseD64, parsePrg, projectNameFor, rangeCover, readD64File, readSpindleDisk, spinChunkName, projectTextFiles, shellWord, SYSTEM_AREA, TOOLCHAIN_KEYS, validLabel, withId,
   type Addr, type AnalysisResult, type Block, type Bookmark, type BuildScript, type ByteMove, type D64File, type NumberFormat, type Override, type PackingInfo, type PackPrefs, type KickProblem, type ListingLine, type LoadedFile, type Project, type RenderResult,
-  type SerializedProject, type Settings, type Token, type ToolchainSettings, type VerifyResult,
+  type SerializedProject, type Settings, type SpindleChunk, type SpindleDisk, type SpindleJob, type Token, type ToolchainSettings, type VerifyResult,
 } from '@mimir/core';
 import { useProject } from './store/project';
 import { useUi, type Activity } from './store/ui';
@@ -191,9 +191,11 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   /* ---- the mounted .d64 ---- */
   const mountBytes = (name: string, path: string | null, bytes: Uint8Array) => {
     const img = parseD64(bytes);
-    setDisk({ name, path, bytes, img });
+    let spindle: SpindleDisk | null = null;
+    try { spindle = readSpindleDisk(bytes); } catch { /* not one */ }
+    setDisk({ name, path, bytes, img, spindle });
     setUi({ activity: 'explorer' });
-    toast(`Mounted ${name}: "${img.name}", ${img.files.length} file${img.files.length === 1 ? '' : 's'}`, 'ok');
+    toast(`Mounted ${name}: "${img.name}", ${img.files.length} file${img.files.length === 1 ? '' : 's'}${spindle ? `, a Spindle 3 disk with ${spindle.jobs.length} job${spindle.jobs.length === 1 ? '' : 's'}` : ''}`, 'ok');
   };
   const mountDisk = async () => {
     if (!kr) return needDesktop();
@@ -203,6 +205,10 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   const openFromDisk = (f: D64File, add: boolean) => {
     if (!disk) return;
     try { addFiles([withId(parsePrg(d64FileName(f), readD64File(disk.bytes, f)))], add); } catch (e) { toast(`"${f.name}": ${errorText(e)}`, 'err'); }
+  };
+  /** a chunk of a Spindle disk's job, as a PRG at its address */
+  const openChunk = (j: SpindleJob, c: SpindleChunk, add: boolean) => {
+    try { addFiles([withId(parsePrg(spinChunkName(j, c).replace(/\.bin$/, '.prg'), makePrg(c.start, c.bytes)))], add); } catch (e) { toast(errorText(e), 'err'); }
   };
   /* ---- packed programs ---- */
   // a decruncher in front of compressed data (detectPacking), and what unp64 -i says about each file when unp64 is
@@ -983,7 +989,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     ...packing.flatMap((p, i) => (p ? [{ lvl: 'warn' as const, msg: `${A.files[i].name} ${p.verdict === 'packed' ? 'is packed' : 'may be packed'}${p.signature ? ` (${p.signature})` : ''}: ${p.reasons.join('; ')}. Unpack it (Unpack with ${unpackerName}) to see the program.`, addr: p.decruncher, cat: 'packing' }] : [])),
   ], [A, R, kickProblems, packing, unpackerName]);
   // the Spindle script tab is there when the analysis found Spindle's drivers
-  const bottomTabs = BOTTOM_TABS.filter(([k]) => k !== 'spindle' || A.spindle.length > 0);
+  const bottomTabs = BOTTOM_TABS.filter(([k]) => k !== 'spindle' || A.spindle.length > 0 || !!disk?.spindle);
   const shownBottom = bottomTabs.some(([k]) => k === bottom) ? bottom : 'log';
   const blk = cursor != null ? findBlock(A.blocks, cursor) : null;
   // cycle counting: the selection, else the code block at the cursor, along the path with the branches marked taken
@@ -1019,7 +1025,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
           onOpen={() => void openPrgs(false)} onAdd={() => void openPrgs(true)} onDemo={loadDemo}
           quicksave={{ info: qsInfo, follow: followQuicksave, onOpen: () => void openQuicksave(), onFollow: v => setUi({ followQuicksave: v }) }}
           onRemoveFile={i => update('Remove file', d => { d.files.splice(i, 1); })} onSetStart={setStart}
-          disk={disk} packing={packing} onMount={() => void mountDisk()} onEject={ejectDisk} onOpenFromDisk={(f, add) => { openFromDisk(f, add); setDrawer(null); }}
+          disk={disk} packing={packing} onMount={() => void mountDisk()} onEject={ejectDisk} onShowSpindle={() => setUi({ bottom: 'spindle', panelOpen: true })} onOpenFromDisk={(f, add) => { openFromDisk(f, add); setDrawer(null); }}
           bmSel={bmSel} onBmSelect={setBmSel} onBmGo={goBookmark} onBmAdd={() => startBookmark()} onBmEdit={openBookmarkEditor} onBmDelete={deleteBookmark}
           bmEditing={bmEdit != null ? { addr: bmEdit, cursorAt: lineAddr() ?? null, onSave: saveBookmark, onCancel: () => { setBmEdit(null); listRef.current?.focus(); }, onPreview: a => navigate(a, { center: true, listing: true, noHistory: true }) } : null}
           pack={{ A, R, project, cursor, sel, prefs: packPrefs, exomizer: toolchain.exomizerPath, desktop: !!kr, busy: buildBusy, result: packRes, current: packKey,
@@ -1109,7 +1115,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         {tab !== 'spec' && panelOpen && <Splitter dir="h" onDrag={d => setUi({ sizes: { ...useUi.getState().sizes, bottom: Math.max(120, Math.min(520, useUi.getState().sizes.bottom - d)) } })} />}
         {tab !== 'spec' && <section className={cx('bottom', !panelOpen && 'collapsed')} aria-label="Panels">
           <div className="tabs small" role="tablist">
-            {bottomTabs.map(([k, l]) => { const n = k === 'log' ? A.log.length : k === 'problems' ? problems.length : k === 'irqs' ? A.raster.length : k === 'spindle' ? A.spindle.length : null; return (
+            {bottomTabs.map(([k, l]) => { const n = k === 'log' ? A.log.length : k === 'problems' ? problems.length : k === 'irqs' ? A.raster.length : k === 'spindle' ? A.spindle.length + (disk?.spindle?.jobs.length ?? 0) : null; return (
               <button key={k} role="tab" aria-selected={shownBottom === k} className={cx('tab', shownBottom === k && 'on')} onClick={() => setUi({ bottom: k, panelOpen: true })}>{l}{n != null && <span className={cx('count', k === 'problems' && problems.some(p => p.lvl === 'err') && 'bad')}>{n}</span>}</button>); })}
             <span className="grow" />
             <button className="icon-btn panel-toggle" onClick={() => setUi({ panelOpen: !panelOpen })} aria-label={panelOpen ? 'Collapse panel' : 'Expand panel'} title={panelOpen ? 'Collapse panel' : 'Expand panel'}><Icon name="down" size={14} className={panelOpen ? '' : 'flip'} /></button>
@@ -1119,7 +1125,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
             {shownBottom === 'problems' && <ProblemsPanel items={problems} onNavigate={nav} deep={A.deep} on={!!project.settings.deepAnalysis} busy={busy} onDeep={on => update(on ? 'Deep analysis on' : 'Deep analysis off', d => { d.settings.deepAnalysis = on; })} />}
             {shownBottom === 'xrefs' && <XrefPanel A={A} R={R} cursor={cursor} onNavigate={nav} S={S} />}
             {shownBottom === 'irqs' && <RasterPanel A={A} R={R} onNavigate={nav} />}
-            {shownBottom === 'spindle' && <SpindlePanel A={A} R={R} onNavigate={nav} onCopy={t => void copyText(t, 'Copied the Spindle script')} />}
+            {shownBottom === 'spindle' && <SpindlePanel A={A} R={R} disk={disk} onNavigate={nav} onCopy={(t, what) => void copyText(t, what)} onOpenChunk={openChunk} />}
             {shownBottom === 'stats' && <StatsPanel A={A} />}
             {shownBottom === 'build' && <BuildPanel build={build} S={S} names={R.fileNames} stale={stale} busy={buildBusy} onVerify={() => void runVerify()} onRun={() => void runBuild()} onCopy={t => void copyText(t)} />}
           </ErrorBoundary></div>

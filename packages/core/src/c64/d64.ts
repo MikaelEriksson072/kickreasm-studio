@@ -38,7 +38,8 @@ const DIR_TRACK = 18;
 
 export const sectorsOnTrack = (t: number): number => (t <= 17 ? 21 : t <= 24 ? 19 : t <= 30 ? 18 : 17);
 
-function sectorOffset(t: number, s: number, tracks: number): number {
+/** The offset of a sector in an image of `tracks` tracks (without error bytes). */
+export function sectorOffset(t: number, s: number, tracks: number): number {
   if (t < 1 || t > tracks || s < 0 || s >= sectorsOnTrack(t)) throw new Error(`track ${t} sector ${s} is not on the disk`);
   let n = 0;
   for (let i = 1; i < t; i++) n += sectorsOnTrack(i);

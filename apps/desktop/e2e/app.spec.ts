@@ -2188,6 +2188,47 @@ test('the Spindle script: a tab when Pefchain drivers are in memory, a row per s
   });
 });
 
+test('a mounted Spindle 3 disk: its load script in the Spindle script tab, each chunk opened as a PRG', async ({ app, page }) => {
+  // fixtures/d64/spindle-demo.d64 (packages/core/test/spindle-disk.test.ts): 4 jobs, labels 01, 02 and 1f, a jump after
+  // the last one, and the boot program going to $0800
+  await waitForListing(page);
+  await stubDialogs(app, { open: [join(repoDir, 'fixtures/d64/spindle-demo.d64')] });
+  await page.getByRole('button', { name: 'Mount D64…' }).click();
+  await expect(toast(page, 'Mounted spindle-demo.d64: "SPINDLE DEMO", 1 file, a Spindle 3 disk with 4 jobs')).toBeVisible();
+  await expect(page.locator('.disk-spindle')).toContainText('Spindle 3 disk: 4 jobs the loader reads, not files');
+
+  await test.step('the Explorer opens the load script, a row per chunk', async () => {
+    await page.locator('.disk-spindle').getByRole('button', { name: 'Load script' }).click();
+    await expect(page.getByRole('tab', { name: /Spindle script/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.spindle-head').first()).toContainText('Load script of spindle-demo.d64 (Spin, Spindle 3): 4 jobs, 6 chunks');
+    const table = page.getByRole('table', { name: 'Spindle load script' });
+    await expect(table.locator('tbody tr td:nth-child(4)')).toHaveText(['job01_0800.bin', 'job01_1000.bin', 'job02_4000.bin', 'job02_6000.bin', 'job03_2000.bin', 'job04_cf00.bin']);
+    await expect(table.locator('tbody tr').nth(4).locator('td').first()).toHaveText('302:1f:');
+    await expect(table.locator('tbody tr').nth(5).locator('td').nth(4)).toHaveText('then jumps to $307a · loads under I/O');
+  });
+
+  await test.step('a row opens its chunk as a PRG, + adds one', async () => {
+    const table = page.getByRole('table', { name: 'Spindle load script' });
+    await table.getByRole('row', { name: /job01_0800/ }).click();
+    await expect(toast(page, 'Loaded job01_0800.prg at $0800')).toBeVisible();
+    await table.getByRole('button', { name: 'Add job02_4000.bin to this project' }).click();
+    await expect(page.locator('.file-name')).toHaveText(['job01_0800.prg', 'job02_4000.prg']);
+    await expect(listing(page).locator('.row', { hasText: 'sta VIC_BORDER_COLOR' }).first()).toBeVisible();
+  });
+
+  await test.step('it copies the script as Spin reads it', async () => {
+    await page.getByRole('button', { name: 'Copy script' }).click();
+    await expect(toast(page, 'Copied the load script')).toBeVisible();
+    const text = (await app.evaluate(({ clipboard }) => clipboard.readText())).replace(/\r\n/g, '\n');
+    expect(text.split('\n').slice(2, 6)).toEqual(['# spin -e 0800', '', 'job01_0800.bin     0800    # $0800-$080a, 11 bytes', 'job01_1000.bin     1000    # $1000-$1257, 600 bytes']);
+  });
+
+  await test.step('ejecting the disk takes the tab away', async () => {
+    await page.getByRole('button', { name: 'Eject disk' }).click();
+    await expect(page.getByRole('tab', { name: /Spindle script/ })).toHaveCount(0);
+  });
+});
+
 test('the tab row fits a small window: the listing tools lose their labels, then move into the ⋯ menu', async ({ app, page }) => {
   await waitForListing(page);
   const row = page.locator('main.main > .tabs');

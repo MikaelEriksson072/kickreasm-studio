@@ -461,7 +461,11 @@ export interface AnalysisResult {
 export type LoaderId = 'spindle' | 'krill' | 'bitfire' | 'sparkle' | 'covert' | 'fastloader' | 'tape' | 'kernal';
 /** part of a loader: the code on the C64 that receives the data (resident), the code that runs in the drive, the drive
  *  commands that upload and start it, the code that sends them, a tape loader's code, a KERNAL LOAD call, or its name */
-export interface LoaderPart { start: Addr; end: Addr; role: 'resident' | 'drivecode' | 'command' | 'install' | 'tape' | 'kernal' | 'text'; what: string }
+export interface LoaderPart {
+  start: Addr; end: Addr; role: 'resident' | 'drivecode' | 'command' | 'install' | 'tape' | 'kernal' | 'text'; what: string;
+  /** in a snapshot's zero page or stack, which the project does not open (only the snapshot holds it) */
+  outside?: boolean;
+}
 export interface LoaderFinding {
   id: LoaderId; name: string;
   /** 'match': its own code (or name) was found; 'likely': what loaders do was found */

@@ -39,7 +39,10 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   - the script of a Spindle trackmo: Pefchain builds a small driver after each part from its line of the script, and
     Mimir reads the drivers in memory back into those lines (the part, its routines and the condition that ends it,
     such as `space` or `ed = 0b`). The *Spindle script* tab lists them, and *Copy script* copies them as Pefchain reads
-    them. A VICE snapshot of a running trackmo holds the parts that are loaded.
+    them. A VICE snapshot of a running trackmo holds the parts that are loaded;
+  - the load script of a Spindle 3 disk: Spin crunches each loader call's files onto the disk, and Mimir reads the
+    jobs back, decrunched, so every chunk opens as a PRG at its address. *Copy script* copies the script as Spin
+    reads it (the file names are not on the disk).
 - **A deep analysis that works the problems down.** Tick *Deep analysis* in the Problems tab. Every guess (a routine
   nothing traced reaches, a pointer-table target, an interrupt handler) is then traced on trial and kept only when it
   leads to no problem. Calls into ROM are not followed into the RAM below, and `$01` is followed through the stack.

@@ -91,6 +91,7 @@ Playwright inspector).
 | the Explorer's sections say what they hold and fold up, and stay folded | Files says *1 file*, Loaders *none found*, Program start *$0810*; the Loaders title folds the section (`aria-expanded` false, its text gone, the summary kept), it is still folded after Blocks and back, and opens again |
 | loaders: the Explorer names the loader and lists its parts, which the listing and the source mark | the raster demo has none; `fixtures/prg/loader-demo.prg` shows *Spindle (lft)* (2-bit + ATN …) with its installer, two drive commands, `$0c00–$0cff` on the C64 and its drive code at `$3000`; a part goes to the listing, where `// ==== Spindle (lft): resident page (jsr here to load the next part) ====` and the header's *Spindle* mark it; the analysis log names it and `F7` verifies |
 | the Spindle script: a tab when Pefchain drivers are in memory, a row per script line that goes to its driver | the demo has no *Spindle script* tab; `fixtures/prg/spindle-demo.prg` (the drivers pefchain 3.1 built for five test parts) has one with 6 rows: `part1.pef space`, `part2.pef f0 = 05`, `\| f0 = 20`, `part3.pef -`, `part4.pef @`, `- stay`, then *its \| line* and *the end of the demo*; a row goes to `$1201 · part3_driver`, marked `// ==== Spindle part 3: its driver (script line "part3.pef -") ====`, and `part4_fadeout` to `$1314`; *Copy script* copies the script with `part1.pef     space      # driver $108c: …`; `F7` verifies; the demo again has no such tab and shows the log |
+| a mounted Spindle 3 disk: its load script in the Spindle script tab, each chunk opened as a PRG | `fixtures/d64/spindle-demo.d64` (written by `test/helpers/spindle-disk.ts`) mounts with *a Spindle 3 disk with 4 jobs*; the Explorer's *Load script* opens the tab with *4 jobs, 6 chunks*, the chunks `job01_0800.bin` … `job04_cf00.bin`, job 3's labels `02:` and `1f:` and job 4's *then jumps to $307a · loads under I/O*; a row opens `job01_0800.prg` at `$0800`, + adds `job02_4000.prg`; *Copy script* copies `# spin -e 0800` and a line per chunk; *Eject* takes the tab away |
 | the Raster IRQs panel lists every IRQ handler with its $d012 and $d011 and goes to it | the demo: *1 raster interrupt, 1 handler*, the row `98 ($062)`, `$62`, `$1b`, `irq_08b7`, `$0836`, *main code via $0314*; clicking `irq_08b7` and `$0836` moves the cursor there |
 | the Memory tab finds text as PETSCII and as screen codes, and bytes, and steps through the hits | `mimir` gives *2 matches*; Enter selects `$0949–$094d` (*1 of 2 matches · PETSCII*), Enter again `$0994–$0998` (*screen codes*), Shift+Enter goes back, and 10 bytes are coloured; *Bytes* `8d ?? d0` has hits and *Next match* steps; `8d 2` says *is not a byte* in red; Esc empties the field |
 | the inspector writes a table in binary or decimal and words as numbers, several a row | the colour table at `colors_0939` is *Hex*; *Bin* gives `.byte %00000110, %00001110, %00000011…`, *Bytes per row* 4 gives `.byte %00000110, %00001110, %00000011, %00000001`; `W` makes it words (*Addr*: `.word $0e06`), *Dec* and *Words per row* 4 give `.word 3590, 259, 3587, 6`; `F7` verifies, `Ctrl+Z` twice goes back to `.word $0e06` |
@@ -173,6 +174,7 @@ apps/desktop     Electron app
   electron-builder.yml  Windows packaging (NSIS installer + portable exe)
 docs/spec.md     technical specification
 fixtures/prg     test programs (raster-demo.prg, and the loader, packed and Spindle demos)
+fixtures/d64     disk images (mimir-demo.d64, and spindle-demo.d64, a Spindle 3 disk)
 ```
 
 ## Architecture notes
@@ -380,6 +382,12 @@ the reference as a patch in `test/helpers/reference.ts`):
 26. Spindle's effect drivers (spec 8.11f) are new in the production engine: the code Pefchain 3.x builds from each
     line of its script is read back into the line (the part's routines, its condition, what comes next), its drivers
     are entry points, and the Spindle script tab lists them. None in the 1078 programs of the test corpus.
+27. A VICE snapshot opened from `$0200` still names a known loader whose code is in its zero page or stack (Sparkle's
+    receive loop is at `$0160`): the part is marked `outside`, and the Explorer says how to open it. A later Sparkle
+    (`inx` for `dex`, `ora #$01`) is known too.
+28. Spindle 3 disks (spec 13.5b) are new: `readSpindleDisk` reads a disk's jobs and decrunches them (disk.c and
+    pack.c of Spindle 3.1), and the Spindle script tab lists them for a mounted disk. Checked against disks spin.exe
+    and pefchain.exe built (every chunk byte-identical with its file) and the four sides of Mojo.
 
 Fixes 3–10 were found by the fast-check fuzz test, which covers more inputs (entries, comments, renames, every override
 kind, every setting, two-file projects) than the prototype harness did. Fix 11 was found while writing the e2e tests,

@@ -1,7 +1,8 @@
-import type { Addr, D64Image, KickProblem, LogLevel, VerifyResult } from '@mimir/core';
+import type { Addr, D64Image, KickProblem, LogLevel, SpindleDisk, VerifyResult } from '@mimir/core';
 
-/** The mounted .d64: its directory is listed in the Explorer, and a copy goes into VICE's drive 8 on Build & Run. */
-export interface MountedDisk { name: string; path: string | null; bytes: Uint8Array; img: D64Image }
+/** The mounted .d64: its directory is listed in the Explorer, and a copy goes into VICE's drive 8 on Build & Run;
+ *  `spindle`: its jobs, when it is a Spindle 3 disk (the Spindle script tab lists them) */
+export interface MountedDisk { name: string; path: string | null; bytes: Uint8Array; img: D64Image; spindle: SpindleDisk | null }
 
 /** Selection in the listing/heatmap; `multi` = an explicit range (shift-click, drag, block header, Go to range).
  * `anchor`..`anchorEnd` is the line or block picked first; extending the selection always keeps it whole. */

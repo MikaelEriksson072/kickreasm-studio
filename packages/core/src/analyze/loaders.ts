@@ -10,6 +10,7 @@
 import type { Addr, Block, LoaderFinding, LoaderId, LoaderPart } from '../types';
 import type { Ctx } from './context';
 import { $4 } from '../util/hex';
+import { parseVsf } from '../c64/vsf';
 
 type Pattern = (Set<number> | null)[];
 /** hex bytes, `..` for any byte, `a|b` for either */
@@ -54,8 +55,9 @@ const KNOWN: Known[] = [
   {
     id: 'sparkle', name: 'Sparkle (Sparta/OMG)', how: '2-bit + ATN; the resident part lives at $0160 and $0200',
     signs: [
-      { pat: pat('AD 00 DD 8C 00 DD 4A 4A CA EA A0 C0 0D 00 DD 8C 00 DD 4A 4A'), role: 'resident', what: 'receive loop (lda $dd00 / sty $dd00)' },
-      { pat: pat('2D 00 DD 8D 00 DD 09 00 9D .. .. 50'), role: 'resident', what: 'receive loop (and $dd00 / sta $dd00 / sta buffer,x)' },
+      // dex or inx, ora #$00 or #$01: the versions differ there
+      { pat: pat('AD 00 DD 8C 00 DD 4A 4A CA|E8 EA A0 C0 0D 00 DD 8C 00 DD 4A 4A'), role: 'resident', what: 'receive loop (lda $dd00 / sty $dd00)' },
+      { pat: pat('2D 00 DD 8D 00 DD 09 00|01 9D .. .. 50'), role: 'resident', what: 'receive loop (and $dd00 / sta $dd00 / sta buffer,x)' },
     ],
     text: 'SPARKLE',
   },
@@ -119,6 +121,22 @@ export function findLoaders(ctx: Ctx, blocks: Block[]): LoaderFinding[] {
     if (k.text) for (const e of encodings(k.text)) for (const a of find(e)) if (!inCode(a)) parts.push({ start: a, end: a + e.length, role: 'text', what: `its name, "${k.text.replace(/\.$/, '')}"` });
     // its name alone could be any text: it counts with its code, or (below) next to drive commands
     if (parts.length) findings.push({ id: k.id, name: k.name, sure: 'match', how: k.how, parts: parts.sort((x, y) => x.start - y.start) });
+  }
+  // ---- a snapshot opened from $0200: a known loader's code in the zero page or the stack, which it holds ----
+  for (const f of ctx.files) {
+    if (!f.vsf) continue;
+    let ram: Uint8Array;
+    try { ram = parseVsf(f.vsf).ram; } catch { continue; }
+    for (const k of KNOWN) for (const s of k.signs) {
+      if (s.page || s.fixed) continue;
+      for (let a = 0; a + s.pat.length <= 0x200; a++) {
+        if (!s.pat.every((x, i) => owner[a + i] < 0 && (!x || x.has(ram[a + i])))) continue;
+        const part: LoaderPart = { start: a, end: a + s.pat.length, role: s.role, what: `${s.what}, in the ${a < 0x100 ? 'zero page' : 'stack'}, which this snapshot is opened without`, outside: true };
+        const known = findings.find(x => x.id === k.id);
+        if (known) known.parts.push(part);
+        else findings.push({ id: k.id, name: k.name, sure: 'match', how: k.how, parts: [part] });
+      }
+    }
   }
   const named = (f: LoaderFinding) => f.parts.some(p => p.role !== 'text');
 
@@ -229,7 +247,7 @@ export function findLoaders(ctx: Ctx, blocks: Block[]): LoaderFinding[] {
   if (loads.length) findings.push({ id: 'kernal', name: 'KERNAL LOAD', sure: 'match', how: 'the standard load through $ffd5 (slow, or as fast as a cartridge or JiffyDOS makes it)', parts: loads });
 
   for (const f of findings) {
-    const where = f.parts.filter(p => p.role !== 'text').slice(0, 4).map(p => `${p.role === 'drivecode' ? 'drive code' : p.role === 'command' ? 'drive command' : p.role} ${$4(p.start)}`).join(', ');
+    const where = f.parts.filter(p => p.role !== 'text').slice(0, 4).map(p => `${p.role === 'drivecode' ? 'drive code' : p.role === 'command' ? 'drive command' : p.role} ${$4(p.start)}${p.outside ? ' (not opened: Settings → Analysis → include the zero page and the stack)' : ''}`).join(', ');
     L(f.id === 'kernal' ? 'info' : 'ok', `Loader: ${f.name}${f.sure === 'likely' ? ' (by its traits)' : ''}: ${f.how}; ${where}${f.parts.length > 4 ? ', …' : ''}`, f.parts[0]?.start ?? null, 'loader');
   }
   return findings;
@@ -242,7 +260,7 @@ function merged(parts: LoaderPart[]): LoaderPart[] {
   const out: LoaderPart[] = [];
   for (const p of [...parts].sort((x, y) => x.start - y.start || y.end - x.end)) {
     const gap = p.role === 'resident' ? 32 : p.role === 'command' || p.role === 'text' || p.role === 'kernal' ? -1 : 0;
-    const q = [...out].reverse().find(x => x.role === p.role);
+    const q = [...out].reverse().find(x => x.role === p.role && !x.outside === !p.outside);
     if (q && p.start <= q.end + gap) { q.end = Math.max(q.end, p.end); continue; }
     out.push({ ...p });
   }

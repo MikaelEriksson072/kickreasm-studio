@@ -20,6 +20,8 @@ interface SidebarProps {
   /** set the program start (null: back to the detected one) */
   onSetStart: (a: Addr | null) => void;
   disk: MountedDisk | null; onMount: () => void; onEject: () => void;
+  /** open the Spindle script tab (a Spindle disk's load script) */
+  onShowSpindle: () => void;
   /** per file: packed (or maybe packed), else null */
   packing: (PackingInfo | null)[];
   /** open a file from the mounted disk (`add`: add it to the project) */
@@ -43,7 +45,7 @@ interface QuicksaveProps {
   onOpen: () => void; onFollow: (v: boolean) => void;
 }
 
-export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpen, onAdd, onDemo, onRemoveFile, onSetStart, disk, onMount, onEject, onOpenFromDisk, packing, bmSel, onBmSelect, onBmGo, onBmAdd, onBmEdit, onBmDelete, bmEditing, pack, quicksave }: SidebarProps) {
+export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpen, onAdd, onDemo, onRemoveFile, onSetStart, disk, onMount, onEject, onShowSpindle, onOpenFromDisk, packing, bmSel, onBmSelect, onBmGo, onBmAdd, onBmEdit, onBmDelete, bmEditing, pack, quicksave }: SidebarProps) {
   const [q, setQ] = useState('');
   const [symTab, setSymTab] = useState<'labels' | 'hw'>('labels');
   if (view === 'explorer') {
@@ -72,7 +74,7 @@ export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpe
         </SideSection>
         <LoadersSection A={A} packed={packing.some(p => p?.verdict === 'packed')} onNavigate={onNavigate} />
         <QuicksaveSection {...quicksave} />
-        {disk && <DiskSection disk={disk} onEject={onEject} onOpenFromDisk={onOpenFromDisk} />}
+        {disk && <DiskSection disk={disk} onEject={onEject} onOpenFromDisk={onOpenFromDisk} onShowSpindle={onShowSpindle} />}
         <ProgramStart A={A} R={R} project={project} onNavigate={onNavigate} onSetStart={onSetStart} />
         <SideSection id="map" title="Memory map" summary={`${segs.length} block${segs.length === 1 ? '' : 's'}`}>
           <div className="mmap">
@@ -160,7 +162,7 @@ function QuicksaveSection({ info, follow, onOpen, onFollow }: QuicksaveProps) {
 }
 
 /** The mounted .d64, listed the way the 1541 lists it. A PRG opens with a click; + adds it to the project. */
-function DiskSection({ disk, onEject, onOpenFromDisk }: { disk: MountedDisk; onEject: () => void; onOpenFromDisk: (f: D64File, add: boolean) => void }) {
+function DiskSection({ disk, onEject, onOpenFromDisk, onShowSpindle }: { disk: MountedDisk; onEject: () => void; onOpenFromDisk: (f: D64File, add: boolean) => void; onShowSpindle: () => void }) {
   const { img } = disk;
   return (
     <SideSection id="disk" title="Disk" summary={`"${img.name}"`} actions={<button className="icon-btn" title={`Eject ${disk.name}`} aria-label="Eject disk" onClick={onEject}><Icon name="eject" size={14} /></button>}>
@@ -180,6 +182,12 @@ function DiskSection({ disk, onEject, onOpenFromDisk }: { disk: MountedDisk; onE
         })}
         {!img.files.length && <div className="muted small">No files on this disk.</div>}
       </div>
+      {disk.spindle && (
+        <div className="disk-spindle">
+          <span><b>Spindle 3 disk:</b> {disk.spindle.jobs.length} job{disk.spindle.jobs.length === 1 ? '' : 's'} the loader reads, not files</span>
+          <button className="btn small" onClick={onShowSpindle}>Load script</button>
+        </div>
+      )}
       <div className="side-hint">{img.freeBlocks} blocks free{img.tracks !== 35 ? ` · ${img.tracks} tracks` : ''} · in drive 8 on Build &amp; Run</div>
     </SideSection>
   );
@@ -197,10 +205,14 @@ function LoadersSection({ A, packed, onNavigate }: { A: AnalysisResult; packed: 
           <div className="muted small">{l.how}</div>
           <ul className="loader-parts">
             {l.parts.slice(0, 12).map((p, i) => (
-              <li key={i}><button className="mono" title={`${p.what}\nClick to go there`} onClick={() => onNavigate(p.start)}>${h4(p.start)}–${h4(p.end - 1)}</button><span>{LOADER_ROLE[p.role]}</span></li>
+              <li key={i} className={p.outside ? 'outside' : undefined}>{p.outside
+                ? <span className="mono" title={p.what}>${h4(p.start)}–${h4(p.end - 1)}</span>
+                : <button className="mono" title={`${p.what}\nClick to go there`} onClick={() => onNavigate(p.start)}>${h4(p.start)}–${h4(p.end - 1)}</button>}
+              <span>{LOADER_ROLE[p.role]}{p.outside && ' · not opened'}</span></li>
             ))}
             {l.parts.length > 12 && <li className="muted">and {l.parts.length - 12} more, marked in the listing</li>}
           </ul>
+          {l.parts.some(p => p.outside) && <p className="side-hint">Part of it is in the snapshot's zero page or stack, which is not opened. Tick <i>VICE snapshots: include the zero page and the stack</i> in Settings → Analysis and open the snapshot again to see it.</p>}
         </div>
       )) : <p className="side-hint">{packed ? 'None found: the program is packed, and its loader with it. Unpack it (the notice above the listing) to find it.' : 'No fast, IRQ or tape loader found, and no KERNAL LOAD.'}</p>}
     </SideSection>
