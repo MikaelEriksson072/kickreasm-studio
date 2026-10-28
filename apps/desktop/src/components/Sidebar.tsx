@@ -1,4 +1,6 @@
-/* Sidebar: Explorer (files, the mounted disk, program start, memory map), Blocks (filterable), Symbols (labels, hardware registers), Bookmarks, Pack. */
+/* Sidebar: Explorer (files, the mounted disk, program start, memory map), Blocks (filterable), Symbols (labels, hardware registers), Bookmarks, Pack.
+ * The Explorer's sections are cards that fold up (the user's choice is kept), each with what it holds in a few words
+ * beside its title. */
 import { useMemo, useState } from 'react';
 import { h2, h4, hwSymbol, kindInfo, overwritesSystemArea, parseVsf, SYSTEM_AREA, type Addr, type AnalysisResult, type D64File, type LoaderPart, type PackingInfo, type Project, type RenderResult, type SymbolRef } from '@kickreasm/core';
 import { Icon } from '../lib/icons';
@@ -10,6 +12,7 @@ import type { Activity } from '../store/ui';
 import { BookmarksView, type BookmarkEditing } from './Bookmarks';
 import { MemoryStrip, type CanvasColors } from './Heatmap';
 import { PackView, type PackViewProps } from './Pack';
+import { SideSection } from './SideSection';
 
 interface SidebarProps {
   view: Activity; A: AnalysisResult; R: RenderResult; project: Project; colors: CanvasColors; cursor: Addr | null;
@@ -48,8 +51,11 @@ export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpe
     return (
       <div className="side-inner">
         <div className="side-title">Explorer</div>
-        <div className="side-sec">
-          <div className="sec-head"><span>Files</span><span className="grow" /><button className="icon-btn" title="Add PRG to this project" aria-label="Add PRG to this project" onClick={onAdd}><Icon name="plus" size={14} /></button></div>
+        <SideSection id="files" title="Files" summary={`${project.files.length} file${project.files.length === 1 ? '' : 's'}`}
+          actions={<>
+            <button className="btn tiny ghost" onClick={onDemo} title="Load the showcase: a C64 intro with one block of every type and a guided tour (F2)">Demo</button>
+            <button className="icon-btn" title="Add PRG to this project" aria-label="Add PRG to this project" onClick={onAdd}><Icon name="plus" size={14} /></button>
+          </>}>
           {project.files.map((f, i) => (
             <div key={f.id || i} className="file-row" onClick={() => onNavigate(f.load)}>
               <Icon name="doc" size={14} />
@@ -58,15 +64,17 @@ export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpe
               {project.files.length > 1 && <button className="icon-btn" title={`Remove ${f.name}`} aria-label={`Remove ${f.name}`} onClick={e => { e.stopPropagation(); onRemoveFile(i); }}><Icon name="x" size={13} /></button>}
             </div>
           ))}
-          <div className="side-actions"><button className="btn" onClick={onOpen}><Icon name="upload" />Open PRG…</button><button className="btn ghost" onClick={onMount}><Icon name="disk" />Mount D64…</button><button className="btn ghost" onClick={onDemo} title="Load the showcase: a C64 intro with one block of every type and a guided tour (F2)">Demo</button></div>
-          <p className="muted small">Open PRG… also opens VICE snapshots (.vsf). Or drop .prg or .vsf files anywhere in the window (hold Shift to add them), or a .d64 to mount it.</p>
-        </div>
+          <div className="side-actions two">
+            <button className="btn small" onClick={onOpen} title="Open a .prg, or a VICE snapshot (.vsf), as a new project"><Icon name="upload" size={13} />Open PRG…</button>
+            <button className="btn small ghost" onClick={onMount} title="Mount a .d64 disk image and open its files"><Icon name="disk" size={13} />Mount D64…</button>
+          </div>
+          <p className="side-hint">Or drop .prg, .vsf or .d64 files on the window; with Shift they are added.</p>
+        </SideSection>
         <LoadersSection A={A} packed={packing.some(p => p?.verdict === 'packed')} onNavigate={onNavigate} />
         <QuicksaveSection {...quicksave} />
         {disk && <DiskSection disk={disk} onEject={onEject} onOpenFromDisk={onOpenFromDisk} />}
         <ProgramStart A={A} R={R} project={project} onNavigate={onNavigate} onSetStart={onSetStart} />
-        <div className="side-sec">
-          <div className="sec-head"><span>Memory map</span></div>
+        <SideSection id="map" title="Memory map" summary={`${segs.length} block${segs.length === 1 ? '' : 's'}`}>
           <div className="mmap">
             <MemoryStrip A={A} colors={colors} cursor={cursor} onNavigate={onNavigate} />
             <div className="seg-list">
@@ -76,7 +84,7 @@ export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpe
                 </button>); })}
             </div>
           </div>
-        </div>
+        </SideSection>
       </div>
     );
   }
@@ -133,21 +141,21 @@ const savedText = (ms: number) => {
 /** VICE's quicksave snapshot: how to make one in VICE, the newest one, opening it, and opening each new one by itself. */
 function QuicksaveSection({ info, follow, onOpen, onFollow }: QuicksaveProps) {
   const file = info?.path.split(/[\\/]/).pop() || 'C64SC.vsf';
+  const time = info?.found && info.saved ? new Date(info.saved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
   return (
-    <section className="side-sec qs-sec" aria-label="VICE quicksave">
-      <div className="sec-head"><span>VICE quicksave</span></div>
-      <p className="small qs-how">Take the running C64 from VICE into KickReasm: in VICE press <kbd>Alt</kbd>+<kbd>F11</kbd> (Snapshot → Quicksave snapshot), and the snapshot {follow ? 'opens here by itself' : 'can be opened here with F9'}, analysed like a PRG.</p>
+    <SideSection id="quicksave" title="VICE quicksave" className="qs-sec" summary={time ?? 'none yet'}>
+      <p className="side-hint qs-how">In VICE press <kbd>Alt</kbd>+<kbd>F11</kbd> (Snapshot → Quicksave snapshot): the snapshot {follow ? 'opens here by itself' : 'opens here with F9'}, analysed like a PRG.</p>
       <div className="qs-status small" role="status" aria-label="Latest VICE quicksave">
         {info?.found && info.saved
           ? <><Icon name="ok" size={13} className="qs-ok" /><span>Latest: <b>{savedText(info.saved)}</b> <span className="muted mono" title={info.path}>{file}</span></span></>
           : <><Icon name="info" size={13} /><span className="muted">None yet. VICE writes it as <span className="mono" title={info?.path}>{file}</span> in its settings folder.</span></>}
       </div>
       <button className="btn small qs-open" disabled={!!info && !info.found} onClick={onOpen} title="Open the newest quicksave as a new project (Ctrl+Z goes back to this one)"><Icon name="download" size={13} />Open the latest quicksave <kbd>F9</kbd></button>
-      <label className="check small" title="When VICE writes a new quicksave (Alt+F11), it opens here. Ctrl+Z goes back to the project before.">
+      <label className="check small" title="When VICE writes a new quicksave (Alt+F11), it opens here. Ctrl+Z goes back to the project you had.">
         <input type="checkbox" aria-label="Open each new VICE quicksave" checked={follow} onChange={e => onFollow(e.target.checked)} />
-        <span>Open new quicksaves automatically<small className="muted qs-note">Ctrl+Z goes back to the project you had</small></span>
+        <span>Open new quicksaves automatically</span>
       </label>
-    </section>
+    </SideSection>
   );
 }
 
@@ -155,8 +163,7 @@ function QuicksaveSection({ info, follow, onOpen, onFollow }: QuicksaveProps) {
 function DiskSection({ disk, onEject, onOpenFromDisk }: { disk: MountedDisk; onEject: () => void; onOpenFromDisk: (f: D64File, add: boolean) => void }) {
   const { img } = disk;
   return (
-    <div className="side-sec">
-      <div className="sec-head"><span>Disk</span><span className="grow" /><button className="icon-btn" title={`Eject ${disk.name}`} aria-label="Eject disk" onClick={onEject}><Icon name="eject" size={14} /></button></div>
+    <SideSection id="disk" title="Disk" summary={`"${img.name}"`} actions={<button className="icon-btn" title={`Eject ${disk.name}`} aria-label="Eject disk" onClick={onEject}><Icon name="eject" size={14} /></button>}>
       <div className="disk-head mono small" title={disk.path ?? disk.name}><Icon name="disk" size={13} /><span className="disk-title">"{img.name}"</span><span className="muted">{img.id} {img.dosType}</span></div>
       <div className="disk-list" role="list" aria-label={`Files on ${disk.name}`}>
         {img.files.map((f, i) => {
@@ -173,8 +180,8 @@ function DiskSection({ disk, onEject, onOpenFromDisk }: { disk: MountedDisk; onE
         })}
         {!img.files.length && <div className="muted small">No files on this disk.</div>}
       </div>
-      <div className="muted small">{img.freeBlocks} blocks free{img.tracks !== 35 ? ` · ${img.tracks} tracks` : ''} · in drive 8 on Build &amp; Run</div>
-    </div>
+      <div className="side-hint">{img.freeBlocks} blocks free{img.tracks !== 35 ? ` · ${img.tracks} tracks` : ''} · in drive 8 on Build &amp; Run</div>
+    </SideSection>
   );
 }
 
@@ -183,8 +190,7 @@ const LOADER_ROLE: Record<LoaderPart['role'], string> = { resident: 'on the C64'
 /** The fast, IRQ and tape loaders the analysis found (spec 8.11c): what each is, how it works and where its parts are. */
 function LoadersSection({ A, packed, onNavigate }: { A: AnalysisResult; packed: boolean; onNavigate: (a: Addr) => void }) {
   return (
-    <section className="side-sec loader-sec" aria-label="Loaders">
-      <div className="sec-head"><span>Loaders</span></div>
+    <SideSection id="loaders" title="Loaders" className="loader-sec" summary={A.loaders.length ? `${A.loaders.length} found` : 'none found'}>
       {A.loaders.length ? A.loaders.map(l => (
         <div key={l.id} className="loader" aria-label={l.name}>
           <div className="loader-name">{l.name}{l.sure === 'likely' && <span className="pill" title="Found by what loaders do (drive code, drive commands, a receive loop), not by its own code">by its traits</span>}</div>
@@ -196,8 +202,8 @@ function LoadersSection({ A, packed, onNavigate }: { A: AnalysisResult; packed: 
             {l.parts.length > 12 && <li className="muted">and {l.parts.length - 12} more, marked in the listing</li>}
           </ul>
         </div>
-      )) : <p className="muted small">{packed ? 'None found: the program is packed, and its loader with it. Unpack it (the notice above the listing) to find it.' : 'No fast, IRQ or tape loader found, and no KERNAL LOAD.'}</p>}
-    </section>
+      )) : <p className="side-hint">{packed ? 'None found: the program is packed, and its loader with it. Unpack it (the notice above the listing) to find it.' : 'No fast, IRQ or tape loader found, and no KERNAL LOAD.'}</p>}
+    </SideSection>
   );
 }
 
@@ -231,11 +237,10 @@ function ProgramStart({ A, R, project, onNavigate, onSetStart }: Pick<SidebarPro
     setErr(''); setV(''); onSetStart(t.addr);
   };
   return (
-    <div className="side-sec">
-      <div className="sec-head"><span>Program start</span></div>
-      {A.entry != null && <button className="seg-row" onClick={() => onNavigate(A.entry!)}>
+    <SideSection id="start" title="Program start" summary={A.entry != null ? `$${h4(A.entry)}` : 'none'}>
+      {A.entry != null && <button className="seg-row start-at" onClick={() => onNavigate(A.entry!)}>
         <i style={{ background: 'var(--g-code)' }} /><span className="mono">${h4(A.entry)}</span><span className="seg-name">{name ?? ''}</span>
-        <span className="muted small">{user ? 'set by you' : detected ? detected.from : ''}</span>
+        <span className={cx('pill', user && 'user')}>{user ? 'set by you' : detected ? detected.from : ''}</span>
       </button>}
       <div className="start-row">
         <input className="mono" aria-label="Program start address" value={v} placeholder="$0810 or a label" spellCheck={false}
@@ -246,6 +251,6 @@ function ProgramStart({ A, R, project, onNavigate, onSetStart }: Pick<SidebarPro
       </div>
       {err && <div className="err-text small">{err}</div>}
       <div className={cx('small start-vice', vice.warn ? 'warn-text' : 'muted')}><Icon name="play" size={11} />Build &amp; Run: {vice.text}</div>
-    </div>
+    </SideSection>
   );
 }

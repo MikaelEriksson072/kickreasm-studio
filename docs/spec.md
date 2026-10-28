@@ -1311,7 +1311,7 @@ tom inställning behålls.
 |---|---|
 | Titelrad | Öppna, Spara, Ångra/Gör om, kommandosök, Verify, Export, Terminal (13.6), **Build & Run**, tema, inställningar |
 | Aktivitetsrad | Explorer, Blocks, Symbols, Bookmarks (med antal), Pack (med antal intervall), specifikation, kommandopalett |
-| Sidopanel | **Explorer**: filer, monterad disk (13.5), programstart och minneskarta (64 KB-remsa och segmentlista). **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Exomizer (13.8) |
+| Sidopanel | **Explorer**: filer, loaders, VICE-quicksave, monterad disk (13.5), programstart och minneskarta (64 KB-remsa och segmentlista), var och en ett kort vars rubrik fäller ihop det (valet sparas per användare, `sideClosed`) med vad det rymmer bredvid rubriken (*1 file*, *none found*, quicksavens tid, startadressen, antal block). *Demo* och *+* (lägg till en PRG) står i Files rubrik; hjälptexterna är en rad, resten står i knapparnas tips. Pack-vyns sektioner är likadana kort. **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Exomizer (13.8) |
 | Editor | Flikar: **Listing** (interaktiv, virtualiserad; vänsterkolumnen visar adress eller radnummer), **Graphics** (allt minne som tecken, sprites eller bitmappar, 14.5), **Memory** (minnet som VICE-monitorns `m`, `i` och `ii`, 14.6), **main.asm** (Monaco), **SPEC.md** |
 | Inspektor | **Memory map** (256 × 256 heatmap, lägen Type/Bytes/Refs, zoom till laddade sidor), **Block** (intervall, evidens, konfidens, typ, etikett, kommentar), **Preview** (sprite/chars/bitmap, multicolor, text, musik- och rutininfo) |
 | Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Statistics, Build output |
@@ -1367,7 +1367,12 @@ Synlig fokusmarkering, tangentbordsnavigering överallt, `aria`-etiketter på ik
 
 Fliken **Graphics** (även kommandopaletten) ritar hela minnet, oavsett vilka block analysen eller användaren satt, för
 att man ska hitta grafik med ögonen, som i ICU64. Geometri och ritning ligger i `src/lib/gfxview.ts` och testas i
-`test/gfxview.test.ts`. Det finns fem lägen:
+`test/gfxview.test.ts`. **Lägesraden** överst (`ViewModes`, gemensam med Memory) har en knapp per läge med ikon och cellens storlek (*8×8*,
+*24×21*, *320×200*, *40×25*). Det valda läget är ifyllt med accentfärgen, och bredvid står lägets namn med vad vyn
+visar (*Sprites · 64 bytes each · 8 a row · hires · 2×*). Där står också *Go*-fältet. Under den ligger inställningarna i
+grupper med rubrik: *Fonts* (Font per row), *Layout* (per rad, zoom, förskjutning), *Characters* (Screens) och
+*Colours*. I en smal editor döljs först storlekarna och sedan knapparnas namn (ikonerna och raden bredvid står kvar).
+Det finns fem lägen:
 - **Characters:** 8 byte per tecken, 16, 32, 40 (standard, en skärms bredd) eller 64 per rad. Med *Other…* skrivs
   vilket antal som helst från 1 till 128 in. `Enter` eller att lämna fältet tar det, och piltangenterna stegar det. Ett
   sparat 32, den tidigare standarden, blir 40 en gång (`GfxPrefs.v` 2). Ett annat valt antal behålls.
@@ -1463,7 +1468,10 @@ väljer en rad och alla rader och sparar en rad som .png (320 × 8).
 ### 14.6 Minnesvyn (Memory)
 
 Fliken **Memory** (även kommandopaletten) visar det laddade minnet som VICE-monitorn skriver ut det
-(`packages/core/src/c64/monitor.ts`, `src/components/MemoryDump.tsx`):
+(`packages/core/src/c64/monitor.ts`, `src/components/MemoryDump.tsx`). Lägesraden är densamma som i Graphics: *Hex and
+text*, *PETSCII* och *Screen codes*, var och en med monitorns kommando som en tangent (`m`, `i`, `ii`), och bredvid vad vyn
+visar (*Hex and text · 16 bytes a row · upper case*), kommandofältet och *Copy*. Under den grupperna *Layout*, *Text* och
+*Find*:
 - **`m`**: en rad är `>C:0801  0b 08 0a 00  9e 32 30 36  34 00 00 00  00 00 00 20   .....2064...... `, alltså adressen, 16
   byte i grupper om fyra (8 som i en 40-kolumnsmonitor, valbart) och samma byte som text. En kort sista rad fylls ut så att
   textkolumnen står kvar.

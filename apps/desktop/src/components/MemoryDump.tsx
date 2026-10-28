@@ -9,12 +9,15 @@ import {
   type Addr, type AnalysisResult, type FindAs, type MemoryMatch, type MonitorMode, type MonitorRange, type MonitorRow, type RenderResult,
 } from '@kickreasm/core';
 import { Icon } from '../lib/icons';
+import { OptGroup, ViewModes, type ViewMode } from './ViewModes';
 import { cx, groupOfType, ROW } from '../lib/util';
 import type { Sel } from '../lib/types';
 import { useUi, type MonPrefs } from '../store/ui';
 
-const MODES: [MonitorMode, string, string][] = [
-  ['m', 'm', 'Hex and text, as the monitor command m'], ['i', 'i', 'PETSCII text, as i'], ['ii', 'ii', 'Screen codes, as ii'],
+const MODES: ViewMode<MonitorMode>[] = [
+  { key: 'm', label: 'Hex and text', badge: 'm', name: 'Hex and text (m)', title: 'Hex and text, as the monitor command m' },
+  { key: 'i', label: 'PETSCII', badge: 'i', name: 'PETSCII (i)', title: 'PETSCII text, 40 bytes a row, as the monitor command i' },
+  { key: 'ii', label: 'Screen codes', badge: 'ii', name: 'Screen codes (ii)', title: 'Screen codes, 40 bytes a row, as the monitor command ii' },
 ];
 /** what a selection can be marked as from here */
 const MARKS: [string, string][] = [['text', 'Text'], ['textsc', 'Text (screen codes)'], ['bytes', 'Bytes'], ['code', 'Code']];
@@ -207,20 +210,30 @@ export function MemoryDump({ A, R, cursor, sel, onCursor, onSelect, onClear, onM
       </div>);
   }
 
+  const now = <>
+    <b>{MODES.find(m => m.key === mode)!.label}</b>
+    <span>{perRow} bytes a row</span>
+    <span>{lower ? 'lower case' : 'upper case'}</span>
+    {colors && <span>block colours</span>}
+  </>;
   return (
     <div className="gfxv monv" aria-label="Memory as the VICE monitor shows it">
-      <div className="gfxv-bar">
-        <div className="seg" role="group" aria-label="Show memory as">{MODES.map(([k, l, t]) => <button key={k} className={cx('mono', mode === k && 'on')} aria-pressed={mode === k} title={t} onClick={() => set({ mode: k })}>{l}</button>)}</div>
-        {mode === 'm' && <label className="gfxv-field">Per row<select aria-label="Bytes per row" value={prefs.perRow} onChange={e => set({ perRow: +e.target.value as 8 | 16 })}><option value={16}>16</option><option value={8}>8 (40 columns)</option></select></label>}
-        <label className="check gfxv-mc"><input type="checkbox" checked={lower} onChange={e => set({ lower: e.target.checked })} /><span>Lower case</span></label>
-        <label className="check gfxv-mc" title="Colour the bytes by the type of their block, as in the memory map"><input type="checkbox" checked={colors} onChange={e => set({ colors: e.target.checked })} /><span>Block colours</span></label>
-        <span className="grow" />
-        <form className="gfxv-go" onSubmit={e => { e.preventDefault(); run(); }}>
+      <ViewModes label="Show memory as" modes={MODES} value={mode} onChange={k => set({ mode: k })} now={now}
+        aside={<><form className="gfxv-go" onSubmit={e => { e.preventDefault(); run(); }}>
           <input aria-label="Monitor command" className={cx('mono', cmdErr && 'bad')} value={cmd} title={cmdErr ?? 'A VICE monitor command (m 0801 08ff, i 0801, ii 0400 07e7), or an address or label'} placeholder="m 0801 08ff" spellCheck={false}
             onChange={e => { setCmd(e.target.value); setCmdErr(null); }} />
           <button className="btn small" type="submit"><Icon name="target" size={13} />Go</button>
         </form>
-        <div className="mon-find">
+        <button className="btn small" onClick={copy} title={range ? 'Copy the selected bytes as monitor text' : 'Copy all loaded memory as monitor text'}><Icon name="copy" size={13} />{range ? 'Copy selection' : 'Copy all'}</button></>} />
+      <div className="gfxv-bar view-opts">
+        {mode === 'm' && <OptGroup title="Layout">
+          <label className="gfxv-field">Per row<select aria-label="Bytes per row" value={prefs.perRow} onChange={e => set({ perRow: +e.target.value as 8 | 16 })}><option value={16}>16</option><option value={8}>8 (40 columns)</option></select></label>
+        </OptGroup>}
+        <OptGroup title="Text">
+          <label className="check gfxv-mc"><input type="checkbox" checked={lower} onChange={e => set({ lower: e.target.checked })} /><span>Lower case</span></label>
+          <label className="check gfxv-mc" title="Colour the bytes by the type of their block, as in the memory map"><input type="checkbox" checked={colors} onChange={e => set({ colors: e.target.checked })} /><span>Block colours</span></label>
+        </OptGroup>
+        <OptGroup title="Find" className="mon-find">
           <div className="seg" role="group" aria-label="Find as">{FIND_AS.map(([k, l, t]) => <button key={k} className={cx(findAs === k && 'on')} aria-pressed={findAs === k} title={t} onClick={() => setFindAs(k)}>{l}</button>)}</div>
           <input ref={findInput} aria-label="Find in memory" className={cx('mono mon-find-q', 'error' in found && 'bad')} value={query} spellCheck={false}
             placeholder={findAs === 'text' ? 'Find text' : 'a9 00 8d'} title="Enter: the next hit from the cursor, Shift+Enter: the one before (F3 / Shift+F3 in the dump)"
@@ -229,9 +242,7 @@ export function MemoryDump({ A, R, cursor, sel, onCursor, onSelect, onClear, onM
           <button className="icon-btn small" aria-label="Previous match" title="Previous match (Shift+Enter)" disabled={!hits.length} onClick={() => goHit(-1)}><Icon name="up" size={14} /></button>
           <button className="icon-btn small" aria-label="Next match" title="Next match (Enter)" disabled={!hits.length} onClick={() => goHit(1)}><Icon name="down" size={14} /></button>
           <span className={cx('small', 'error' in found ? 'err-text' : 'muted')} role="status" aria-label="Find result">{findStatus}</span>
-          <span className="grow" />
-          <button className="btn small" onClick={copy} title={range ? 'Copy the selected bytes as monitor text' : 'Copy all loaded memory as monitor text'}><Icon name="copy" size={13} />{range ? 'Copy selection' : 'Copy all'}</button>
-        </div>
+        </OptGroup>
       </div>
       {cmdErr && <div className="gfxv-sel err-text small" role="alert">{cmdErr}</div>}
       <div className="gfxv-sel" role="status">

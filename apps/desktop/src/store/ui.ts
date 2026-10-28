@@ -51,13 +51,15 @@ interface UiState {
   cycles: boolean;
   /** a new VICE quicksave (Alt+F11 in VICE) is opened when it is written */
   followQuicksave: boolean;
+  /** the side panel's sections folded up (by id) */
+  sideClosed: string[];
   gfx: GfxPrefs;
   mon: MonPrefs;
   sizes: Sizes;
   set: (patch: Partial<Omit<UiState, 'set'>>) => void;
 }
 
-const PERSIST = ['theme', 'tab', 'panelOpen', 'welcome', 'heatFit', 'gutter', 'cycles', 'followQuicksave', 'gfx', 'mon', 'sizes'] as const;
+const PERSIST = ['theme', 'tab', 'panelOpen', 'welcome', 'heatFit', 'gutter', 'cycles', 'followQuicksave', 'sideClosed', 'gfx', 'mon', 'sizes'] as const;
 
 export const useUi = create<UiState>((set) => ({
   theme: store.get<Theme>('kr.theme', 'dark'),
@@ -71,6 +73,7 @@ export const useUi = create<UiState>((set) => ({
   dataAsCode: false,
   cycles: store.get('kr.cycles', false),
   followQuicksave: store.get('kr.followQuicksave', true),
+  sideClosed: store.get<string[]>('kr.sideClosed', []),
   gfx: gfxPrefs(store.get<Partial<GfxPrefs>>('kr.gfx', {})),
   mon: { ...MON_DEFAULTS, ...store.get<Partial<MonPrefs>>('kr.mon', {}) },
   sizes: store.get<Sizes>('kr.sizes', { side: 272, insp: 312, bottom: 230 }),

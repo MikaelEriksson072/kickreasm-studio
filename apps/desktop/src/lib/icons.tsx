@@ -19,6 +19,8 @@ const ICONS = {
   menu: 'M4 6h16M4 12h16M4 18h16', panel: 'M4 4h16v16H4zM15 4v16', copy: 'M9 9h11v11H9zM15 9V4H4v11h5',
   left: 'M19 12H5M11 6l-6 6 6 6', right: 'M5 12h14M13 6l6 6-6 6', pencil: 'M4 20h4L19.5 8.5l-4-4L4 16z',
   music: 'M9 18V5.5L20 3.5v12.5M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+  grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z', sprite: 'M8 4l2 3h4l2-3M6 7h12v6H6zM9.5 10h.01M14.5 10h.01M6 13l-2 4M18 13l2 4M9 13v4M15 13v4',
+  screen: 'M3 5h18v11H3zM8 20h8M12 16v4', rows: 'M4 4h16v5H4zM4 15h16v5H4zM7.5 6.5h5M7.5 17.5h5',
   image: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9h.01', chevron: 'M9 6l6 6-6 6', down: 'M6 9l6 6 6-6', up: 'M6 15l6-6 6 6', target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   folder: 'M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z',
   disk: 'M4 4h13l3 3v13H4zM8 4v5h8V4M8 20v-6h8v6', eject: 'M12 5l7 8H5zM5 18h14',

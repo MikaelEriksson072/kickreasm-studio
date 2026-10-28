@@ -1630,7 +1630,10 @@ test('the Memory tab shows the program as the VICE monitor does: m, i and ii', a
   await test.step('m: a row is the address, 16 bytes in groups of four and the same bytes as text', async () => {
     await page.getByRole('tab', { name: 'Memory' }).click();
     expect(await row('0801').textContent()).toBe('>C:0801  0b 08 0a 00  9e 32 30 36  34 00 00 00  00 00 00 20   .....2064...... ');
+    // further down, past what the window shows
+    await dump.evaluate(el => { el.scrollTop = 200; });
     await expect(row('0941')).toContainText('KICKREAS');
+    await dump.evaluate(el => { el.scrollTop = 0; });
   });
 
   await test.step('a click puts the cursor on a byte, the arrow keys move it, Shift selects', async () => {
@@ -1660,11 +1663,11 @@ test('the Memory tab shows the program as the VICE monitor does: m, i and ii', a
 
   await test.step('ii shows screen codes, in the lower case set too; i shows PETSCII 40 to a row', async () => {
     await command('ii 0985');
-    await expect(page.getByRole('button', { name: 'ii', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Screen codes (ii)' })).toHaveAttribute('aria-pressed', 'true');
     await expect(row('0985')).toHaveText(/^\*C:0985 {2}HELLO FROM THE KICKREASM STUDIO DEMO/);
-    await page.getByText('Lower case').click();
+    await page.getByText('Lower case', { exact: true }).click();
     await expect(row('0985')).toHaveText(/^\*C:0985 {2}hello from the kickreasm studio demo/);
-    await page.getByText('Lower case').click();
+    await page.getByText('Lower case', { exact: true }).click();
     await command('i 0801');
     await expect(row('0801')).toHaveText(/^>C:0801 {2}\.{5}2064/);
     await expect(row('0829')).toBeVisible();
@@ -1730,7 +1733,7 @@ test('a VICE quicksave (Alt+F11 in VICE) opens by itself, F9 opens it again, Ctr
   await page.getByRole('button', { name: 'Save settings' }).click();
 
   await test.step('the Explorer says how to make one in VICE, and that there is none yet', async () => {
-    await expect(section).toContainText('in VICE press Alt+F11 (Snapshot → Quicksave snapshot), and the snapshot opens here by itself');
+    await expect(section).toContainText('In VICE press Alt+F11 (Snapshot → Quicksave snapshot): the snapshot opens here by itself');
     await expect(status).toContainText('None yet. VICE writes it as C64SC.vsf in its settings folder.');
     await expect(open).toBeDisabled();
   });
@@ -1760,7 +1763,7 @@ test('a VICE quicksave (Alt+F11 in VICE) opens by itself, F9 opens it again, Ctr
 
   await test.step('with following off a new quicksave is only announced, and F9 opens it', async () => {
     await page.getByLabel('Open each new VICE quicksave').uncheck();
-    await expect(section).toContainText('the snapshot can be opened here with F9');
+    await expect(section).toContainText('the snapshot opens here with F9');
     writeFileSync(qs, readFileSync(snapshot));
     utimesSync(qs, new Date(), new Date(Date.now() + 5000));
     await expect(toast(page, 'VICE saved a new quicksave: F9 opens it')).toBeVisible({ timeout: 15_000 });
@@ -2087,6 +2090,26 @@ test('Build & Run restarts a VICE snapshot as it was taken, with the built progr
   expect(log).toContain('the snapshot restarted as it was taken (PC $08c7, $01 = $37), the built program in its RAM');
   // the program is byte-identical, so the snapshot VICE gets is the one that was opened
   expect(readFileSync(started![1])).toEqual(readFileSync(vsf));
+});
+
+test('the Explorer\'s sections say what they hold and fold up, and stay folded', async ({ page }) => {
+  await waitForListing(page);
+  const loaders = page.getByRole('region', { name: 'Loaders' });
+  const toggle = loaders.getByRole('button', { name: 'Loaders' });
+  await expect(page.getByRole('region', { name: 'Files' }).locator('.sec-sum')).toHaveText('1 file');
+  await expect(loaders.locator('.sec-sum')).toHaveText('none found');
+  await expect(page.getByRole('region', { name: 'Program start' }).locator('.sec-sum')).toHaveText('$0810');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(loaders).not.toContainText('No fast, IRQ or tape loader found');
+  await expect(loaders.locator('.sec-sum')).toHaveText('none found');
+  // another view and back: still folded (the choice is kept with the user's other preferences)
+  await page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: 'Blocks' }).click();
+  await page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: 'Explorer' }).click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(loaders).toContainText('No fast, IRQ or tape loader found, and no KERNAL LOAD.');
 });
 
 test('loaders: the Explorer names the loader and lists its parts, which the listing and the source mark', async ({ app, page }) => {

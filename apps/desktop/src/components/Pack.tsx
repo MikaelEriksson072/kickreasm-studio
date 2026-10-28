@@ -5,6 +5,7 @@ import { useEffect, useState, type KeyboardEvent } from 'react';
 import { editRanges, extraProblem, h2, h4, kindInfo, mergeRanges, packProblem, rangeCover, type Addr, type AnalysisResult, type PackPrefs, type Project, type RenderResult } from '@kickreasm/core';
 import type { PackResponse } from '../../shared/ipc';
 import { Icon } from '../lib/icons';
+import { SideSection } from './SideSection';
 import { packCommand, packWarning } from '../lib/pack';
 import { cx, fmtBytes, groupOfKind } from '../lib/util';
 import type { Sel } from '../lib/types';
@@ -89,8 +90,7 @@ export function PackView(p: PackViewProps) {
       {!desktop && <p className="muted small pack-note">Packing runs Exomizer, so it needs the desktop app.</p>}
       {desktop && !exomizer && <div className="pack-note"><p className="muted small">No Exomizer is set. The installed app comes with Exomizer 3.1.1; or set your own.</p><button className="btn small" onClick={p.onSettings}>Settings…</button></div>}
 
-      <div className="side-sec">
-        <div className="sec-head"><span>What to pack</span></div>
+      <SideSection id="pack-what" title="What to pack">
         <div className="seg wide pack-seg" role="tablist" aria-label="What to pack">
           <button role="tab" aria-selected={!prefs.ranges} className={cx(!prefs.ranges && 'on')} onClick={() => prefs.ranges && set({ ranges: null }, 'Pack the whole build')}>Whole build</button>
           <button role="tab" aria-selected={!!prefs.ranges} className={cx(prefs.ranges && 'on')} onClick={() => !prefs.ranges && set({ ranges: selRange ? [{ start: selRange.start, end: selRange.end }] : [] }, 'Pack chosen blocks')}>Chosen blocks</button>
@@ -131,10 +131,9 @@ export function PackView(p: PackViewProps) {
             })}
           </div>
         </>}
-      </div>
+      </SideSection>
 
-      <div className="side-sec">
-        <div className="sec-head"><span>Packed file</span></div>
+      <SideSection id="pack-file" title="Packed file">
         <div className="seg wide pack-seg" role="tablist" aria-label="Kind of packed file">
           <button role="tab" aria-selected={prefs.mode === 'sfx'} className={cx(prefs.mode === 'sfx' && 'on')} title="A program that decrunches itself and starts (exomizer sfx)" onClick={() => set({ mode: 'sfx' }, 'Pack as a self-extracting program')}>Self-extracting</button>
           <button role="tab" aria-selected={prefs.mode === 'mem'} className={cx(prefs.mode === 'mem' && 'on')} title="Crunched data that your own code decrunches (exomizer mem)" onClick={() => set({ mode: 'mem' }, 'Pack as crunched data')}>Crunched data</button>
@@ -179,17 +178,16 @@ export function PackView(p: PackViewProps) {
         <label className="check"><input id="pack-fast" type="checkbox" checked={prefs.fast} onChange={e => set({ fast: e.target.checked }, 'Pack: faster crunching')} /><span>Crunch faster (-C)<small className="muted"> — a little larger</small></span></label>
         <TextField id="pack-extra" label="More Exomizer options" value={prefs.extra} placeholder="-p 4 -Di_line_number=1987" error={extraProblem(prefs.extra)} onCommit={v => set({ extra: v }, 'Pack: options')} />
         <TextField id="pack-out" label="File name" value={prefs.out} placeholder={cmd.out} onCommit={v => set({ out: v }, 'Pack: file name')} />
-      </div>
+      </SideSection>
 
-      <div className="side-sec">
-        <div className="sec-head"><span>Command</span></div>
+      <SideSection id="pack-command" title="Command">
         <pre className="pack-cmd mono" aria-label="Exomizer command">{cmd.text}</pre>
         {problem && <p className="err-text small">{problem}</p>}
         <button className="btn primary pack-go" disabled={!ready} onClick={p.onPack} title="Build and verify with Build & Run's toolchain, then pack the result">
           <Icon name="download" size={14} />{busy ?? 'Pack'}</button>
         <p className="muted small">Pack builds and verifies the program first, like Build &amp; Run, then packs the PRG it built.</p>
         {result && <PackResultCard result={result} fresh={fresh} onRun={p.onRun} onSave={p.onSave} onLog={p.onLog} />}
-      </div>
+      </SideSection>
     </div>
   );
 }

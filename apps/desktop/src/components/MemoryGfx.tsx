@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { artStudioPicture, findBlock, gfxSource, h2, h4, kindInfo, koalaPicture, makePrg, validLabel, type Addr, type AnalysisResult, type BlockKind, type RenderResult } from '@kickreasm/core';
 import { Icon } from '../lib/icons';
+import { OptGroup, ViewModes, type ViewMode } from './ViewModes';
 import { parseGoto } from '../lib/goto';
 import { bitmapAround, builtinFont, byteAt, cellAt, cellOf, cellRange, charsetAround, drawMemory, fontRowsLayout, fontRowStarts, FONT_ROWS, gfxImage, NO_FONT, gfxLayout, rangeRects, rowAddr, screenPointer, spritePointer, type GfxKind, type GfxLayout } from '../lib/gfxview';
 import { C64, C64_NAMES } from '../lib/palette';
@@ -15,7 +16,17 @@ import type { Sel } from '../lib/types';
 import { useUi, type GfxPrefs } from '../store/ui';
 import type { CharRomResult } from '../../shared/ipc';
 
-const KINDS: [GfxKind, string][] = [['chars', 'Characters'], ['sprites', 'Sprites'], ['bitmap', 'Bitmaps'], ['screens', 'Screens'], ['fontrows', 'Font per row']];
+const GFX_MODES: ViewMode<GfxKind>[] = [
+  { key: 'chars', label: 'Characters', icon: 'grid', sub: '8×8', title: 'Memory as characters: 8 bytes, 8 × 8 pixels each' },
+  { key: 'sprites', label: 'Sprites', icon: 'sprite', sub: '24×21', title: 'Memory as sprites: 64 bytes, 24 × 21 pixels each' },
+  { key: 'bitmap', label: 'Bitmaps', icon: 'image', sub: '320×200', title: 'Memory as bitmaps: 8000 bytes, 320 × 200 pixels each' },
+  { key: 'screens', label: 'Screens', icon: 'screen', sub: '40×25', title: 'Memory as screens: 1000 screen codes, 40 × 25 characters each' },
+  { key: 'fontrows', label: 'Font per row', icon: 'rows', title: 'A picture whose character rows each have their own font' },
+];
+/** what the view shows, beside the mode switch (whose buttons say the size) */
+const SHOWS: Record<GfxKind, string> = {
+  chars: '8 bytes each', sprites: '64 bytes each', bitmap: '8000 bytes each', screens: '1000 screen codes each', fontrows: 'a font for each row',
+};
 const COLS: Record<GfxKind, number[]> = { chars: [16, 32, 40, 64], sprites: [4, 8, 16], bitmap: [1], screens: [1, 2, 3], fontrows: [1] };
 /** characters per row can also be typed in, up to this many */
 const MAX_CHAR_COLS = 128;
@@ -197,11 +208,22 @@ export function MemoryGfx({ A, R, cursor, sel, onSelect, onClear, onMark, onShow
     : kind === 'screens' ? { label: 'With the sprite pointers (1 KB)', of: (a: Addr) => ({ start: a, end: a + 0x400 }) }
       : kind === 'fontrows' ? { label: `All ${L.rows} rows`, of: () => ({ start: L.offset, end: rowAddr(L, L.rows) }) } : null;
 
+  const now = <>
+    <b>{GFX_MODES.find(m => m.key === kind)!.label}</b>
+    <span>{SHOWS[kind]}</span>
+    {kind === 'chars' || kind === 'sprites' || kind === 'screens' ? <span>{cols} a row</span> : kind === 'fontrows' ? <span>{rowCount} rows</span> : null}
+    <span>{mc ? 'multicolour' : 'hires'}</span>
+    <span>{zoom}×</span>
+  </>;
   return (
     <div className="gfxv" tabIndex={-1} onKeyDown={key} aria-label="Memory as graphics">
-      <div className="gfxv-bar">
-        <div className="seg" role="group" aria-label="Show memory as">{KINDS.map(([k, l]) => <button key={k} className={cx(kind === k && 'on')} aria-pressed={kind === k} onClick={() => set({ kind: k })}>{l}</button>)}</div>
-        {kind === 'fontrows' && <>
+      <ViewModes label="Show memory as" modes={GFX_MODES} value={kind} onChange={k => set({ kind: k })} now={now}
+        aside={kind !== 'fontrows' && <form className="gfxv-go" onSubmit={e => { e.preventDefault(); go(); }}>
+          <input aria-label="Go to address, label or range" className={cx('mono', gotoErr && 'bad')} value={goto} title={gotoErr ?? 'Go to an address, a label or a range ($2000-$27ff)'} placeholder="$3000, label, range" spellCheck={false} onChange={e => { setGoto(e.target.value); setGotoErr(null); }} />
+          <button className="btn small" type="submit"><Icon name="target" size={13} />Go</button>
+        </form>} />
+      <div className="gfxv-bar view-opts">
+        {kind === 'fontrows' && <OptGroup title="Fonts">
           <AddrField label="Screen codes" aria="First row of the screen" value={rowCodes} labels={R.labels} onSet={a => set({ rowCodes: a })}
             title={`The 40 screen codes every row shows: the first row of the screen${codesLoaded ? '' : `. $${h4(rowCodes)} is not loaded, so the codes are 0-39`}`} />
           <span className="gfxv-field">
@@ -222,33 +244,34 @@ export function MemoryGfx({ A, R, cursor, sel, onSelect, onClear, onMark, onShow
             <input type="checkbox" checked={rowSkip} onChange={e => set({ rowSkip: e.target.checked })} /><span>Skip where no font can be</span></label>
           {fontRows.skipped.length > 0 && <span className="muted small" title={fontRows.skipped.map(z => `$${h4(z.at)}: ${z.why}`).join('\n')}>skipped {fontRows.skipped.map(z => `$${h4(z.at)}`).join(', ')}</span>}
           <label className="gfxv-field">Rows<select aria-label="Rows" value={rowCount} onChange={e => set({ rowCount: +e.target.value })}>{Array.from({ length: FONT_ROWS }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}</select></label>
-        </>}
-        {kind === 'chars' && <CountField value={cols} presets={COLS.chars} max={MAX_CHAR_COLS} aria="Characters per row" onSet={n => set({ charCols: n })} />}
-        {kind !== 'bitmap' && kind !== 'fontrows' && kind !== 'chars' && <label className="gfxv-field">Per row<select aria-label="Cells per row" value={cols} onChange={e => set(kind === 'sprites' ? { spriteCols: +e.target.value } : { screenCols: +e.target.value })}>{COLS[kind].map(n => <option key={n} value={n}>{n}</option>)}</select></label>}
-        {kind === 'screens' && <label className="gfxv-field" title={rom && !rom.found && screenFont.startsWith('rom') ? `VICE's character ROM was not found (looked for ${rom.path || 'it beside the VICE in Settings → Toolchain'}): the built-in letters are drawn` : 'The characters the screen codes are drawn with'}>Charset
-          <select aria-label="Draw screens with" value={screenFont} onChange={e => set({ screenFont: e.target.value })}>
-            <option value="rom">C64 ROM, upper case{rom && !rom.found ? ' (not found)' : ''}</option>
-            <option value="rom-lower">C64 ROM, lower case{rom && !rom.found ? ' (not found)' : ''}</option>
-            <option value="builtin">Built-in letters and digits</option>
-            {charsets.length > 0 && <optgroup label="Charsets found">{charsets.map(b => <option key={b.start} value={`$${h4(b.start)}`}>${h4(b.start)}{R.labels.get(b.start) ? ` ${R.labels.get(b.start)!.name}` : ''}</option>)}</optgroup>}
-            <optgroup label="2 KB of memory at">{Array.from({ length: 32 }, (_, i) => i * 0x800).filter(a => !charsets.some(b => b.start === a)).map(a => <option key={a} value={`$${h4(a)}`}>${h4(a)}</option>)}</optgroup>
-          </select></label>}
-        <label className="gfxv-field">Zoom<select aria-label="Zoom" value={zoom} onChange={e => set({ zoom: +e.target.value })}>{[1, 2, 3, 4].map(z => <option key={z} value={z}>{z}×</option>)}</select></label>
-        <label className="check gfxv-mc"><input type="checkbox" checked={mc} onChange={e => set({ mc: e.target.checked })} /><span>Multicolor</span></label>
-        {(['bg', 'fg', ...(mc ? ['mc1', 'mc2'] : [])] as (keyof GfxPrefs['colors'])[]).map(k => (
-          <label key={k} className="gfxv-field gfxv-color" title={`${k === 'bg' ? 'Background (00)' : k === 'fg' ? (mc ? 'Color 11' : 'Foreground') : k === 'mc1' ? 'Color 01' : 'Color 10'}`}>
-            {k.toUpperCase()}<i style={{ background: C64[colors[k]] }} /><select aria-label={`Color ${k}`} value={colors[k]} onChange={e => set({ colors: { ...colors, [k]: +e.target.value } })}>{C64_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}</select>
-          </label>
-        ))}
-        {kind !== 'fontrows' && <span className="gfxv-field" title="Move the grid by bytes, for data that does not start on a cell boundary">Offset
-          <button className="icon-btn" aria-label="Offset back one byte" onClick={() => set({ offset: offset - 1 })}><Icon name="left" size={13} /></button>
-          <span className="mono">{L.offset}</span>
-          <button className="icon-btn" aria-label="Offset forward one byte" onClick={() => set({ offset: offset + 1 })}><Icon name="right" size={13} /></button></span>}
-        <span className="grow" />
-        {kind !== 'fontrows' && <form className="gfxv-go" onSubmit={e => { e.preventDefault(); go(); }}>
-          <input aria-label="Go to address, label or range" className={cx('mono', gotoErr && 'bad')} value={goto} title={gotoErr ?? 'Go to an address, a label or a range ($2000-$27ff)'} placeholder="$3000, label, range" spellCheck={false} onChange={e => { setGoto(e.target.value); setGotoErr(null); }} />
-          <button className="btn small" type="submit"><Icon name="target" size={13} />Go</button>
-        </form>}
+        </OptGroup>}
+        <OptGroup title="Layout">
+          {kind === 'chars' && <CountField value={cols} presets={COLS.chars} max={MAX_CHAR_COLS} aria="Characters per row" onSet={n => set({ charCols: n })} />}
+          {kind !== 'bitmap' && kind !== 'fontrows' && kind !== 'chars' && <label className="gfxv-field">Per row<select aria-label="Cells per row" value={cols} onChange={e => set(kind === 'sprites' ? { spriteCols: +e.target.value } : { screenCols: +e.target.value })}>{COLS[kind].map(n => <option key={n} value={n}>{n}</option>)}</select></label>}
+          <label className="gfxv-field">Zoom<select aria-label="Zoom" value={zoom} onChange={e => set({ zoom: +e.target.value })}>{[1, 2, 3, 4].map(z => <option key={z} value={z}>{z}×</option>)}</select></label>
+          {kind !== 'fontrows' && <span className="gfxv-field" title="Move the grid by bytes, for data that does not start on a cell boundary">Offset
+            <button className="icon-btn" aria-label="Offset back one byte" onClick={() => set({ offset: offset - 1 })}><Icon name="left" size={13} /></button>
+            <span className="mono">{L.offset}</span>
+            <button className="icon-btn" aria-label="Offset forward one byte" onClick={() => set({ offset: offset + 1 })}><Icon name="right" size={13} /></button></span>}
+        </OptGroup>
+        {kind === 'screens' && <OptGroup title="Characters">
+          <label className="gfxv-field" title={rom && !rom.found && screenFont.startsWith('rom') ? `VICE's character ROM was not found (looked for ${rom.path || 'it beside the VICE in Settings → Toolchain'}): the built-in letters are drawn` : 'The characters the screen codes are drawn with'}>Charset
+            <select aria-label="Draw screens with" value={screenFont} onChange={e => set({ screenFont: e.target.value })}>
+              <option value="rom">C64 ROM, upper case{rom && !rom.found ? ' (not found)' : ''}</option>
+              <option value="rom-lower">C64 ROM, lower case{rom && !rom.found ? ' (not found)' : ''}</option>
+              <option value="builtin">Built-in letters and digits</option>
+              {charsets.length > 0 && <optgroup label="Charsets found">{charsets.map(b => <option key={b.start} value={`$${h4(b.start)}`}>${h4(b.start)}{R.labels.get(b.start) ? ` ${R.labels.get(b.start)!.name}` : ''}</option>)}</optgroup>}
+              <optgroup label="2 KB of memory at">{Array.from({ length: 32 }, (_, i) => i * 0x800).filter(a => !charsets.some(b => b.start === a)).map(a => <option key={a} value={`$${h4(a)}`}>${h4(a)}</option>)}</optgroup>
+            </select></label>
+        </OptGroup>}
+        <OptGroup title="Colours">
+          <label className="check gfxv-mc"><input type="checkbox" checked={mc} onChange={e => set({ mc: e.target.checked })} /><span>Multicolor</span></label>
+          {(['bg', 'fg', ...(mc ? ['mc1', 'mc2'] : [])] as (keyof GfxPrefs['colors'])[]).map(k => (
+            <label key={k} className="gfxv-field gfxv-color" title={`${k === 'bg' ? 'Background (00)' : k === 'fg' ? (mc ? 'Color 11' : 'Foreground') : k === 'mc1' ? 'Color 01' : 'Color 10'}`}>
+              {k.toUpperCase()}<i style={{ background: C64[colors[k]] }} /><select aria-label={`Color ${k}`} value={colors[k]} onChange={e => set({ colors: { ...colors, [k]: +e.target.value } })}>{C64_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}</select>
+            </label>
+          ))}
+        </OptGroup>
       </div>
       <div className="gfxv-sel" role="status">
         {range ? <>
