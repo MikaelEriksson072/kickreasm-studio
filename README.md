@@ -30,7 +30,8 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   - charsets, sprites, bitmaps and screens, from `$d018`, `$dd00` and the sprite pointers;
   - lo/hi pointer tables, sine tables, colour tables and text;
   - timing code: a branch that a CIA timer or the raster points into a delay (a stable raster), marked as a delay,
-    with no labels for what its instructions only read to take time;
+    with no labels for what its instructions only read to take time. Spindle's jitter correction, which subtracts
+    the timer from a constant, is one too;
   - routines nothing traced reaches, such as an init that ran before a snapshot was taken;
   - fast loaders: Spindle, Krill's loader, Bitfire, Sparkle, the Covert Bitops loader, and any other one by its drive
     code;

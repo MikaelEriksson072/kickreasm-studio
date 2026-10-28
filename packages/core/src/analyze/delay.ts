@@ -2,9 +2,11 @@
  * `lda $dc06 / eor #$07 / sta bpl+1 / bpl * / lda #$a9 / lda #$a9 / lda $eaa5` waits 8 down to 0 cycles by where
  * CIA 1's timer B stood: the branch enters the 7 bytes after it 0-7 bytes in, and each way in decodes to
  * instructions that end where the delay ends. A timer is CIA 1 or 2's timer A or B ($dc04-$dc07, $dd04-$dd07) or the
- * VIC's raster ($d012); the most the branch skips is the AND or EOR before the store. The delay is decoded from its
- * start (a snapshot may hold another way in), its operands only take time (they get no labels), and the listing and
- * the source mark it. */
+ * VIC's raster ($d012); the most the branch skips is the AND or EOR before the store. Spindle's template subtracts
+ * the timer from a constant instead (`lda #29 / sec / sbc $dc06 / sta *+4 / bpl *+2 / lda #$a9 …`): with nothing to
+ * bound it, the delay ends where every way in first ends at the same place. The delay is decoded from its start (a
+ * snapshot may hold another way in), its operands only take time (they get no labels), and the listing and the
+ * source mark it. */
 import type { Addr, DelaySled } from '../types';
 import type { Ctx } from './context';
 import { CLOBBER_A, OPC, SHIFT_MN } from '../cpu/opcodes';
@@ -23,11 +25,13 @@ const changesA = (mn: string, mode: string) => CLOBBER_A.has(mn) || mn === 'LDA'
 
 /**
  * The timer read the value stored at `w` comes from, in the straight run before it, and the most the value can be
- * (the AND, or else the EOR, between them); null when it does not come from a timer.
+ * (the AND, or else the EOR, between them; null: nothing bounds it); null when it does not come from a timer.
  */
-function timerValue(ctx: Ctx, w: Addr): { read: Addr; timer: Addr; most: number } | null {
+function timerValue(ctx: Ctx, w: Addr): { read: Addr; timer: Addr; most: number | null } | null {
   const { mem, insLen } = ctx;
   let reg = REG[OPC[mem[w]].mn], and: number | null = null, eor: number | null = null, a = w;
+  // a constant less (or plus, or eor) the timer: where it was read, and which
+  let less: { read: Addr; timer: Addr } | null = null;
   for (let n = 0; n < 8; n++) {
     let q = -1;
     for (let k = 1; k <= 3; k++) if (insLen[(a - k) & 0xffff] === k && OPC[mem[(a - k) & 0xffff]].flow === 'seq') q = (a - k) & 0xffff;
@@ -36,10 +40,12 @@ function timerValue(ctx: Ctx, w: Addr): { read: Addr; timer: Addr; most: number 
     const o = OPC[mem[a]], d = decode(mem, a);
     if (!(reg === 'a' ? changesA(o.mn, o.mode) : CHANGES[o.mn] === reg || (o.mn === 'LAX' && reg === 'x'))) continue;
     if (LOAD[o.mn] === reg) {
+      if (less) return o.mode === 'imm' ? { ...less, most: and ?? eor } : null;
       if ((o.mode !== 'abs' && o.mode !== 'zp') || !counts(d.v!)) return null;
       const most = and ?? eor;
       return most == null ? null : { read: a, timer: d.v!, most };
     }
+    if (reg === 'a' && !less && (o.mn === 'SBC' || o.mn === 'ADC' || o.mn === 'EOR') && (o.mode === 'abs' || o.mode === 'zp') && counts(d.v!)) { less = { read: a, timer: d.v! }; continue; }
     // a transfer: the value was in the other register before it
     if (o.mn === 'TXA' || o.mn === 'TYA') { reg = o.mn === 'TXA' ? 'x' : 'y'; continue; }
     if (o.mn === 'TAX' || o.mn === 'TAY') { reg = 'a'; continue; }
@@ -69,6 +75,23 @@ function waysIn(mem: Uint8Array, start: Addr, n: number): number[] | null {
   return out;
 }
 
+/**
+ * With nothing that bounds the branch: the shortest delay (2-63 bytes) whose every way in ends at its end. In a run of
+ * `lda #$a9` the ways in only meet at its last instruction (`lda $eaa5`); a nop after it is no part of it.
+ */
+function slideLength(mem: Uint8Array, loaded: (a: number) => boolean, start: Addr): number | null {
+  for (let n = 2, pc = start; n <= 63 && loaded(start + n - 1); n++) {
+    // the way in at its start: past an instruction that does more than take time there is no delay
+    while (pc < start + n) {
+      const op = OPC[mem[pc]];
+      if (op.flow !== 'seq' || op.jam || op.access === 'write' || op.access === 'rmw') return null;
+      pc += op.len;
+    }
+    if (waysIn(mem, start, n)) return n;
+  }
+  return null;
+}
+
 /** 5.4b: finds the timing code the trace reached (after an evidence pass), decodes its delays from their start. */
 export function findDelays(ctx: Ctx): void {
   const { mem, insLen, codeOwner, xrefs, entryKind, skip, loaded, L } = ctx;
@@ -76,11 +99,12 @@ export function findDelays(ctx: Ctx): void {
     if (ctx.delays.has(s) || OPC[mem[s]].flow !== 'br' || !insLen[s] || !REG[OPC[mem[w]].mn]) continue;
     const wo = OPC[mem[w]];
     if ((wo.mode !== 'abs' && wo.mode !== 'zp') || decode(mem, w).v !== ((s + 1) & 0xffff)) continue;
-    const t = timerValue(ctx, w);
-    if (!t || t.most < 1 || t.most > 63) continue;
-    const start = (s + 2) & 0xffff, end = start + t.most;
+    const v = timerValue(ctx, w);
+    const start = (s + 2) & 0xffff, most = v && (v.most ?? slideLength(mem, loaded, start));
+    if (!v || most == null || most < 1 || most > 63) continue;
+    const t = { ...v, most }, end = start + most;
     if (!loaded(end - 1)) continue;
-    const ways = waysIn(mem, start, t.most);
+    const ways = waysIn(mem, start, most);
     if (!ways) continue;
     // decoded from its start: a snapshot may have been taken with the branch going in further
     const at = decode(mem, s).target!;

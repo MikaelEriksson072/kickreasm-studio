@@ -374,7 +374,9 @@ the reference as a patch in `test/helpers/reference.ts`):
     the program's own bytes from $0800 a bitmap.
 25. Timing code (spec 8.3b) is new in the production engine: a branch whose offset the code sets from a CIA timer or
     the raster enters a delay, which is decoded from its start, marked, and reads nothing the program has (no labels
-    such as `data_eaa5`). 7 delays in 6 of 1060 real programs, all round-tripping.
+    such as `data_eaa5`). A constant less the timer (`lda #c / sec / sbc $dc06`, Spindle's jitter correction)
+    counts too, the delay then ending where its ways in first meet. 15 delays in 11 real programs (7 in 6 before the
+    constant form), all round-tripping.
 26. Spindle's effect drivers (spec 8.11f) are new in the production engine: the code Pefchain 3.x builds from each
     line of its script is read back into the line (the part's routines, its condition, what comes next), its drivers
     are entry points, and the Spindle script tab lists them. None in the 1078 programs of the test corpus.

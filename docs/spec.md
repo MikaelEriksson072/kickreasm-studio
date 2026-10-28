@@ -366,6 +366,25 @@ smc:    bpl *                   // avståndet 0-7 sätts av koden
   fördröjningen räcker, och varje ingång 0…n avkodas till instruktioner som bara tar tid (inga hopp och inga
   skrivningar) och slutar precis vid fördröjningens slut.
 
+Spindles mall (`template/effect.s`) drar i stället timern från en konstant, och inget begränsar värdet:
+
+```
+        lda #39-(10)            // den tidigaste cykeln
+        sec
+        sbc $dc06               // A blir 0-8
+        sta *+4
+        bpl *+2
+        lda #$a9
+        lda #$a9
+        lda #$a9
+        lda $eaa5
+```
+
+En konstant (`lda #`) som en räknare dras från, läggs till eller EOR:as med (`SBC`/`ADC`/`EOR`) räknas också. Utan
+`AND` eller `EOR` efter är fördröjningen den kortaste (2–63 byte) där varje ingång slutar vid dess slut. I en följd av
+`lda #$a9` möts ingångarna först vid den sista instruktionen (`lda $eaa5`), så en `nop` efter räknas inte med. Mallen
+ger 0–9 byte (10–0 cykler).
+
 Då gäller:
 - **Fördröjningen avkodas från början.** En snapshot kan ha avståndet 5 kvar från senaste avbrottet. Spårningen
   har då gått in mitt i, men fördröjningen avkodas om från början, och grenen skrivs `bpl delay_0886+5`.
@@ -377,8 +396,9 @@ Då gäller:
   bricka *delay*. Loggen har en rad per fördröjning.
 
 `AnalysisResult.delays` (`DelaySled`) har grenen, skrivningen, timern, fördröjningens intervall, hur långt grenen går
-i de laddade byten och hur många cykler den kan ta. **Mätt** på 1060 riktiga program: 7 fördröjningar i 6 program,
-alla CIA 1:s timer A med 0–7 byte (8–0 cykler), och alla återskapas byte för byte. **Test:** `test/delay.test.ts`.
+i de laddade byten och hur många cykler den kan ta. **Mätt** på de riktiga programmen i testkorpusen: 15
+fördröjningar i 11 program (7 i 6 innan konstanten minus timern räknades). De använder CIA 1:s timer A och B och
+CIA 2:s timer A, är 7–29 byte, och alla återskapas byte för byte. **Test:** `test/delay.test.ts`, med Spindles mall.
 
 ### 8.4 Evidenspass (konstantpropagering)
 

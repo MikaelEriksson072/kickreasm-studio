@@ -52,6 +52,41 @@ describe('timing code', () => {
     expect(src).toMatch(/bpl delay_c00a\+5\s/);
   });
 
+  // Spindle 3.1's template/effect.s (public domain): a constant less CIA 1's timer B, nothing that bounds it
+  const SPINDLE = `.pc = $c000
+irq: dec $00
+ sta $c100
+ lda #39-10
+ sec
+ sbc $dc06
+ sta smc+1
+smc: bpl delay
+delay: lda #$a9
+ lda #$a9
+ lda #$a9
+ lda $eaa5
+ stx $c101
+ sty $c102
+ lsr $d019
+ inc $00
+ rti
+`;
+
+  it("finds Spindle's jitter correction, which subtracts the timer from a constant: the delay ends where every way in does", () => {
+    const o = snapshot(SPINDLE);
+    const { A, ins, src } = run(o, o.entries!);
+    expect(A.delays).toEqual([{ branch: 0xc00e, by: 0xc00b, read: 0xc008, timer: 0xdc06, start: 0xc010, end: 0xc019, enter: 0, most: 9, cycles: [0, 10], ins: [0xc010, 0xc012, 0xc014, 0xc016] }]);
+    expect(A.labels.has(0xeaa5)).toBe(false);
+    expect(ins(0xc00e)?.cmt).toBe('self-modified by $c00b; 0-9 bytes into the delay, by CIA1_TB_LO ($dc06)');
+    expect(src).toContain('// delay: the bpl at $c00e goes 0-9 bytes into it by CIA1_TB_LO ($dc06), so it takes 10 down to 0 cycles\ndelay_c010:');
+    expect(ins(0xc019)).toMatchObject({ mn: 'STX', cmt: '' });
+    // not from a timer, or with a store in the delay: no delay
+    for (const s of [SPINDLE.replace('sbc $dc06', 'sbc $c103'), SPINDLE.replace('lda #$a9\n lda #$a9\n lda #$a9', 'lda #$a9\n sta $0400\n lda #$a9')]) {
+      const p = snapshot(s);
+      expect(run(p, p.entries!).A.delays, s).toEqual([]);
+    }
+  });
+
   it('leaves a branch set from anything but a counter, or without a delay that every way in ends in, as it was', () => {
     for (const src of [
       STABLE().replace('lda $dc06', 'lda $c100'), // a variable, not a timer
