@@ -941,6 +941,7 @@ Pefchain läser det, med drivern och rutinerna efter `#`.
 | Bokmärke | `B`, högerklick → *Add bookmark…* / *Edit bookmark…*, `+` i bokmärkeslistan, kommandopaletten | En redigerare överst i bokmärkespanelen i sidofältet, med adress, titel och anteckning. Den täcker inte listningen, som visar koden på adressen mitt i bilden. Ändras adressen visar listningen den nya platsen, och *Cursor line* tar raden markören står på (man kan klicka i koden medan man skriver). `Esc` stänger utan att spara. Titeln föreslås från etiketten på adressen, annars `$xxxx`. Adressen kan ändras (bokmärket flyttas) men måste ligga i en laddad fil, och två bokmärken kan inte dela adress. `B` på en rad som redan har ett bokmärke redigerar det. Det gäller också en `.byte`-rad eller ett ihopfällt block som innehåller bokmärkets adress. Raden får en liten bokmärkessymbol i vänsterkanten; ett klick på den öppnar listan med anteckningen. Bokmärken sparas i projektfilen men aldrig i källkoden, och de ångras med `Ctrl+Z` |
 | Bokmärkeslistan | `Ctrl+B`, aktivitetsradens bokmärkesknapp (visar antalet) | Alla bokmärken sorterade efter adress, med adress och titel, och filtrerbara på titel, anteckning och adress. Ett klick visar hela anteckningen med *Go to*, *Edit* och *Delete*, och ett klick till döljer den. Ett dubbelklick går till platsen i koden |
 | Nästa / föregående bokmärke | `F2` / `Shift+F2` | Går till bokmärket efter eller före markörens rad och börjar om från första eller sista. Titeln visas i en toast |
+| Patch | `P`, högerklick → *Patch selection/line/block with new code…*, kommandopaletten | Ny kod skrivs över markeringen (eller raden vid markören) i de laddade bytena; `P` på en patchad rad redigerar patchen (10.2) |
 | Lägg till startpunkt | `E` | Spårning från adressen |
 | Programstart | Explorer → *Program start* (adress eller etikett), högerklick → *Set as program start*, kommandopaletten | Ersätter den detekterade starten (8.2); *Use the detected start* tar bort valet |
 | Korsreferenser | `X` | Bottenpanelen visar alla referenser till raden |
@@ -992,6 +993,55 @@ Kolumnen visar summan efter varje rad (`Σ`). Inspektorns **Cycles** visar:
 Statusraden visar totalen. Markerade brancher är visningsläge och sparas inte i projektet.
 
 **Historik:** i produktion används Immer-patchar (inverterbara) i stället för hela ögonblicksbilder; prototypen sparar 100 ögonblicksbilder, vilket är billigt eftersom filbuffertar delas.
+
+### 10.2 Patchar
+
+En patch är ny kod som användaren skriver över ett intervall av de laddade bytena (`packages/core/src/patch.ts`).
+
+- **Dialogen** (`P` på en markering, högerklick, kommandopaletten) heter *Patch $xxxx–$yyyy* och har:
+  - ett namn (förslag `patch_xxxx`), unikt i projektet och också namnet på PRG-filen;
+  - koden, ifylld med intervallets rader som listningen skriver dem (instruktioner, data, etiketter, kommentarer);
+  - *Fill the rest with*: NOP (`$ea`, standard) eller byten som redan står där;
+  - *Overwrite past the range*.
+- **Kodrutan** ser ut som en assemblerlistning. Till vänster om varje rad står adressen och de första byten den blir:
+  en rad med bara en etikett får sin adress, och en rad som går förbi intervallet står i varningsfärg. Raden med
+  markören och raden med ett fel har var sitt band över hela bredden. Rubriken säger *Code at $xxxx* och tangenterna.
+  - Markören står på första instruktionen när dialogen öppnas.
+  - `Tab` går till nästa instruktion och `Shift+Tab` till föregående, runt till första och sista. En instruktion är en
+    rad med kod efter en eventuell etikett, inte en ensam etikett, en kommentar eller en tom rad.
+  - `Enter` ger en ny rad med instruktionernas indrag.
+  - `Ctrl+Enter` lägger in patchen och `Esc` stänger.
+- **Koden** är Kick Assembler. Den assembleras medan man skriver, med den inbyggda Kick-subset-assemblern, från
+  intervallets start. Programmets etiketter och nollsidevariabler (som listningen namnger dem) och hårdvarunamnen i
+  `include/c64-hardware.asm` går att använda. Ett namn som koden själv definierar vinner. Dialogen visar hur många byte
+  koden blir av intervallets, vad resten fylls med, och byten som skrivs och byten de skriver över. Fel visas med
+  radnummer i koden. Varje rad får en egen etikett före sig när den assembleras (`assemblePatch`), och etikettens
+  värde är radens adress. Därför syns adresserna så långt assemblern kom, även när koden har ett fel eller är för lång.
+- **Längden:** koden får inte bli längre än intervallet. Med *Overwrite past the range* får den skriva vidare över
+  byten efter intervallet, och dialogen säger vilka. Den får aldrig gå utanför filen som håller intervallet eller in i
+  en annan patch, och den måste skrivas i ett stycke från starten (ingen egen `.pc`). Utan kod fylls intervallet med NOP.
+- **Patchen skrivs över filens byte**, och projektet sparar den i `Project.patches`: namnet, intervallet, koden,
+  valen, byten den skrev (`bytes`) och byten den skrev över (`old`), base64 i `.mimir.json`. Analysen och allt annat
+  (verifiering, Build & Run, Pack) ser alltså de patchade bytena.
+- **Listningen markerar** de patchade byten: raderna tonas, byten och kanten står i varningsfärg, och första raden
+  har märket *patch namn*. Källkoden får en kommentarsrad där patchen börjar och slutar
+  (`// ==== patch "namn": $xxxx-$yyyy, N bytes written over the original ====`, `// ==== end of patch "namn" ====`).
+- **Explorer → Patches** (bara när det finns patchar) listar dem efter adress med en på/av-knapp, namn och intervall,
+  och storleken i tipset. Rubriken säger *N on* eller *N of M on*. Ett klick går dit och markerar byten, och knapparna
+  redigerar, sparar som PRG och tar bort.
+- **Av och på** (knappen i Explorer, högerklick, kommandopaletten, `switchPatch`): en avstängd patch lägger tillbaka
+  de ursprungliga byten men står kvar i listan (`off` i projektet, nedtonad i Explorer). Den behåller sitt intervall,
+  så ingen annan patch kan skrivas där. Listningen och källkoden markerar den inte, men exporten skriver ändå dess PRG.
+  Påslagen skrivs den över byten igen.
+- **Redigera:** `P` eller högerklick på en patchad rad öppnar *Edit patch "namn"* med den sparade koden. Patchen
+  skrivs då om över byten den en gång skrev över. En avstängd patch förblir avstängd.
+- **Ta bort** lägger tillbaka de ursprungliga byten. Allt ångras med `Ctrl+Z`.
+- **Spara som PRG:** *Save patch as PRG…* (Explorer, högerklick, kommandopaletten) sparar `namn.prg` med patchens
+  adress som laddadress och byten den skriver.
+- **Exporten** skriver varje patch till `patches/<namn>.prg` och listar dem i README, där avstängda märks *switched
+  off: not in the sources*. `original/` innehåller filerna som de laddades, utan patcharna, medan källkoden och `out/`
+  har de påslagna patcharna i sig.
+- En fil som tas bort ur projektet, eller packas upp, tar sina patchar med sig.
 
 ## 11. Kick Assembler-generatorn
 
@@ -1460,7 +1510,7 @@ tom inställning behålls.
 |---|---|
 | Titelrad | Öppna, Spara, Ångra/Gör om, kommandosök, Verify, Export, Terminal (13.6), **Build & Run**, tema, inställningar |
 | Aktivitetsrad | Explorer, Blocks, Symbols, Bookmarks (med antal), Pack (med antal intervall), specifikation, kommandopalett |
-| Sidopanel | **Explorer**: filer, monterad disk (13.5) direkt under dem, VICE-quicksave, loaders, programstart och minneskarta (64 KB-remsa och segmentlista), var och en ett kort vars rubrik fäller ihop det (valet sparas per användare, `sideClosed`) med vad det rymmer bredvid rubriken (*1 file*, *none found*, quicksavens tid, startadressen, antal block). *Demo* och *+* (lägg till en PRG) står i Files rubrik; hjälptexterna är en rad, resten står i knapparnas tips. Pack-vyns sektioner är likadana kort. **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Exomizer (13.8) |
+| Sidopanel | **Explorer**: filer, monterad disk (13.5) direkt under dem, VICE-quicksave, patchar (10.2, när det finns några), loaders, programstart och minneskarta (64 KB-remsa och segmentlista), var och en ett kort vars rubrik fäller ihop det (valet sparas per användare, `sideClosed`) med vad det rymmer bredvid rubriken (*1 file*, *none found*, quicksavens tid, startadressen, antal block). *Demo* och *+* (lägg till en PRG) står i Files rubrik; hjälptexterna är en rad, resten står i knapparnas tips. Pack-vyns sektioner är likadana kort. **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Exomizer (13.8) |
 | Editor | Flikar: **Listing** (interaktiv, virtualiserad; vänsterkolumnen visar adress eller radnummer), **Graphics** (allt minne som tecken, sprites eller bitmappar, 14.5), **Memory** (minnet som VICE-monitorns `m`, `i` och `ii`, 14.6), **main.asm** (Monaco), **SPEC.md** |
 | Inspektor | **Memory map** (256 × 256 heatmap, lägen Type/Bytes/Refs, zoom till laddade sidor), **Block** (intervall, evidens, konfidens, typ, etikett, kommentar), **Preview** (sprite/chars/bitmap, multicolor, text, musik- och rutininfo) |
 | Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Spindle script (Pefchain-drivers, 8.11f, och en Spindle 3-disks laddskript, 13.5b, när de finns), Statistics, Build output |

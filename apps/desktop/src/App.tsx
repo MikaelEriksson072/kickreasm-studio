@@ -7,7 +7,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import {
   bankRange, buildScripts, comparePrg, createProject, cyclePath, d64FileName, detectPacking, makePrg, mergeOverride, portName, portText, deserializeProject, exportFiles, findBlock, h2, h4, kindInfo, lineMove, lineText, MARK_AS, MARK_TYPE, moveBlockKeys,
   formatOverride, openC64File, overwritesSystemArea, parseVsf, patchSnapshot, editRanges, showcaseProject, parseD64, parsePrg, projectNameFor, rangeCover, readD64File, readSpindleDisk, spinChunkName, projectTextFiles, shellWord, SYSTEM_AREA, TOOLCHAIN_KEYS, validLabel, withId,
-  type Addr, type AnalysisResult, type Block, type Bookmark, type BuildScript, type ByteMove, type D64File, type NumberFormat, type Override, type PackingInfo, type PackPrefs, type KickProblem, type ListingLine, type LoadedFile, type Project, type RenderResult,
+  patchAt, patchEnd, patchesOn, patchFileName, patchPrg, switchPatch, withoutPatch, withPatch,
+  type Addr, type AnalysisResult, type Block, type Bookmark, type BuildScript, type ByteMove, type D64File, type NumberFormat, type Override, type PackingInfo, type PackPrefs, type KickProblem, type ListingLine, type LoadedFile, type Patch, type PatchPlan, type Project, type RenderResult,
   type SerializedProject, type Settings, type SpindleChunk, type SpindleDisk, type SpindleJob, type Token, type ToolchainSettings, type VerifyResult,
 } from '@mimir/core';
 import { useProject } from './store/project';
@@ -29,6 +30,7 @@ import { BOTTOM_TABS, BuildPanel, LogList, ProblemsPanel, RasterPanel, SpindlePa
 import { SettingsModal } from './components/Settings';
 import { CommandPalette, GotoModal } from './components/CommandPalette';
 import { MergeRangeModal } from './components/MergeRange';
+import { PatchModal, type PatchDraft } from './components/Patch';
 import { MemoryGfx } from './components/MemoryGfx';
 import { MemoryDump } from './components/MemoryDump';
 import { bookmarkList } from './components/Bookmarks';
@@ -94,7 +96,9 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   const [sel, setSel] = useState<Sel | null>(null);
   const [scrollReq, setScrollReq] = useState<ScrollReq | null>(null);
   const [heatMode, setHeatMode] = useState<HeatMode>('type');
-  const [modal, setModal] = useState<'settings' | 'goto' | 'palette' | 'merge' | null>(null);
+  const [modal, setModal] = useState<'settings' | 'goto' | 'palette' | 'merge' | 'patch' | null>(null);
+  /** the patch dialog's range and code */
+  const [patchDraft, setPatchDraft] = useState<PatchDraft | null>(null);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [labelError, setLabelError] = useState<string | null>(null);
@@ -247,7 +251,12 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       const out = withId(parsePrg(`${f.name.replace(/\.prg$/i, '')}-unpacked.prg`, r.prg));
       const entry = r.entry != null && r.entry >= out.load && r.entry < out.load + out.bytes.length ? r.entry : null;
       if (project.files.length === 1) { replace({ ...createProject({ name: projectNameFor(out.name), files: [out], settings: project.settings }), entryPoint: entry }); resetView(); }
-      else update(`Unpack ${f.name}`, d => { d.files[i] = out; });
+      else update(`Unpack ${f.name}`, d => {
+        // a patch written over the packed file has nothing to stand on in the unpacked one
+        const was = d.files[i];
+        d.files[i] = out;
+        d.patches = d.patches.filter(p => !(p.start >= was.load && patchEnd(p) <= was.load + was.bytes.length));
+      });
       const at = `$${h4(out.load)}-$${h4(out.load + out.bytes.length - 1)}`;
       setUnpacked({ ok: true, title: `Unpacked ${f.name} with ${unpackerName}${r.packer ? ` (${r.packer})` : ''}: ${out.name}, ${at}${entry != null ? `, starting at $${h4(entry)}${project.files.length === 1 ? ' (set as the program start)' : ''}` : ''}.`, output: `${output}\n\nKept ${r.name} from ${r.dir}` });
       toast(`Unpacked ${f.name}: ${out.bytes.length} bytes at ${at}`, 'ok');
@@ -443,6 +452,62 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     setBmSel(a);
     toast(`Bookmark $${h4(a)}: ${project.bookmarks[a].title}`, 'info');
   };
+  /* ---- patches: new code written over a range of the loaded bytes (spec 10.2) ---- */
+  const patchSpan = (p: Patch) => `$${h4(p.start)}–$${h4(patchEnd(p) - 1)}`;
+  /** the code of start..end as the listing writes it: its instructions and data, and the labels and comment lines in it */
+  const rangeLines = (start: Addr, end: Addr): string[] => {
+    const out: string[] = [];
+    for (const l of R.lines) {
+      if (l.k === 'file' || l.k === 'hdr' || l.a < start || l.a >= end) continue;
+      if ((l.k === 'dir' && !l.n) || (l.k === 'cmt' && (l.zp != null || l.mark))) continue;
+      out.push(lineText(l, S));
+    }
+    while (out.length && !out[0].trim()) out.shift();
+    while (out.length && !out[out.length - 1].trim()) out.pop();
+    return out;
+  };
+  const editPatch = (p: Patch) => {
+    setPatchDraft({ start: p.start, end: p.end, name: p.name, source: p.source, fill: p.fill, over: p.over, id: p.id });
+    setModal('patch');
+  };
+  /** P: the selection, else the line at the cursor (a range with a patch in it edits that patch) */
+  const startPatch = (range?: Range | null) => {
+    const r = range ?? (sel && sel.multi && sel.end > sel.start ? { start: sel.start, end: sel.end } : curLine && ('n' in curLine && curLine.n > 0 || curLine.k === 'hdr') ? lineRange(curLine) : null);
+    if (!r) { toast('Select the lines to patch, or put the cursor on one', 'info'); return; }
+    const hit = project.patches.filter(p => p.start < r.end && patchEnd(p) > r.start);
+    if (hit.length === 1) { editPatch(hit[0]); return; }
+    if (hit.length > 1) { toast(`The selection holds ${hit.length} patches (${hit.map(p => `"${p.name}"`).join(', ')}): edit them one at a time`, 'warn'); return; }
+    if (A.owner[r.start] < 0) { toast(`$${h4(r.start)} is not part of any loaded file`, 'warn'); return; }
+    setPatchDraft({ start: r.start, end: r.end, name: `patch_${h4(r.start)}`, source: rangeLines(r.start, r.end).join('\n'), fill: 'nop', over: false });
+    setModal('patch');
+  };
+  const closePatch = () => { setModal(null); setPatchDraft(null); setTimeout(() => listRef.current?.focus(), 0); };
+  const savePatchPlan = (plan: PatchPlan) => {
+    const p = plan.patch, was = project.patches.some(x => x.id === p.id), w = withPatch(project, p);
+    update(`${was ? 'Edit patch' : 'Patch'} "${p.name}" ${patchSpan(p)}`, d => { d.files = w.files; d.patches = w.patches; });
+    closePatch();
+    toast(p.off ? `Patch "${p.name}" saved; it is switched off (Explorer → Patches switches it on)`
+      : `Patch "${p.name}" written over ${patchSpan(p)} (${p.bytes.length} byte${p.bytes.length === 1 ? '' : 's'}): the listing marks it, Ctrl+Z takes it back`, 'ok');
+  };
+  const removePatch = (p: Patch) => {
+    const w = withoutPatch(project, p.id);
+    update(`Remove patch "${p.name}"`, d => { d.files = w.files; d.patches = w.patches; });
+    toast(`Patch "${p.name}" removed${p.off ? '' : `: ${patchSpan(p)} has its bytes back`}`, 'ok');
+  };
+  /** off: the bytes it wrote over come back, and it stays in the list; on: it is written again */
+  const switchOnePatch = (p: Patch, on: boolean) => {
+    const w = switchPatch(project, p.id, on);
+    update(`Switch ${on ? 'on' : 'off'} patch "${p.name}"`, d => { d.files = w.files; d.patches = w.patches; });
+    toast(on ? `Patch "${p.name}" is on: written over ${patchSpan(p)}` : `Patch "${p.name}" is off: ${patchSpan(p)} has its original bytes`, 'ok');
+  };
+  const savePatchPrg = async (p: Patch) => {
+    if (!kr) return needDesktop();
+    try {
+      const r = await kr.saveFile({ name: patchFileName(p.name), bytes: patchPrg(p), title: `Save patch "${p.name}" as PRG` });
+      if (r) toast(`Patch "${p.name}" saved to ${r.path} (loads at $${h4(p.start)})`, 'ok');
+    } catch (e) { toast(`Save failed: ${errorText(e)}`, 'err'); }
+  };
+  const goPatch = (p: Patch) => { navigate(p.start, { center: true, listing: true }); setSel({ start: p.start, end: patchEnd(p), multi: true, anchor: p.start, anchorEnd: patchEnd(p) }); setTimeout(() => listRef.current?.focus(), 0); };
   /* ---- cycle counting: the branches the user marks as taken (view state, not in the project) ---- */
   const [taken, setTaken] = useState<ReadonlySet<Addr>>(() => new Set());
   const toggleTaken = (pc: Addr) => setTaken(t => { const n = new Set(t); if (n.has(pc)) n.delete(pc); else n.add(pc); return n; });
@@ -802,6 +867,11 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     { id: 'merge-prev', label: 'Merge the block at the cursor with the previous block', run: () => mergeBlock('prev') },
     { id: 'merge-next', label: 'Merge the block at the cursor with the next block', run: () => mergeBlock('next') },
     { id: 'merge-range', label: 'Merge range into one block… (start, end, block type)', key: 'M', run: () => setModal('merge') },
+    { id: 'patch', label: 'Patch the selection (or the cursor line) with new code… (a patch on it: edit it)', key: 'P', run: () => startPatch() },
+    ...project.patches.flatMap(p => [
+      { id: `patch-switch-${p.id}`, label: `Switch ${p.off ? 'on' : 'off'} patch "${p.name}" (${patchSpan(p)})`, run: () => switchOnePatch(p, !!p.off) },
+      { id: `patch-save-${p.id}`, label: `Save patch "${p.name}" (${patchSpan(p)}) as PRG…`, run: () => void savePatchPrg(p) },
+    ]),
     { id: 'entry', label: 'Add entry point at cursor', key: 'E', run: addEntry },
     { id: 'start', label: 'Set the program start to the cursor line', run: () => { const a = lineAddr(); if (a != null) setStart(a); } },
     ...(project.entryPoint != null ? [{ id: 'start-clear', label: `Clear the program start $${h4(project.entryPoint)} (Build & Run starts the program with RUN)`, run: () => setStart(null) }] : []),
@@ -884,7 +954,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         default: break;
       }
       const key = e.key.length === 1 ? e.key.toUpperCase() : e.key;
-      const single: Record<string, string> = { B: 'bookmark', F: 'fold', G: 'goto', M: 'merge-range', N: 'rename', ';': 'comment', '/': 'note-line', '*': 'note-block', U: 'auto', E: 'entry', X: 'xrefs', C: 'mark-code', D: 'mark-bytes', W: 'mark-words', T: 'mark-text' };
+      const single: Record<string, string> = { B: 'bookmark', F: 'fold', G: 'goto', M: 'merge-range', P: 'patch', N: 'rename', ';': 'comment', '/': 'note-line', '*': 'note-block', U: 'auto', E: 'entry', X: 'xrefs', C: 'mark-code', D: 'mark-bytes', W: 'mark-words', T: 'mark-text' };
       if (single[key]) run(single[key]);
     };
     window.addEventListener('keydown', onKey);
@@ -934,6 +1004,18 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
           ...(has ? [{ label: 'Remove bookmark', run: () => deleteBookmark(at!) }] : []),
         ]; })(),
         { sep: true },
+        ...(() => {
+          // a patched line: its patch; otherwise new code over the selection, the line or the block of a header
+          const p = l.a != null ? patchAt(project.patches, l.a) : undefined;
+          if (p) return [
+            { label: `Edit patch "${p.name}"…`, key: 'P', run: () => editPatch(p) },
+            { label: p.off ? `Switch patch "${p.name}" on` : `Switch patch "${p.name}" off (the original bytes come back)`, run: () => switchOnePatch(p, !!p.off) },
+            { label: `Save patch "${p.name}" as PRG…`, run: () => void savePatchPrg(p) },
+            { label: `Remove patch "${p.name}"${p.off ? '' : ' (the original bytes come back)'}`, run: () => removePatch(p) },
+          ];
+          const r = inSel && sel ? { start: sel.start, end: sel.end } : ('n' in l && l.n > 0) || l.k === 'hdr' ? lineRange(l) : null;
+          return r ? [{ label: inSel ? 'Patch selection with new code…' : l.k === 'hdr' ? 'Patch block with new code…' : 'Patch line with new code…', key: 'P', run: () => startPatch(r) }] : [];
+        })(),
         { label: inSel ? 'Mark selection as' : 'Mark from here as', children: MARK_AS.map(m => ({ label: m.label, key: m.key, run: () => { if (range) mark(m.id, range); } })) },
         { label: 'Clear override', key: 'U', run: () => { if (range) clearOverride(range); } },
         ...([['prev', 'previous'], ['next', 'next']] as const).flatMap(([dir, word]) => { const m = mergeOverride(A, l.a, dir); return m ? [{ label: `Merge with ${word} block (${kindInfo(m.other.type).label}) → ${kindInfo(m.into).label}`, run: () => mergeBlock(dir, l.a) }] : []; }),
@@ -1024,7 +1106,12 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         <Sidebar view={activity} A={A} R={R} project={project} colors={colors} cursor={cursor} onNavigate={a => { nav(a); setDrawer(null); }}
           onOpen={() => void openPrgs(false)} onAdd={() => void openPrgs(true)} onDemo={loadDemo}
           quicksave={{ info: qsInfo, follow: followQuicksave, onOpen: () => void openQuicksave(), onFollow: v => setUi({ followQuicksave: v }) }}
-          onRemoveFile={i => update('Remove file', d => { d.files.splice(i, 1); })} onSetStart={setStart}
+          onRemoveFile={i => update('Remove file', d => {
+            d.files.splice(i, 1);
+            // a patch goes with the file it was written over
+            d.patches = d.patches.filter(p => d.files.some(f => p.start >= f.load && patchEnd(p) <= f.load + f.bytes.length));
+          })} onSetStart={setStart}
+          patches={{ list: project.patches, onGo: goPatch, onEdit: editPatch, onSwitch: switchOnePatch, onSave: p => void savePatchPrg(p), onRemove: removePatch }}
           disk={disk} packing={packing} onMount={() => void mountDisk()} onEject={ejectDisk} onShowSpindle={() => setUi({ bottom: 'spindle', panelOpen: true })} onOpenFromDisk={(f, add) => { openFromDisk(f, add); setDrawer(null); }}
           bmSel={bmSel} onBmSelect={setBmSel} onBmGo={goBookmark} onBmAdd={() => startBookmark()} onBmEdit={openBookmarkEditor} onBmDelete={deleteBookmark}
           bmEditing={bmEdit != null ? { addr: bmEdit, cursorAt: lineAddr() ?? null, onSave: saveBookmark, onCancel: () => { setBmEdit(null); listRef.current?.focus(); }, onPreview: a => navigate(a, { center: true, listing: true, noHistory: true }) } : null}
@@ -1096,7 +1183,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
               <Listing lines={view.lines} lineNo={view.lineNo} folded={folded} hidden={view.hidden} onToggleFold={toggleFold} excluded={excludedSet} A={A} lineOf={lineOf} cursor={cursor} picked={pickedLine} sel={sel} onClickLine={onClickLine} onDragTo={l => { if (extendTo(l)) setCursor(l.a); }} onMove={moveInto} onToken={onToken} onContext={onContext}
                 scrollReq={scrollReq} editing={editing} onCommitEdit={commitEdit} onCancelEdit={() => { setEditing(null); listRef.current?.focus(); }}
                 labelError={labelError} setLabelError={setLabelError} listRef={listRef} gutter={gutter} bookmarks={project.bookmarks} onBookmark={a => showBookmarks(a)}
-                cycles={cycles ? { path, taken, onToggle: toggleTaken } : null} />
+                patches={patchesOn(project.patches)} cycles={cycles ? { path, taken, onToggle: toggleTaken } : null} />
             </>}
             <Suspense fallback={<div className="empty">Loading…</div>}>
               {tab === 'source' && <SourceView R={R} A={A} S={S} path={srcPath || `${R.fileNames[0]}.asm`} setPath={setSrcPath} cursor={cursor} onNavigate={(a, o) => navigate(a, o)} theme={theme} extraFiles={extraFiles} problems={kickProblems} onCopy={t => void copyText(t)} onExport={() => void exportProject()}
@@ -1151,6 +1238,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       {modal === 'goto' && <GotoModal R={R} onGo={a => { setModal(null); nav(a); }} onSelect={(s, e) => { setModal(null); selectRange(s, e); }} onClose={() => setModal(null)} />}
       {modal === 'palette' && <CommandPalette commands={commands} onClose={() => setModal(null)} />}
       {modal === 'merge' && <MergeRangeModal A={A} R={R} cursor={cursor} sel={sel} onMerge={mergeRangeInto} onClose={() => setModal(null)} />}
+      {modal === 'patch' && patchDraft && <PatchModal A={A} R={R} project={project} draft={patchDraft} onApply={savePatchPlan} onClose={closePatch} />}
       <div className="toasts" aria-live="polite">{toasts.map(t => <div key={t.id} className={cx('toast', `t-${t.kind}`)}><Icon name={LVL_ICON[t.kind] || 'info'} size={15} />{t.msg}</div>)}</div>
     </div>
   );

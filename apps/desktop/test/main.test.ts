@@ -216,6 +216,23 @@ describe('schemas', () => {
     expect(serializedProjectSchema.parse(JSON.parse(JSON.stringify(serializeProject(demoProject())))).files[0].vsf).toBeUndefined();
   });
 
+  it('reads patches, and older files without them; the bytes written and written over go together', () => {
+    const patch = { id: 'a1', name: 'red border', start: 0x091e, end: 0x0926, source: '  lda #$02\n  sta $d020', fill: 'nop' as const, over: false,
+      bytes: Uint8Array.of(0xa9, 0x02, 0x8d, 0x20, 0xd0, 0xea, 0xea, 0xea), old: Uint8Array.of(0xad, 0x1b, 0xd4, 0x29, 0x0f, 0x8d, 0xe7, 0xdb) };
+    const p = { ...demoProject(), patches: [patch] };
+    expect(projectSchema.safeParse(p).success).toBe(true);
+    expect(projectSchema.safeParse({ ...p, patches: [{ ...patch, old: patch.old.subarray(1) }] }).success).toBe(false);
+    const json = JSON.parse(JSON.stringify(serializeProject(p)));
+    const read = deserializeProject(serializedProjectSchema.parse(json) as SerializedProject);
+    expect(read.patches.map(x => ({ ...x, id: 'a1' }))).toEqual([patch]);
+    expect(serializedProjectSchema.safeParse({ ...json, patches: [{ ...json.patches[0], old: 'AAA=' }] }).success).toBe(false);
+    // one switched off keeps that
+    const off = JSON.parse(JSON.stringify(serializeProject({ ...p, patches: [{ ...patch, off: true }] })));
+    expect(deserializeProject(serializedProjectSchema.parse(off) as SerializedProject).patches[0].off).toBe(true);
+    delete json.patches;
+    expect(serializedProjectSchema.parse(json).patches).toEqual([]);
+  });
+
   it('reads bank zones, and older files without them', () => {
     const p = { ...demoProject(), bankZones: [{ start: 0x0810, end: 0x0820, port: 0x34 }, { start: 0x0900, end: 0x0910, vicBank: 2 }, { start: 0x0810, end: 0x0818, port: null }] };
     const json = JSON.parse(JSON.stringify(serializeProject(p)));

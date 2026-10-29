@@ -2382,3 +2382,132 @@ test('the Memory tab finds text as PETSCII and as screen codes, and bytes, and s
     await expect(q).toHaveValue('');
   });
 });
+
+test('patch: new code over the selected lines, marked as patched, saved as a PRG, exported, removed', async ({ workDir: work, app, page }) => {
+  await waitForListing(page);
+  await stubDialogs(app, { open: [join(repoDir, 'fixtures/prg/raster-demo.prg')] });
+  await page.keyboard.press('Control+o');
+  await expect(toast(page, 'Loaded raster-demo.prg at $0801')).toBeVisible();
+  const dialog = page.getByRole('dialog');
+  const code = dialog.locator('#patch-code');
+  const patchedRow = (adr: string) => listing(page).locator('.row.patched', { has: page.locator('.adr', { hasText: adr }) });
+
+  await test.step('P on a selection opens the patch dialog with the lines\' code', async () => {
+    // fx_091e: lda SID_OSC3 / and #$0f / sta COLOR_RAM+999 (8 bytes), then rts
+    await goTo(page, 'fx_091e');
+    for (let i = 0; i < 2; i++) await page.keyboard.press('Shift+ArrowDown');
+    await expect(statusBar(page)).toContainText('sel $091e–$0925 (8 B)');
+    await page.keyboard.press('p');
+    await expect(dialog).toHaveAccessibleName('Patch $091e–$0925');
+    await expect(code).toHaveValue(/^fx_091e:\n\s*lda SID_OSC3 .*\n\s*and #\$0f\n\s*sta COLOR_RAM\+24\*40\+39 /);
+    await expect(dialog.getByRole('status')).toContainText('8 of 8 bytes');
+    // each line's address and bytes beside it, as in an assembler listing
+    await expect(dialog.locator('.pe-gl')).toHaveText([/^091e$/, /^091e\s*ad 1b d4$/, /^0921\s*29 0f$/, /^0923\s*8d e7 db$/]);
+  });
+
+  await test.step('the cursor starts on the first instruction; Tab goes to the next, Shift+Tab back, Enter keeps the indent', async () => {
+    const caret = () => code.evaluate((el: HTMLTextAreaElement) => el.value.slice(el.selectionStart, el.selectionStart + 3));
+    await expect(code).toBeFocused();
+    expect(await caret()).toBe('lda');
+    await expect(dialog.locator('.pe-gl.cur')).toHaveText(/^091e\s*ad 1b d4$/);
+    await page.keyboard.press('Tab');
+    expect(await caret()).toBe('and');
+    await page.keyboard.press('Tab');
+    expect(await caret()).toBe('sta');
+    await page.keyboard.press('Tab');
+    expect(await caret()).toBe('lda');
+    await page.keyboard.press('Shift+Tab');
+    expect(await caret()).toBe('sta');
+    await expect(code).toBeFocused();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('nop');
+    await expect(code).toHaveValue(/\n        nop$/);
+    // one byte too many: the line past the range is marked
+    await expect(dialog.locator('.pe-gl').last()).toHaveText(/^0926\s*ea$/);
+    await expect(dialog.locator('.pe-gl.past')).toHaveCount(1);
+  });
+
+  await test.step('longer code needs "Overwrite past the range"; shorter code is filled with NOPs', async () => {
+    await code.fill('  lda #$02\n  sta $d020\n  sta $d021\n  nop');
+    await expect(dialog.getByRole('alert')).toHaveText('The code is 9 bytes, 1 more than the 8 of the original. Tick "Overwrite past the range" to write over the bytes after it.');
+    await expect(dialog.getByRole('button', { name: 'Apply patch' })).toBeDisabled();
+    await dialog.locator('#patch-over').check();
+    await expect(dialog.getByRole('status')).toContainText('9 of 8 bytes; 1 byte past the range, over $0926.');
+    await dialog.locator('#patch-over').uncheck();
+    await code.fill('  lda #$02\n  sta $d020');
+    await expect(dialog.getByRole('status')).toContainText('5 of 8 bytes; the other 3 become NOP ($ea).');
+    await expect(dialog.getByRole('status')).toContainText('a9 02 8d 20 d0 ea ea ea');
+    await dialog.locator('#patch-name').fill('red border');
+    await dialog.getByRole('button', { name: 'Apply patch' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(toast(page, 'Patch "red border" written over $091e–$0925 (8 bytes)')).toBeVisible();
+  });
+
+  await test.step('the listing marks the patched bytes, the Explorer lists the patch, F7 verifies', async () => {
+    const rows = await listingRows(page);
+    expect(rowAt(rows, '091e')?.text).toMatch(/^lda #\$02/);
+    expect(rowAt(rows, '0923')?.text).toBe('nop');
+    expect(rows.some(r => r.text === '// ==== patch "red border": $091e-$0925, 8 bytes written over the original ====')).toBe(true);
+    await expect(patchedRow('091e')).toContainText('patch red border');
+    await expect(listing(page).locator('.row.patched')).toHaveCount(5);
+    const list = page.getByRole('list', { name: 'Patches' });
+    await expect(list.getByRole('listitem')).toHaveText([/red border\s*\$091e–\$0925$/]);
+    await page.keyboard.press('F7');
+    await expect(statusBar(page)).toContainText('✓ round-trip verified', { timeout: 90_000 });
+  });
+
+  await test.step('P on a patched line edits the patch', async () => {
+    await goTo(page, '$091e');
+    await page.keyboard.press('p');
+    await expect(dialog).toHaveAccessibleName('Edit patch "red border"');
+    await expect(code).toHaveValue('  lda #$02\n  sta $d020');
+    await code.fill('  inc $d020');
+    await dialog.getByRole('button', { name: 'Save patch' }).click();
+    await expect(dialog).toBeHidden();
+    expect(rowAt(await listingRows(page), '091e')?.text).toMatch(/^inc /);
+    await expect(listing(page).locator('.row.patched')).toHaveCount(6);
+  });
+
+  await test.step('the switch in the Explorer turns the patch off (the original bytes) and on again', async () => {
+    const sw = page.getByRole('switch', { name: 'Patch red border on' });
+    const section = page.locator('.side-sec', { hasText: 'Patches' });
+    await expect(sw).toBeChecked();
+    await sw.uncheck();
+    await expect(toast(page, 'Patch "red border" is off: $091e–$0925 has its original bytes')).toBeVisible();
+    await expect(listing(page).locator('.row.patched')).toHaveCount(0);
+    expect(rowAt(await listingRows(page), '091e')?.text).toMatch(/^lda SID_OSC3/);
+    await expect(section.locator('.sec-sum')).toHaveText('0 of 1 on');
+    await sw.check();
+    await expect(listing(page).locator('.row.patched')).toHaveCount(6);
+    expect(rowAt(await listingRows(page), '091e')?.text).toMatch(/^inc /);
+    await expect(section.locator('.sec-sum')).toHaveText('1 on');
+  });
+
+  await test.step('saved as a PRG, and exported to patches/ with the original files kept', async () => {
+    const want = [0x1e, 0x09, 0xee, 0x20, 0xd0, 0xea, 0xea, 0xea, 0xea, 0xea];
+    const file = join(work, 'red_border.prg');
+    await stubDialogs(app, { save: file });
+    await page.getByRole('button', { name: 'Save patch red border as PRG' }).click();
+    await expect(toast(page, `Patch "red border" saved to ${file} (loads at $091e)`)).toBeVisible();
+    expect([...readFileSync(file)]).toEqual(want);
+    const out = join(work, 'export');
+    await stubDialogs(app, { open: [out] });
+    await page.keyboard.press('Control+e');
+    await expect(toast(page, `Exported verified Kick Assembler project to ${out}`)).toBeVisible({ timeout: 90_000 });
+    expect([...readFileSync(join(out, 'patches', 'red_border.prg'))]).toEqual(want);
+    expect(readFileSync(join(out, 'original', 'raster-demo.prg'))).toEqual(readFileSync(join(repoDir, 'fixtures/prg/raster-demo.prg')));
+    expect(readFileSync(join(out, 'raster-demo.asm'), 'utf8')).toContain('// ==== patch "red border": $091e-$0925, 8 bytes written over the original ====');
+    expect(readFileSync(join(out, 'README.md'), 'utf8')).toContain('`patches/red_border.prg`');
+  });
+
+  await test.step('removed from the Explorer: the original bytes are back; Ctrl+Z brings the patch back', async () => {
+    await page.getByRole('button', { name: 'Remove patch red border' }).click();
+    await expect(toast(page, 'Patch "red border" removed: $091e–$0925 has its bytes back')).toBeVisible();
+    expect(rowAt(await listingRows(page), '091e')?.text).toMatch(/^lda SID_OSC3/);
+    await expect(listing(page).locator('.row.patched')).toHaveCount(0);
+    await expect(page.getByRole('list', { name: 'Patches' })).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    await expect(listing(page).locator('.row.patched')).toHaveCount(6);
+  });
+});

@@ -148,6 +148,32 @@ export interface PackPrefs {
  */
 export interface BankZone { start: Addr; end: Addr; port?: number | null; vicBank?: number | null }
 
+/** What a patch puts in the rest of its range when its code is shorter: NOPs ($ea), or the bytes that were there. */
+export type PatchFill = 'nop' | 'keep';
+
+/**
+ * Code the user wrote over a range of the loaded bytes (spec 10.2), assembled at `start`. It is written over the
+ * file's bytes, and keeps the bytes that were there (`old`), so it can be edited and removed again.
+ */
+export interface Patch {
+  id: string;
+  /** also the name of its PRG file (patches/<name>.prg in the export) */
+  name: string;
+  start: Addr;
+  /** the end of the range it replaces (excluded); with `over` the code may run past it */
+  end: Addr;
+  /** the code as the user wrote it (Kick Assembler) */
+  source: string;
+  fill: PatchFill;
+  over: boolean;
+  /** what it writes from `start`: the code, then the fill */
+  bytes: Uint8Array;
+  /** the bytes it writes over, as many */
+  old: Uint8Array;
+  /** switched off: the files hold `old` instead of `bytes`; it keeps its range and its PRG file */
+  off?: boolean;
+}
+
 export interface Project {
   format: 'mimir-project';
   version: 1;
@@ -168,6 +194,8 @@ export interface Project {
   scripts: Partial<Record<BuildScript, string>>;
   /** how the Pack view packs the project with Exomizer (missing or null: not set up yet) */
   pack?: PackPrefs | null;
+  /** code the user wrote over the loaded bytes, in the order written; `files` holds those that are on */
+  patches: Patch[];
   settings: Settings;
 }
 
@@ -191,6 +219,8 @@ export interface ProjectInput {
   /** the user's notes on addresses; they change nothing in the analysis or the output */
   bookmarks?: Record<Addr, Bookmark>;
   scripts?: Partial<Record<BuildScript, string>>;
+  /** the patches (those that are on are in `files`): the source marks where each one that is on is */
+  patches?: Pick<Patch, 'name' | 'start' | 'bytes' | 'off'>[];
   settings?: Partial<Settings>;
 }
 
@@ -225,6 +255,8 @@ export interface SerializedProject {
   scripts?: Partial<Record<BuildScript, string>>;
   /** missing in project files from before packing with Exomizer */
   pack?: PackPrefs | null;
+  /** `bytes` and `old` as base64; missing in project files from before patches */
+  patches?: (Omit<Patch, 'id' | 'bytes' | 'old'> & { bytes: string; old: string })[];
   settings: Partial<Settings>;
 }
 

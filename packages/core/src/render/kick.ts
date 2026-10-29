@@ -98,6 +98,11 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
     if (d.side != null && d.side !== d.start) markAt(loaderStarts, d.side, `==== Spindle part ${d.part}: a seek or the next disk side comes in here ====`);
     if (d.front !== d.start) markAt(loaderStarts, d.front, `==== Spindle part ${d.part}: the part before jumps in here ====`);
   }
+  // the user's patches that are on (10.2): where each starts and where it ends
+  for (const p of (project.patches ?? []).filter(x => !x.off)) {
+    markAt(loaderStarts, p.start, `==== patch "${p.name}": ${n4(p.start)}-${n4(p.start + p.bytes.length - 1)}, ${p.bytes.length} byte${p.bytes.length === 1 ? '' : 's'} written over the original ====`);
+    markAt(loaderEnds, p.start + p.bytes.length, `==== end of patch "${p.name}" ====`);
+  }
   const marked = (a: Addr) => loaderStarts.has(a) || loaderEnds.has(a);
   /** data and text rows break at notes and loader marks like at labels */
   const breakAt = (a: Addr) => noteAt(a) || marked(a);

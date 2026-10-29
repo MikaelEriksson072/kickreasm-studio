@@ -2,7 +2,7 @@
  * The Explorer's sections are cards that fold up (the user's choice is kept), each with what it holds in a few words
  * beside its title. */
 import { useMemo, useState } from 'react';
-import { h2, h4, hwSymbol, kindInfo, overwritesSystemArea, parseVsf, SYSTEM_AREA, type Addr, type AnalysisResult, type D64File, type LoaderPart, type PackingInfo, type Project, type RenderResult, type SymbolRef } from '@mimir/core';
+import { h2, h4, hwSymbol, kindInfo, overwritesSystemArea, parseVsf, patchEnd, patchFileName, SYSTEM_AREA, type Addr, type AnalysisResult, type D64File, type LoaderPart, type PackingInfo, type Patch, type Project, type RenderResult, type SymbolRef } from '@mimir/core';
 import { Icon } from '../lib/icons';
 import { parseGoto } from '../lib/goto';
 import { cx, fmtBytes, groupOfKind } from '../lib/util';
@@ -35,6 +35,15 @@ interface SidebarProps {
   pack: PackViewProps;
   /** VICE's quicksave snapshot (Alt+F11 in VICE) */
   quicksave: QuicksaveProps;
+  /** the user's patches (spec 10.2) */
+  patches: PatchesProps;
+}
+
+interface PatchesProps {
+  list: readonly Patch[];
+  onGo: (p: Patch) => void; onEdit: (p: Patch) => void; onSave: (p: Patch) => void; onRemove: (p: Patch) => void;
+  /** switch it on (written over the bytes) or off (the original bytes back) */
+  onSwitch: (p: Patch, on: boolean) => void;
 }
 
 interface QuicksaveProps {
@@ -45,7 +54,7 @@ interface QuicksaveProps {
   onOpen: () => void; onFollow: (v: boolean) => void;
 }
 
-export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpen, onAdd, onDemo, onRemoveFile, onSetStart, disk, onMount, onEject, onShowSpindle, onOpenFromDisk, packing, bmSel, onBmSelect, onBmGo, onBmAdd, onBmEdit, onBmDelete, bmEditing, pack, quicksave }: SidebarProps) {
+export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpen, onAdd, onDemo, onRemoveFile, onSetStart, disk, onMount, onEject, onShowSpindle, onOpenFromDisk, packing, bmSel, onBmSelect, onBmGo, onBmAdd, onBmEdit, onBmDelete, bmEditing, pack, quicksave, patches }: SidebarProps) {
   const [q, setQ] = useState('');
   const [symTab, setSymTab] = useState<'labels' | 'hw'>('labels');
   if (view === 'explorer') {
@@ -74,6 +83,7 @@ export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpe
         </SideSection>
         {disk && <DiskSection disk={disk} onEject={onEject} onOpenFromDisk={onOpenFromDisk} onShowSpindle={onShowSpindle} />}
         <QuicksaveSection {...quicksave} />
+        {patches.list.length > 0 && <PatchesSection {...patches} />}
         <LoadersSection A={A} packed={packing.some(p => p?.verdict === 'packed')} onNavigate={onNavigate} />
         <ProgramStart A={A} R={R} project={project} onNavigate={onNavigate} onSetStart={onSetStart} />
         <SideSection id="map" title="Memory map" summary={`${segs.length} block${segs.length === 1 ? '' : 's'}`}>
@@ -157,6 +167,32 @@ function QuicksaveSection({ info, follow, onOpen, onFollow }: QuicksaveProps) {
         <input type="checkbox" aria-label="Open each new VICE quicksave" checked={follow} onChange={e => onFollow(e.target.checked)} />
         <span>Open new quicksaves automatically</span>
       </label>
+    </SideSection>
+  );
+}
+
+/** The patches by address, each with a switch: a click goes to one (and selects what it wrote); edit, save as PRG,
+ *  remove. */
+function PatchesSection({ list, onGo, onEdit, onSave, onRemove, onSwitch }: PatchesProps) {
+  const sorted = [...list].sort((x, y) => x.start - y.start);
+  const on = list.filter(p => !p.off).length;
+  return (
+    <SideSection id="patches" title="Patches" summary={on === list.length ? `${list.length} on` : `${on} of ${list.length} on`}>
+      <div role="list" aria-label="Patches">
+        {sorted.map(p => (
+          <div key={p.id} role="listitem" className={cx('file-row patch-row', p.off && 'off')} onClick={() => onGo(p)}
+            title={`Go to the patch "${p.name}": $${h4(p.start)}–$${h4(patchEnd(p) - 1)}, ${p.bytes.length} bytes${p.over && patchEnd(p) > p.end ? `, ${patchEnd(p) - p.end} past the range` : ''}${p.off ? ' (off)' : ''}\n\n${p.source.length > 400 ? p.source.slice(0, 400) + '…' : p.source}`}>
+            <input type="checkbox" role="switch" className="switch" checked={!p.off} aria-label={`Patch ${p.name} on`}
+              title={p.off ? 'Off: the original bytes are there. Switch it on' : 'On: written over the original bytes. Switch it off'}
+              onClick={e => e.stopPropagation()} onChange={e => onSwitch(p, e.target.checked)} />
+            <div className="file-meta"><div className="file-name">{p.name}</div><div className="muted mono small">${h4(p.start)}–${h4(patchEnd(p) - 1)}</div></div>
+            <button className="icon-btn" title={`Edit the patch "${p.name}" (P)`} aria-label={`Edit patch ${p.name}`} onClick={e => { e.stopPropagation(); onEdit(p); }}><Icon name="pencil" size={13} /></button>
+            <button className="icon-btn" title={`Save as ${patchFileName(p.name)}, loading at $${h4(p.start)}`} aria-label={`Save patch ${p.name} as PRG`} onClick={e => { e.stopPropagation(); onSave(p); }}><Icon name="download" size={13} /></button>
+            <button className="icon-btn" title={`Remove the patch${p.off ? '' : `: $${h4(p.start)}–$${h4(patchEnd(p) - 1)} gets its original bytes back`}`} aria-label={`Remove patch ${p.name}`} onClick={e => { e.stopPropagation(); onRemove(p); }}><Icon name="x" size={13} /></button>
+          </div>
+        ))}
+      </div>
+      <p className="side-hint">On: written over the loaded bytes. Off: the original bytes are back. The export writes each to patches/ as a PRG.</p>
     </SideSection>
   );
 }
