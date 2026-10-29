@@ -1,12 +1,13 @@
 /* VICE's quicksave snapshot (spec 13.7b): Snapshot → Quicksave snapshot (Alt+F11 in VICE 3.x) writes <machine>.vsf in
  * VICE's settings folder, C64SC.vsf for x64sc and C64.vsf for x64. The app reads the newest of them (or the file set in
  * Settings → Toolchain), and watches them: each new quicksave is announced to the renderer, which opens it. */
-import { unwatchFile, watchFile, type Stats } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { existsSync, unwatchFile, watchFile, type Stats } from 'node:fs';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { isVsf, openC64File } from '@mimir/core';
-import type { QuicksaveEvent, QuicksaveInfo, QuicksaveResult } from '../../shared/ipc';
+import { z } from 'zod';
+import { isVsf, openC64File, parseVsf } from '@mimir/core';
+import type { QuicksaveEntry, QuicksaveEvent, QuicksaveInfo, QuicksaveResult } from '../../shared/ipc';
 import { openedPrg } from './project-fs';
 
 /** the machines whose quicksave the app reads: x64sc, then x64 */
@@ -55,6 +56,89 @@ export async function readQuicksave(files: string[], opts: { zeroPage?: boolean 
       if (attempt >= 3) throw e;
       await sleep(300);
     }
+  }
+}
+
+/** how many of VICE's quicksaves the app keeps */
+export const KEPT_QUICKSAVES = 5;
+
+const entryId = z.string().regex(/^[a-z0-9]{1,32}$/);
+const indexSchema = z.array(z.object({ id: entryId, name: z.string().min(1).max(80), saved: z.number(), size: z.number().int().min(0) })).max(64);
+
+/** a quicksave's name as it starts: `quicksave 2026-10-29 12:43:30` (when VICE saved it, local time) */
+export function quicksaveName(saved: number): string {
+  const d = new Date(saved), p = (n: number) => String(n).padStart(2, '0');
+  return `quicksave ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+/** a name as a file name: what Windows does not allow in one becomes `-` */
+export const quicksaveFileName = (name: string): string => `${name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-').replace(/[. ]+$/, '') || 'quicksave'}.vsf`; // eslint-disable-line no-control-regex
+
+/** a whole snapshot (VICE writes it in pieces: one that does not parse yet is not one) */
+const whole = (bytes: Uint8Array) => { if (!isVsf(bytes)) return false; try { parseVsf(bytes); return true; } catch { return false; } };
+
+/**
+ * The newest quicksaves VICE wrote, kept in a folder of the app's (`<user data>/quicksaves`, with `index.json`): each new
+ * one is copied there with a name the user can change, so the next Alt+F11 does not take it. The newest
+ * KEPT_QUICKSAVES stay; one saved to a folder of the user's stays there. One thing at a time, in order.
+ */
+export class QuicksaveHistory {
+  private queue: Promise<unknown> = Promise.resolve();
+  constructor(private readonly dir: string, private readonly keep = KEPT_QUICKSAVES) {}
+
+  private run<T>(fn: () => Promise<T>): Promise<T> { const p = this.queue.then(fn, fn); this.queue = p.catch(() => undefined); return p; }
+  /** where the kept quicksave is (an id from the list only) */
+  file(id: string): string { return join(this.dir, `${entryId.parse(id)}.vsf`); }
+  private async read(): Promise<QuicksaveEntry[]> {
+    try {
+      const list = indexSchema.parse(JSON.parse(await readFile(join(this.dir, 'index.json'), 'utf8')));
+      return list.filter(e => existsSync(this.file(e.id)));
+    } catch { return []; }
+  }
+  private async write(list: QuicksaveEntry[]): Promise<void> {
+    await mkdir(this.dir, { recursive: true });
+    await writeFile(join(this.dir, 'index.json'), JSON.stringify(list, null, 1));
+  }
+
+  /** the kept quicksaves, the newest first */
+  list(): Promise<QuicksaveEntry[]> { return this.run(() => this.read()); }
+
+  /** Keep the quicksave VICE wrote at `path` at `saved` (once: the same save again is not a new one). */
+  add(path: string, saved: number): Promise<QuicksaveEntry[]> {
+    return this.run(async () => {
+      const list = await this.read();
+      if (list.some(e => e.saved === saved)) return list;
+      let bytes: Uint8Array | null = null;
+      for (let attempt = 0; attempt < 4 && !bytes; attempt++) {
+        try { const b = new Uint8Array(await readFile(path)); if (whole(b)) bytes = b; } catch { /* not there now */ }
+        if (!bytes) await sleep(300);
+      }
+      if (!bytes) return list;
+      const id = `${Math.round(saved).toString(36)}${Math.random().toString(36).slice(2, 6)}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+      await mkdir(this.dir, { recursive: true });
+      await writeFile(this.file(id), bytes);
+      const next = [{ id, name: quicksaveName(saved), saved, size: bytes.length }, ...list].sort((a, b) => b.saved - a.saved);
+      for (const old of next.slice(this.keep)) await rm(this.file(old.id), { force: true });
+      await this.write(next.slice(0, this.keep));
+      return next.slice(0, this.keep);
+    });
+  }
+
+  rename(id: string, name: string): Promise<QuicksaveEntry[]> {
+    return this.run(async () => {
+      const list = (await this.read()).map(e => (e.id === id ? { ...e, name: name.trim() || e.name } : e));
+      await this.write(list);
+      return list;
+    });
+  }
+
+  /** the kept quicksave: its entry and bytes */
+  get(id: string): Promise<{ entry: QuicksaveEntry; bytes: Uint8Array }> {
+    return this.run(async () => {
+      const entry = (await this.read()).find(e => e.id === id);
+      if (!entry) throw new Error('That quicksave is no longer kept (only the newest 5 are)');
+      return { entry, bytes: new Uint8Array(await readFile(this.file(id))) };
+    });
   }
 }
 

@@ -39,7 +39,7 @@ import { ContextMenu } from './components/ContextMenu';
 import { Splitter } from './components/Splitter';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useCanvasColors, type HeatMode } from './components/Heatmap';
-import type { IdentifyResponse, OpenedPrg, QuicksaveInfo } from '../shared/ipc';
+import type { IdentifyResponse, OpenedPrg, QuicksaveEntry, QuicksaveInfo } from '../shared/ipc';
 
 const SourceView = lazy(() => import('./components/SourceView').then(m => ({ default: m.SourceView })));
 const SpecView = lazy(() => import('./components/SpecView').then(m => ({ default: m.SpecView })));
@@ -182,7 +182,31 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   };
   /** what the Explorer says about it: the newest quicksave and when it was saved, or where VICE will write one */
   const [qsInfo, setQsInfo] = useState<QuicksaveInfo | null>(null);
-  const refreshQuicksave = useCallback(() => { kr?.quicksaveInfo().then(setQsInfo, () => setQsInfo(null)); }, []);
+  /** the newest quicksaves the app keeps, with the names given them */
+  const [qsList, setQsList] = useState<QuicksaveEntry[]>([]);
+  const refreshQuicksave = useCallback(() => {
+    kr?.quicksaveInfo().then(setQsInfo, () => setQsInfo(null));
+    kr?.quicksaves().then(setQsList, () => setQsList([]));
+  }, []);
+  /** a kept quicksave opened as a new project, like the latest one with F9 */
+  const openKeptQuicksave = async (q: QuicksaveEntry) => {
+    if (!kr) return needDesktop();
+    try {
+      const r = await kr.openQuicksaveEntry({ id: q.id, zeroPage: !!project.settings.snapshotZeroPage });
+      if (!r.found) return;
+      const f = r.files[0];
+      const traced = f.entries?.length ? `, traced from ${f.entries.map(e => `$${h4(e)}`).join(', ')}` : '';
+      addFiles(r.files, false, { undoLabel: `Open the quicksave "${q.name}"`, note: `Opened the quicksave "${q.name}": ${f.snapshot ?? f.name}${traced}. Ctrl+Z goes back to the project before` });
+    } catch (e) { toast(`VICE quicksave: ${errorText(e)}`, 'err'); refreshQuicksave(); }
+  };
+  const renameKeptQuicksave = async (q: QuicksaveEntry, name: string) => {
+    if (!kr || !name.trim() || name.trim() === q.name) return;
+    try { setQsList(await kr.renameQuicksave({ id: q.id, name: name.trim() })); } catch (e) { toast(errorText(e), 'err'); }
+  };
+  const saveKeptQuicksave = async (q: QuicksaveEntry) => {
+    if (!kr) return needDesktop();
+    try { const r = await kr.saveQuicksave({ id: q.id }); if (r) toast(`The quicksave "${q.name}" saved to ${r.path}`, 'ok'); } catch (e) { toast(`Save failed: ${errorText(e)}`, 'err'); }
+  };
   useEffect(refreshQuicksave, [refreshQuicksave, toolchain.viceQuicksave]);
   // the main process watches the quicksave file: a new one opens (or is announced) without a click
   const quicksaveRef = useRef(openQuicksave);
@@ -1105,7 +1129,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       <aside className="sidebar"><ErrorBoundary>
         <Sidebar view={activity} A={A} R={R} project={project} colors={colors} cursor={cursor} onNavigate={a => { nav(a); setDrawer(null); }}
           onOpen={() => void openPrgs(false)} onAdd={() => void openPrgs(true)} onDemo={loadDemo}
-          quicksave={{ info: qsInfo, follow: followQuicksave, onOpen: () => void openQuicksave(), onFollow: v => setUi({ followQuicksave: v }) }}
+          quicksave={{ info: qsInfo, follow: followQuicksave, onOpen: () => void openQuicksave(), onFollow: v => setUi({ followQuicksave: v }),
+            kept: qsList, onOpenKept: q => void openKeptQuicksave(q), onRenameKept: (q, name) => void renameKeptQuicksave(q, name), onSaveKept: q => void saveKeptQuicksave(q) }}
           onRemoveFile={i => update('Remove file', d => {
             d.files.splice(i, 1);
             // a patch goes with the file it was written over

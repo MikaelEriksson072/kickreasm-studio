@@ -2,7 +2,7 @@
  * bytes (D), verify (F7), undo/redo, selecting large ranges (G with a range, Shift+click on headers,
  * dragging) that merge the blocks inside, and open/save/export with Electron's file dialogs stubbed.
  * Build & Run (F5) is not covered: it starts VICE. */
-import { existsSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { expect, repoDir, test } from './fixtures';
@@ -1801,7 +1801,7 @@ test('the Demo button opens the showcase: every block type and a guided tour in 
   });
 });
 
-test('a VICE quicksave (Alt+F11 in VICE) opens by itself, F9 opens it again, Ctrl+Z goes back', async ({ workDir: work, page }) => {
+test('a VICE quicksave (Alt+F11 in VICE) opens by itself, F9 opens it again, Ctrl+Z goes back; the newest are kept, named and saved', async ({ workDir: work, app, page }) => {
   await waitForListing(page);
   // a file of its own instead of VICE's settings folder: the user's quicksaves are never touched
   const qs = join(work, 'C64SC.vsf'), snapshot = join(repoDir, 'fixtures/vsf/raster-demo.vsf');
@@ -1849,8 +1849,33 @@ test('a VICE quicksave (Alt+F11 in VICE) opens by itself, F9 opens it again, Ctr
     utimesSync(qs, new Date(), new Date(Date.now() + 5000));
     await expect(toast(page, 'VICE saved a new quicksave: F9 opens it')).toBeVisible({ timeout: 15_000 });
     await open.click();
-    await expect(toast(page, /^Opened the VICE quicksave from /)).toBeVisible();
+    // (the toast of the first one may still be there)
+    await expect(toast(page, /^Opened the VICE quicksave from /).last()).toBeVisible();
     await page.getByLabel('Open each new VICE quicksave').check();
+  });
+
+  await test.step('both quicksaves are kept, the newest first; one is named, saved in a folder, and the other opened', async () => {
+    const kept = section.getByRole('list', { name: 'Kept VICE quicksaves' }).getByRole('listitem');
+    const stamp = /^quicksave \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
+    await expect(kept).toHaveCount(2);
+    await expect(kept.locator('.qs-name-text')).toHaveText([stamp, stamp]);
+    const [newest, older] = await kept.locator('.qs-name-text').allTextContents();
+    await section.getByRole('button', { name: `Rename the quicksave ${newest}` }).click();
+    const input = section.getByLabel(`Name of the quicksave ${newest}`);
+    await expect(input).toBeFocused();
+    await input.fill('intro');
+    await input.press('Enter');
+    await expect(kept.locator('.qs-name-text')).toHaveText(['intro', older]);
+    const file = join(work, 'saved', 'intro.vsf');
+    mkdirSync(join(work, 'saved'), { recursive: true });
+    await stubDialogs(app, { save: file });
+    await section.getByRole('button', { name: 'Save the quicksave intro' }).click();
+    await expect(toast(page, `The quicksave "intro" saved to ${file}`)).toBeVisible();
+    expect(readFileSync(file)).toEqual(readFileSync(snapshot));
+    expect((await dialogOptions(app)).pop()).toMatchObject({ title: 'Save the quicksave "intro"', defaultPath: expect.stringMatching(/intro\.vsf$/) });
+    await kept.nth(1).getByRole('button', { name: new RegExp(`^${older.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).click();
+    await expect(toast(page, `Opened the quicksave "${older}": VICE 3.10 snapshot of a C64SC`)).toBeVisible();
+    await expect(files).toHaveText([`${older.replace(/:/g, '-')}.prg`]);
   });
 });
 

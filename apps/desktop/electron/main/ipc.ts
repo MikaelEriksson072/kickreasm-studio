@@ -12,11 +12,13 @@ import type { SettingsStore } from './settings';
 import { createBuildFolder, readDiskImage, readPrgFiles, readProjectFile, writeExportFolder, writeProjectFile, type ExportWatcher } from './project-fs';
 import { buildWithKickAssembler, identifyWithTool, openTerminal, packWithExomizer, runInVice, unpackWithTool } from './toolchain';
 import { viceAttach, viceCommand } from './vice-monitor';
-import { quicksaveFiles, quicksaveInfo, readQuicksave, type QuicksaveWatcher } from './quicksave';
+import { quicksaveFileName, quicksaveFiles, quicksaveInfo, readQuicksave, type QuicksaveHistory, type QuicksaveWatcher } from './quicksave';
 import { charRomFiles, readCharRom } from './chargen';
+import { openC64File } from '@mimir/core';
+import { openedPrg } from './project-fs';
 import {
-  buildSchema, diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectOpenSchema, projectSaveSchema, quicksaveSchema, runSchema, terminalOpenSchema, unpackSchema,
-  toolchainSettingsSchema, viceAttachSchema, viceCommandSchema,
+  buildSchema, diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectOpenSchema, projectSaveSchema, quicksaveEntrySchema, quicksaveRenameSchema, quicksaveSaveSchema,
+  quicksaveSchema, runSchema, terminalOpenSchema, unpackSchema, toolchainSettingsSchema, viceAttachSchema, viceCommandSchema,
 } from './schemas';
 
 export interface IpcDeps {
@@ -29,6 +31,8 @@ export interface IpcDeps {
   isTrustedUrl: (url: string) => boolean;
   /** watches VICE's quicksave snapshot (the files follow the setting) */
   quicksave: QuicksaveWatcher;
+  /** the newest quicksaves, kept with names */
+  history: QuicksaveHistory;
 }
 
 const windowOf = (wc: WebContents) => BrowserWindow.fromWebContents(wc) ?? undefined;
@@ -46,8 +50,11 @@ async function pickPaths(e: IpcMainInvokeEvent, options: OpenDialogOptions): Pro
 }
 
 export function registerIpc(deps: IpcDeps): void {
-  const { policy, settings, watcher, recent, quicksave } = deps;
+  const { policy, settings, watcher, recent, quicksave, history } = deps;
   quicksave.watch(quicksaveFiles(settings.get().viceQuicksave));
+  // the quicksave there is now (from before the app started, or in a newly set file) joins the kept ones
+  const keepCurrent = () => quicksaveInfo(quicksaveFiles(settings.get().viceQuicksave)).then(i => (i.found && i.saved ? history.add(i.path, i.saved) : null)).catch(() => null);
+  let kept = keepCurrent();
   /** the folder last picked in a dialog: where the terminal opens when the renderer names none */
   let lastChosen: string | null = null;
   /** a folder the user picked: allowed for this session, and where this kind of dialog opens next time */
@@ -151,12 +158,30 @@ export function registerIpc(deps: IpcDeps): void {
   // the file comes from the settings (or VICE's own folder), never from the renderer
   handle(CHANNELS.viceQuicksave, quicksaveSchema, req => readQuicksave(quicksaveFiles(settings.get().viceQuicksave), req));
   handle(CHANNELS.viceQuicksaveInfo, z.undefined().or(z.object({}).strict()), () => quicksaveInfo(quicksaveFiles(settings.get().viceQuicksave)));
+  // the kept quicksaves (13.7b): by the ids of the list; their files are the app's own
+  handle(CHANNELS.viceQuicksaves, z.undefined().or(z.object({}).strict()), async () => { await kept; return history.list(); });
+  handle(CHANNELS.viceQuicksaveOpen, quicksaveEntrySchema, async req => {
+    const { entry, bytes } = await history.get(req.id);
+    return { found: true, path: history.file(req.id), saved: entry.saved, files: [openedPrg(openC64File(quicksaveFileName(entry.name), bytes, { zeroPage: req.zeroPage }))] };
+  });
+  handle(CHANNELS.viceQuicksaveRename, quicksaveRenameSchema, req => history.rename(req.id, req.name));
+  handle(CHANNELS.viceQuicksaveSave, quicksaveSaveSchema, async (req, e): Promise<FileSaveResult | null> => {
+    const { entry, bytes } = await history.get(req.id);
+    const win = windowOf(e.sender), start = recent.folder('snapshot'), file = quicksaveFileName(entry.name);
+    const options = { title: `Save the quicksave "${entry.name}"`, defaultPath: start ? join(start, file) : file, filters: [{ name: 'VICE snapshot', extensions: ['vsf'] }, { name: 'All files', extensions: ['*'] }] };
+    const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options);
+    if (r.canceled || !r.filePath) return null;
+    chose(dirname(r.filePath), 'snapshot');
+    await writeFile(r.filePath, bytes);
+    return { path: r.filePath };
+  });
   // the ROM comes from the VICE in the settings, never from a path the renderer gives
   handle(CHANNELS.viceCharRom, z.undefined().or(z.object({}).strict()), () => readCharRom(charRomFiles(settings.get().vicePath)));
   handle(CHANNELS.settingsGet, z.undefined().or(z.object({}).strict()), () => settings.get());
   handle(CHANNELS.settingsSet, toolchainSettingsSchema.partial(), req => {
     const next = settings.set(req);
     quicksave.watch(quicksaveFiles(next.viceQuicksave));
+    kept = keepCurrent();
     return next;
   });
 }

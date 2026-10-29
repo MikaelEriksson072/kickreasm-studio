@@ -1,7 +1,7 @@
 /* Main-process logic without Electron: path policy, settings store, IPC schemas, toolchain runner. */
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { analyze, DEFAULT_PACK, demoProject, deserializeProject, LEGACY_PROJECT_FORMAT, makeD64, render, serializeProject, type SerializedProject, type ToolchainSettings } from '@mimir/core';
@@ -11,9 +11,9 @@ import { assertEntryName, PathPolicy } from '../electron/main/paths';
 import { bringOldSettings } from '../electron/main/migrate';
 import { RecentFolders } from '../electron/main/recent';
 import { bundledExomizer, bundledUnp64, defaultToolchainSettings, SettingsStore } from '../electron/main/settings';
-import { diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectSchema, runSchema, serializedProjectSchema } from '../electron/main/schemas';
+import { diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectSchema, quicksaveEntrySchema, quicksaveRenameSchema, runSchema, serializedProjectSchema } from '../electron/main/schemas';
 import { buildWithKickAssembler, packWithExomizer } from '../electron/main/toolchain';
-import { QUICKSAVE_FILE, QuicksaveWatcher, quicksaveFiles, quicksaveInfo, readQuicksave, viceConfigDir } from '../electron/main/quicksave';
+import { QUICKSAVE_FILE, QuicksaveHistory, QuicksaveWatcher, quicksaveFileName, quicksaveFiles, quicksaveInfo, quicksaveName, readQuicksave, viceConfigDir } from '../electron/main/quicksave';
 import { readDiskImage, readPrgFiles, readProjectFile, writeProjectFile } from '../electron/main/project-fs';
 import { charRomFiles, readCharRom } from '../electron/main/chargen';
 
@@ -22,7 +22,7 @@ const toolchain = (patch: Partial<ToolchainSettings> = {}): ToolchainSettings =>
 
 describe('IPC contract', () => {
   it('has exactly the channels of spec 13.4', () => {
-    expect(Object.values(CHANNELS).sort()).toEqual(['disk:open', 'export:write', 'fs:changed', 'prg:open', 'project:open', 'project:save', 'settings:get', 'settings:set', 'terminal:open', 'toolchain:build', 'toolchain:identify', 'toolchain:pack', 'toolchain:run', 'toolchain:unpack', 'vice:attach', 'vice:command', 'file:save', 'vice:quicksave', 'vice:quicksave-info', 'vice:quicksaved', 'vice:chargen'].sort());
+    expect(Object.values(CHANNELS).sort()).toEqual(['disk:open', 'export:write', 'fs:changed', 'prg:open', 'project:open', 'project:save', 'settings:get', 'settings:set', 'terminal:open', 'toolchain:build', 'toolchain:identify', 'toolchain:pack', 'toolchain:run', 'toolchain:unpack', 'vice:attach', 'vice:command', 'file:save', 'vice:quicksave', 'vice:quicksave-info', 'vice:quicksaves', 'vice:quicksave-open', 'vice:quicksave-rename', 'vice:quicksave-save', 'vice:quicksaved', 'vice:chargen'].sort());
   });
 });
 
@@ -184,6 +184,36 @@ describe('VICE quicksave snapshots', () => {
       await new Promise(r => setTimeout(r, 400));
       expect(seen).toEqual([files[0]]);
     } finally { w.close(); }
+  });
+
+  it('keeps the newest 5 with names of their own, each once, in a folder of the app\'s', async () => {
+    const vice = tmp(), dir = join(tmp(), 'quicksaves'), qs = join(vice, 'C64SC.vsf');
+    writeFileSync(qs, vsf());
+    const h = new QuicksaveHistory(dir);
+    const t0 = new Date(2026, 9, 29, 12, 43, 30).getTime();
+    expect(await h.list()).toEqual([]);
+    expect((await h.add(qs, t0))[0]).toMatchObject({ name: 'quicksave 2026-10-29 12:43:30', saved: t0, size: vsf().length });
+    // the same save again is no new one
+    expect(await h.add(qs, t0)).toHaveLength(1);
+    for (let i = 1; i <= 5; i++) await h.add(qs, t0 + i * 1000);
+    const list = await h.list();
+    expect(list.map(e => e.saved)).toEqual([5, 4, 3, 2, 1].map(i => t0 + i * 1000));
+    // the oldest one's file is gone with it
+    expect(readdirSync(dir).filter(f => f.endsWith('.vsf'))).toHaveLength(5);
+    const renamed = await h.rename(list[2].id, '  intro scroller ');
+    expect(renamed[2].name).toBe('intro scroller');
+    expect((await new QuicksaveHistory(dir).list())[2].name).toBe('intro scroller');
+    const got = await h.get(list[2].id);
+    expect([...got.bytes]).toEqual([...vsf()]);
+    // not a whole snapshot (VICE still writing it, or another file): not kept
+    writeFileSync(qs, 'VICE Snapshot File\x1a but no more');
+    expect(await h.add(qs, t0 + 9000)).toHaveLength(5);
+    await expect(h.get('zzzz')).rejects.toThrow(/no longer kept/);
+    expect(() => h.file('../index')).toThrow();
+    expect(quicksaveFileName('intro: part 2?')).toBe('intro- part 2-.vsf');
+    expect(quicksaveName(t0)).toBe('quicksave 2026-10-29 12:43:30');
+    expect(quicksaveEntrySchema.safeParse({ id: '../x' }).success).toBe(false);
+    expect(quicksaveRenameSchema.safeParse({ id: 'abc', name: '   ' }).success).toBe(false);
   });
 });
 

@@ -3,7 +3,7 @@
  * empty and the demo program is loaded. MIMIR_E2E_EXE=<path to Mimir Studio.exe> runs the
  * same tests against a packaged app (release/<version>/win-unpacked or an installed copy). */
 import { _electron as electron, expect, test as base, type ElectronApplication, type Page } from '@playwright/test';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -39,6 +39,9 @@ export const test = base.extend<Fixtures>({
 
   userData: async ({}, use) => {
     const dir = tempDir('profile');
+    // the VICE quicksave is looked for in the profile, never in the user's VICE settings folder (the app keeps a copy
+    // of the one it finds); a test that needs one sets its own file in Settings
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ viceQuicksave: join(dir, 'vice', 'C64SC.vsf') }));
     await use(dir);
     removeDir(dir);
   },

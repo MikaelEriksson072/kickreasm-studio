@@ -24,7 +24,8 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   banked out.
 - **VICE snapshots open like programs.** A `.vsf` file, or `F9` for VICE's quicksave, gives the RAM, the PC, the live
   interrupt vectors and `$01` as the starting point. *Build & Run* puts your rebuilt program into the snapshot and
-  restarts it exactly where it was.
+  restarts it exactly where it was. The newest 5 quicksaves are kept in a list, where you can name them, open them and
+  save them to a folder of your own.
 - **It recognises what demos and games are made of:**
   - SID players, by their jump table and note frequency table, exported as a `.sid` that Kick Assembler loads with `LoadSid`;
   - charsets, sprites, bitmaps and screens, from `$d018`, `$dd00` and the sprite pointers;

@@ -7,7 +7,7 @@ import { bringOldSettings } from './migrate';
 import { registerIpc } from './ipc';
 import { PathPolicy } from './paths';
 import { ExportWatcher } from './project-fs';
-import { QuicksaveWatcher } from './quicksave';
+import { QuicksaveHistory, QuicksaveWatcher } from './quicksave';
 import { RecentFolders } from './recent';
 import { SettingsStore } from './settings';
 
@@ -65,11 +65,14 @@ app.whenReady().then(() => {
   const watcher = new ExportWatcher(path => {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send(CHANNELS.fsChanged, { path });
   });
-  // a new quicksave from VICE (Alt+F11) goes to every window, which opens it
+  // a new quicksave from VICE (Alt+F11) joins the kept ones, then goes to every window, which opens it
+  const history = new QuicksaveHistory(join(app.getPath('userData'), 'quicksaves'));
   const quicksave = new QuicksaveWatcher(e => {
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(CHANNELS.viceQuicksaved, e);
+    void history.add(e.path, e.saved).catch(() => null).then(() => {
+      for (const w of BrowserWindow.getAllWindows()) w.webContents.send(CHANNELS.viceQuicksaved, e);
+    });
   });
-  registerIpc({ policy: new PathPolicy(), settings: new SettingsStore(app.getPath('userData')), recent: new RecentFolders(app.getPath('userData')), watcher, isTrustedUrl, quicksave });
+  registerIpc({ policy: new PathPolicy(), settings: new SettingsStore(app.getPath('userData')), recent: new RecentFolders(app.getPath('userData')), watcher, isTrustedUrl, quicksave, history });
   buildMenu();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

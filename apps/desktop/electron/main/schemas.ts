@@ -154,5 +154,10 @@ export const packSchema = z.object({ files: z.array(z.object({ name: fileName, p
 export const fileSaveSchema = z.object({ name: fileName, bytes: z.instanceof(Uint8Array).refine(b => b.length > 0 && b.length <= 4 * 1024 * 1024, 'empty or larger than 4 MB'), title: z.string().max(200).optional() });
 /** VICE's quicksave snapshot: `zeroPage` opens it from $0002 */
 export const quicksaveSchema = z.object({ zeroPage: z.boolean().optional() }).strict().default({});
+/** one of the kept quicksaves, by the id the list gave (13.7b) */
+const quicksaveId = z.string().regex(/^[a-z0-9]{1,32}$/);
+export const quicksaveEntrySchema = z.object({ id: quicksaveId, zeroPage: z.boolean().optional() }).strict();
+export const quicksaveRenameSchema = z.object({ id: quicksaveId, name: z.string().trim().min(1).max(80) }).strict();
+export const quicksaveSaveSchema = z.object({ id: quicksaveId }).strict();
 export const viceAttachSchema = z.object({ host: z.string().max(255).optional(), port: z.number().int().min(1).max(65535).optional() }).default({});
 export const viceCommandSchema = z.object({ command: z.string().max(4096) });
