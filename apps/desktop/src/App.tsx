@@ -1183,7 +1183,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
               <Listing lines={view.lines} lineNo={view.lineNo} folded={folded} hidden={view.hidden} onToggleFold={toggleFold} excluded={excludedSet} A={A} lineOf={lineOf} cursor={cursor} picked={pickedLine} sel={sel} onClickLine={onClickLine} onDragTo={l => { if (extendTo(l)) setCursor(l.a); }} onMove={moveInto} onToken={onToken} onContext={onContext}
                 scrollReq={scrollReq} editing={editing} onCommitEdit={commitEdit} onCancelEdit={() => { setEditing(null); listRef.current?.focus(); }}
                 labelError={labelError} setLabelError={setLabelError} listRef={listRef} gutter={gutter} bookmarks={project.bookmarks} onBookmark={a => showBookmarks(a)}
-                patches={patchesOn(project.patches)} cycles={cycles ? { path, taken, onToggle: toggleTaken } : null} />
+                patches={patchesOn(project.patches)} keepView={dataAsCode} cycles={cycles ? { path, taken, onToggle: toggleTaken } : null} />
             </>}
             <Suspense fallback={<div className="empty">Loading…</div>}>
               {tab === 'source' && <SourceView R={R} A={A} S={S} path={srcPath || `${R.fileNames[0]}.asm`} setPath={setSrcPath} cursor={cursor} onNavigate={(a, o) => navigate(a, o)} theme={theme} extraFiles={extraFiles} problems={kickProblems} onCopy={t => void copyText(t)} onExport={() => void exportProject()}

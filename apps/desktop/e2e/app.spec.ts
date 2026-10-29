@@ -440,6 +440,51 @@ test('show data as code to find code that is marked as data', async ({ page }) =
   expect(rowAt(await listingRows(page), '0939')?.text).toMatch(/^\.byte \$06, \$0e/);
 });
 
+test('Data as code keeps the line in view where it is on screen, both ways', async ({ page }) => {
+  await waitForListing(page);
+  const toggle = page.getByRole('button', { name: 'Data as code' });
+  const y = async (l: Locator) => Math.round((await l.boundingBox())?.y ?? -1);
+  // the row that shows `adr` (the last one starting at or before it) and where it is on screen
+  const rowOf = (adr: number) => listing(page).evaluate((el, a) => {
+    const rows = [...el.querySelectorAll<HTMLElement>('.row:not(.hdr)')].filter(r => /^[0-9a-f]{4}$/.test(r.querySelector('.adr')?.textContent ?? '') && r.querySelector('.hex')?.textContent)
+      .sort((p, q) => parseFloat(p.style.top) - parseFloat(q.style.top));
+    const r = rows.filter(x => parseInt(x.querySelector('.adr')!.textContent!, 16) <= a).pop();
+    return r ? { adr: r.querySelector('.adr')!.textContent, y: Math.round(r.getBoundingClientRect().y) } : null;
+  }, adr);
+
+  await test.step('the cursor\'s line stays put, with all the data above it turned into code', async () => {
+    // $3000 is far below the tables and graphics that become many lines of code
+    await goTo(page, '$3000');
+    const cur = listing(page).locator('.row.cur');
+    const y0 = await y(cur);
+    await toggle.click();
+    await expect(listing(page).locator('.row.preview').first()).toBeVisible();
+    await expect.poll(() => y(cur)).toBe(y0);
+    await expect(cur.locator('.adr')).toHaveText(/^(2f[0-9a-f]{2}|3000)$/);
+    await page.getByRole('button', { name: 'Show as classified' }).click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(() => y(cur)).toBe(y0);
+  });
+
+  await test.step('without the cursor in view, the top line stays put', async () => {
+    const top = await listing(page).evaluate(async el => {
+      // scrolled, and drawn again for where it is now
+      el.scrollTop -= 2000;
+      await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 50))));
+      const box = el.getBoundingClientRect();
+      const rows = [...el.querySelectorAll<HTMLElement>('.row:not(.hdr)')].filter(r => r.getBoundingClientRect().y >= box.y && r.getBoundingClientRect().bottom <= box.bottom && /^[0-9a-f]{4}$/.test(r.querySelector('.adr')?.textContent ?? '') && r.querySelector('.hex')?.textContent)
+        .sort((p, q) => parseFloat(p.style.top) - parseFloat(q.style.top));
+      return { adr: parseInt(rows[0].querySelector('.adr')!.textContent!, 16), y: Math.round(rows[0].getBoundingClientRect().y) };
+    });
+    await toggle.click();
+    await expect(listing(page).locator('.row.preview').first()).toBeVisible();
+    await expect.poll(async () => (await rowOf(top.adr))?.y).toBe(top.y);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(async () => (await rowOf(top.adr))?.y).toBe(top.y);
+  });
+});
+
 test('merge a block with the block before or after it', async ({ page }) => {
   await waitForListing(page);
   await goTo(page, 'txt_0960');

@@ -90,9 +90,11 @@ interface ListingProps {
   cycles?: CycleView | null;
   /** the user's patches: the bytes they wrote over are marked (spec 10.2) */
   patches?: readonly Patch[];
+  /** when this changes (data shown as code), the line in view stays where it is on screen once the new lines come */
+  keepView?: unknown;
 }
 
-export function Listing({ lines, lineNo, folded, hidden, onToggleFold, excluded, A, lineOf, cursor, picked, sel, onClickLine, onDragTo, onMove, onToken, onContext, scrollReq, editing, onCommitEdit, onCancelEdit, labelError, setLabelError, listRef, gutter, bookmarks, onBookmark, cycles, patches = [] }: ListingProps) {
+export function Listing({ lines, lineNo, folded, hidden, onToggleFold, excluded, A, lineOf, cursor, picked, sel, onClickLine, onDragTo, onMove, onToken, onContext, scrollReq, editing, onCommitEdit, onCancelEdit, labelError, setLabelError, listRef, gutter, bookmarks, onBookmark, cycles, patches = [], keepView }: ListingProps) {
   const box = useRef<HTMLDivElement | null>(null);
   const [top, setTop] = useState(0);
   const [height, setHeight] = useState(600);
@@ -172,6 +174,34 @@ export function Listing({ lines, lineNo, folded, hidden, onToggleFold, excluded,
     const y = j * ROW;
     if (scrollReq.center || y < el.scrollTop || (i + 1) * ROW > el.scrollTop + vis) el.scrollTop = Math.max(0, y - Math.floor(vis / 3));
   }, [scrollReq]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Data as code turns rows of data into many lines (and back): the line in view stays where it is on screen. That
+  // is the cursor's line when it is in view, else the top line with bytes; its place on screen is taken before the
+  // change (the bar above the listing comes and goes with it) and kept until the new lines are there.
+  const boxTop = useRef(0);
+  const keep = useRef<{ addr: Addr; y: number; at: number } | null>(null);
+  const keptOnce = useRef(false);
+  const place = () => {
+    const el = box.current, k = keep.current; if (!el || !k) return;
+    const i = lineOf[k.addr]; if (i < 0) return;
+    el.scrollTop = Math.max(0, el.getBoundingClientRect().top + i * ROW - k.y);
+    setTop(el.scrollTop);
+  };
+  useLayoutEffect(() => {
+    if (!keptOnce.current) { keptOnce.current = true; return; }
+    const el = box.current; if (!el) return;
+    const s = el.scrollTop, ci = cursor != null ? lineOf[cursor] : -1;
+    let i = ci >= 0 && ci * ROW >= s && (ci + 1) * ROW <= s + el.clientHeight ? ci : -1;
+    const bytes = (l: ListingLine) => 'n' in l && l.n > 0;
+    if (i < 0) { i = Math.ceil(s / ROW); while (i < lines.length && !bytes(lines[i])) i++; }
+    if (i >= lines.length) return;
+    keep.current = { addr: i === ci && cursor != null ? cursor : lines[i].a, y: boxTop.current + i * ROW - s, at: Date.now() };
+    place();
+  }, [keepView]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const k = keep.current; if (!k) return;
+    if (Date.now() - k.at < 10000) place();
+    keep.current = null;
+  }, [lines]); // eslint-disable-line react-hooks/exhaustive-deps
   const curLine = picked ?? (cursor != null ? lineOf[cursor] : -1);
   // the counted range's instructions, by address
   const steps = useMemo(() => new Map((cycles?.path?.steps ?? []).map(s => [s.pc, s])), [cycles?.path]);
@@ -252,6 +282,8 @@ export function Listing({ lines, lineNo, folded, hidden, onToggleFold, excluded,
       : `Drop it in ${[moves.prev && intoText(moves.prev, 'prev'), moves.next && intoText(moves.next, 'next')].filter(Boolean).join(' or ')} · Esc cancels`;
     chip = <div className={cx('move-chip', m && 'ok')} role="status" style={{ top: moving.over * ROW + ROW + 2 }}>{text}</div>;
   }
+  // where the listing is on screen after this render (the line kept in view is placed against it); runs last
+  useLayoutEffect(() => { if (box.current) boxTop.current = box.current.getBoundingClientRect().top; });
   return (
     <div className={cx('listing', moving && 'moving')} ref={el => { box.current = el; listRef.current = el; }} tabIndex={0} onScroll={e => setTop(e.currentTarget.scrollTop)} aria-label="Disassembly listing">
       <div style={{ height: lines.length * ROW + 40, position: 'relative' }}>{rows}{pop}{chip}</div>
