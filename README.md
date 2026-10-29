@@ -63,11 +63,12 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   - set the memory configuration for a range, keep bookmarks and fold blocks;
   - leave blocks out of the build, or save them as binary files.
 - **Patches.** Select lines and press `P` to write new code over them, in Kick Assembler with the program's labels and
-  the hardware names. The editor shows each line's address and bytes as you type, and `Tab` steps from instruction to
-  instruction. The code can be shorter (NOPs fill the rest) but not longer, unless you choose to overwrite past the
-  range. The listing marks the patched bytes. Each patch can be switched off and on in the Explorer, edited, removed
-  (the original bytes come back) and saved as a PRG. The export writes each one's source to `patches/`, as a `.asm`
-  file that assembles on its own.
+  the hardware names. The editor shows each line's address and bytes as you type, `Tab` steps from instruction to
+  instruction, and an original instruction you write over moves to a column on the right, out of the code. The code
+  can be shorter (NOPs fill the rest) but not longer, unless you choose to overwrite past the range. The listing marks
+  the patched bytes. Each patch can be switched off and on in the Explorer, edited, removed (the original bytes come
+  back) and saved as a PRG. The export writes each one's source to `patches/`, as a `.asm` file that assembles on its
+  own.
 - **The toolchain is built in:** Kick Assembler builds, VICE (`F5`), Exomizer packing in the *Pack* view, and a
   terminal with the tools on its `PATH`.
 

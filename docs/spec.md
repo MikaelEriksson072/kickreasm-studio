@@ -1011,6 +1011,12 @@ En patch är ny kod som användaren skriver över ett intervall av de laddade by
     rad med kod efter en eventuell etikett, inte en ensam etikett, en kommentar eller en tom rad.
   - `Enter` ger en ny rad med instruktionernas indrag.
   - `Ctrl+Enter` lägger in patchen och `Esc` stänger.
+  - **Skriva över originalet** (en ny patch, vars rader börjar som originalets): ett tecken som skrivs där en
+    originalinstruktion börjar (där markören står när dialogen öppnas och efter `Tab`) ersätter hela instruktionen
+    till radens slut. Ändras en originalrad någon annanstans ändras bara det. I båda fallen flyttar originalet till
+    kolumnen *Original* längst till höger, överstruket. Det är inte en del av koden och räknas inte. `Ctrl+Z` i
+    kodrutan tar tillbaka originalraden, och då försvinner den ur kolumnen. Raderna följs när rader läggs till eller tas
+    bort. Kolumnen syns när något har skrivits över.
 - **Koden** är Kick Assembler. Den assembleras medan man skriver, med den inbyggda Kick-subset-assemblern, från
   intervallets start. Programmets etiketter och nollsidevariabler (som listningen namnger dem) och hårdvarunamnen i
   `include/c64-hardware.asm` går att använda. Ett namn som koden själv definierar vinner. Dialogen visar hur många byte

@@ -134,6 +134,11 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .pe-gl.err { background: color-mix(in srgb, var(--err) 18%, transparent); }
 .pe-gl.past .pe-adr, .pe-gl.past .pe-hex { color: var(--warn); }
 .pe-code { position: relative; flex: 1; min-width: 0; }
+/* the original instructions written over, on the right: not part of the code */
+.pe-was { flex: none; width: 26ch; overflow: hidden; border-left: 1px solid var(--line); background: var(--panel); padding-top: 6px; font-size: 12.5px; color: var(--fg-3); user-select: none; }
+.pe-wl { height: 20px; line-height: 20px; padding: 0 10px; white-space: pre; overflow: hidden; text-overflow: ellipsis; text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--fg-3) 60%, transparent); }
+.pe-wl.cur { background: var(--row-hover); }
+.pe-was-title { flex: none; width: 26ch; padding: 0 10px; box-sizing: content-box; border-left: 1px solid var(--line); color: var(--fg-2); }
 .pe-band { position: absolute; left: 0; right: 0; top: 6px; height: 20px; background: var(--row-hover); pointer-events: none; }
 .pe-band.err { background: color-mix(in srgb, var(--err) 12%, transparent); }
 .pe-code textarea { position: relative; display: block; width: 100%; height: 100%; margin: 0; border: 0; outline: none; resize: none; background: transparent; color: var(--fg);

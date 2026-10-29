@@ -61,7 +61,7 @@ export function PatchModal({ A, R, project, draft, onApply, onClose }: PatchModa
           <label className="field"><span>Fill the rest with</span>
             <select id="patch-fill" value={fill} onChange={e => setFill(e.target.value as PatchFill)}><option value="nop">NOP ($ea)</option><option value="keep">the bytes that are there</option></select></label>
         </div>
-        <PatchEditor value={source} onChange={setSource} start={start} end={end} lines={plan.lines} code={plan.code} errorLine={'error' in plan ? plan.line : undefined} />
+        <PatchEditor value={source} onChange={setSource} start={start} end={end} lines={plan.lines} code={plan.code} errorLine={'error' in plan ? plan.line : undefined} original={!draft.id} />
         <label className="check small"><input type="checkbox" id="patch-over" checked={over} onChange={e => setOver(e.target.checked)} />
           <span>Overwrite past the range: the code may be longer than the {size} bytes, and writes over the bytes after it</span></label>
         {ok ? sum : <div className="err-text small" role="alert">{plan.error}</div>}
@@ -81,14 +81,39 @@ interface PatchEditorProps {
   lines?: (PatchLine | null)[]; code?: Uint8Array;
   /** the line the error is on (1 for the first) */
   errorLine?: number;
+  /** the code starts as the original's lines (a new patch): what is written over them moves them to the right */
+  original?: boolean;
 }
 
-/** The code with an assembler listing's columns beside it: each line's address and its first bytes. */
-function PatchEditor({ value, onChange, start, end, lines, code, errorLine }: PatchEditorProps) {
+/** The lines of `next` that are the lines of `prev` they came from, given what changed between them (the same lines
+ *  at the start and at the end): a line edited, split or joined keeps what its first part had, a new line has none. */
+function followLines<T>(prev: readonly string[], next: readonly string[], per: readonly (T | null)[]): (T | null)[] {
+  let p = 0;
+  while (p < prev.length && p < next.length && prev[p] === next[p]) p++;
+  let s = 0;
+  while (s < prev.length - p && s < next.length - p && prev[prev.length - 1 - s] === next[next.length - 1 - s]) s++;
+  const was = prev.length - p - s;
+  return [...per.slice(0, p), ...Array.from({ length: next.length - p - s }, (_, k) => (k < was ? per[p + k] ?? null : null)), ...per.slice(prev.length - s)];
+}
+
+/** an original line's instruction as the Original column shows it (without the indent and the comment) */
+const bare = (line: string) => line.replace(/\/\/.*$/, '').trim();
+
+/**
+ * The code with an assembler listing's columns beside it: each line's address and its first bytes. In a new patch
+ * the lines start as the original's; typing at the start of an original instruction writes over all of it, editing
+ * one changes it, and either way the original moves to the Original column on the right, out of the code.
+ */
+function PatchEditor({ value, onChange, start, end, lines, code, errorLine, original }: PatchEditorProps) {
   const ta = useRef<HTMLTextAreaElement>(null), gut = useRef<HTMLDivElement>(null);
   const [cur, setCur] = useState(0);
   const [top, setTop] = useState(0);
   const text = value.split('\n');
+  /** per line: the original line it still is or was edited from (null: a line of the user's) */
+  const origin = useRef<(string | null)[]>(original ? text.map(l => (instructionAt(l) != null ? l : null)) : text.map(() => null));
+  const change = (next: string) => { origin.current = followLines(text, next.split('\n'), origin.current); onChange(next); };
+  const moved = text.map((l, i) => { const o = origin.current[i]; return o != null && l !== o ? bare(o) : null; });
+  const anyMoved = moved.some(Boolean);
   /** where each line starts in the text */
   const offsets = useMemo(() => { const o = [0]; for (const l of value.split('\n')) o.push(o[o.length - 1] + l.length + 1); return o; }, [value]);
   const lineAt = (pos: number) => { let i = 0; while (i + 1 < offsets.length - 1 && offsets[i + 1] <= pos) i++; return i; };
@@ -113,6 +138,17 @@ function PatchEditor({ value, onChange, start, end, lines, code, errorLine }: Pa
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const instructions = () => text.flatMap((l, i) => (instructionAt(l) != null ? [i] : []));
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget, pos = el.selectionStart;
+    if (e.key.length === 1 && e.key.trim() && !e.ctrlKey && !e.metaKey && !e.altKey && pos === el.selectionEnd) {
+      // typing at the start of an original instruction writes over it, to the end of the line (one step for Ctrl+Z)
+      const i = lineAt(pos), at = instructionAt(text[i]);
+      if (origin.current[i] != null && text[i] === origin.current[i] && at != null && pos === offsets[i] + at) {
+        e.preventDefault();
+        el.setSelectionRange(pos, offsets[i] + text[i].length);
+        if (!document.execCommand('insertText', false, e.key)) { el.setRangeText(e.key, pos, offsets[i] + text[i].length, 'end'); change(el.value); }
+        return;
+      }
+    }
     if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
       // the next (Shift: the previous) instruction, round to the first (the last)
       e.preventDefault();
@@ -124,7 +160,7 @@ function PatchEditor({ value, onChange, start, end, lines, code, errorLine }: Pa
     if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
       // a new line at the instructions' indent (as typed: Ctrl+Z in the editor takes it back)
       e.preventDefault();
-      const el = e.currentTarget, l = text[lineAt(el.selectionStart)];
+      const l = text[lineAt(pos)];
       const lead = instructionAt(l) != null && !/^\s*[A-Za-z_]\w*:/.test(l) ? /^\s*/.exec(l)![0] : indent;
       if (!document.execCommand('insertText', false, '\n' + lead)) el.setRangeText('\n' + lead, el.selectionStart, el.selectionEnd, 'end');
     }
@@ -138,7 +174,8 @@ function PatchEditor({ value, onChange, start, end, lines, code, errorLine }: Pa
   return (
     <div className="pe">
       <div className="pe-head small"><span className="pe-adr">Addr</span><span className="pe-hex">Bytes</span><span className="pe-title">Code at ${h4(start)}</span>
-        <span className="pe-keys muted"><kbd>Tab</kbd> next instruction · <kbd>Shift</kbd>+<kbd>Tab</kbd> previous · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> apply</span></div>
+        <span className="pe-keys muted"><kbd>Tab</kbd> next instruction · <kbd>Shift</kbd>+<kbd>Tab</kbd> previous · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> apply</span>
+        {anyMoved && <span className="pe-was-title" title="The original instructions you have written over: not part of the code">Original</span>}</div>
       <div className="pe-body">
         <div className="pe-gutter mono" ref={gut} aria-hidden="true">
           <div style={{ transform: `translateY(${-top}px)` }}>
@@ -154,9 +191,14 @@ function PatchEditor({ value, onChange, start, end, lines, code, errorLine }: Pa
           <div className="pe-band" style={{ transform: `translateY(${cur * 20 - top}px)` }} />
           {errorLine != null && errorLine <= text.length && <div className="pe-band err" style={{ transform: `translateY(${(errorLine - 1) * 20 - top}px)` }} />}
           <textarea id="patch-code" ref={ta} className="mono" value={value} spellCheck={false} wrap="off" aria-label={`Code at $${h4(start)} (Kick Assembler)`}
-            onChange={e => { onChange(e.target.value); }} onKeyDown={onKeyDown} onSelect={sync} onKeyUp={sync} onClick={sync}
+            onChange={e => change(e.target.value)} onKeyDown={onKeyDown} onSelect={sync} onKeyUp={sync} onClick={sync}
             onScroll={e => setTop(e.currentTarget.scrollTop)} />
         </div>
+        {anyMoved && <div className="pe-was mono" aria-label="Original instructions written over">
+          <div style={{ transform: `translateY(${-top}px)` }}>
+            {text.map((_, i) => <div key={i} className={cx('pe-wl', i === cur && 'cur')} title={moved[i] ?? undefined}>{moved[i] ?? ''}</div>)}
+          </div>
+        </div>}
       </div>
     </div>
   );

@@ -2473,6 +2473,24 @@ test('patch: new code over the selected lines, marked as patched, saved as a PRG
     await expect(dialog.locator('.pe-gl.past')).toHaveCount(1);
   });
 
+  await test.step('writing over an original instruction moves it to the Original column, out of the code', async () => {
+    const original = dialog.getByLabel('Original instructions written over');
+    await expect(original).toHaveCount(0);
+    // Tab from the new last line goes round to the first instruction: typing there writes over all of `lda SID_OSC3`
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('lda #$02');
+    await expect(original.locator('.pe-wl')).toHaveText(['', 'lda SID_OSC3', '', '', '']);
+    // editing inside a line changes just that, and the original moves over too
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('End');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type('1');
+    await expect(code).toHaveValue(/^fx_091e:\n        lda #\$02\n        and #\$01\n        sta COLOR_RAM\+24\*40\+39 .*\n        nop$/);
+    await expect(original.locator('.pe-wl')).toHaveText(['', 'lda SID_OSC3', 'and #$0f', '', '']);
+    await expect(dialog.locator('.pe-gl').nth(1)).toHaveText(/^091e\s*a9 02$/);
+    await expect(dialog.getByRole('status')).toContainText('8 of 8 bytes');
+  });
+
   await test.step('longer code needs "Overwrite past the range"; shorter code is filled with NOPs', async () => {
     await code.fill('  lda #$02\n  sta $d020\n  sta $d021\n  nop');
     await expect(dialog.getByRole('alert')).toHaveText('The code is 9 bytes, 1 more than the 8 of the original. Tick "Overwrite past the range" to write over the bytes after it.');
