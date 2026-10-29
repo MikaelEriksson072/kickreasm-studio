@@ -185,6 +185,28 @@ describe('patches', () => {
     expect([...assembleAlone(bytes)]).toEqual([...makePrg(0x080d, a.bytes)]);
   });
 
+  it('keeps the cycle count: as many cycles as the original, the NOPs of the fill counted, only instructions of a fixed time', () => {
+    const p = project();
+    // lda #$00 / sta $d020 / sta $d021: 8 bytes, 2 + 4 + 4 = 10 cycles
+    const at = (source: string, o: Partial<PatchRequest> = {}) => plan(p, { start: 0x080d, end: 0x0815, source, cycles: true, ...o });
+    // 6 cycles of code and 3 NOPs of fill (6 more)
+    expect(at('  lda #$02\n  sta $d020')).toMatchObject({ error: 'The patch takes 12 cycles, 2 more than the 10 of the original.', time: { original: 10, originalMost: 10, now: 12 } });
+    expect(at('  lda #0\n  lda #0\n  lda #0\n  lda #0')).toMatchObject({ error: 'The patch takes 8 cycles, 2 fewer than the 10 of the original: 2 left to use.', time: { now: 8 } });
+    const same = ok(at('  lda #$02\n  sta $d020\n  lda #$00'));
+    expect(same.time).toEqual({ original: 10, originalMost: 10, now: 10 });
+    expect(same.patch.cycles).toBe(true);
+    // with the bytes there kept, the original's sta $d021 after the code counts
+    expect(ok(at('  lda #$02\n  sta $d020', { fill: 'keep' })).time?.now).toBe(10);
+    // a branch, an indexed read that can cross a page: not allowed; $d000,x cannot cross, so it is
+    expect(at('  bne *+2\n  lda #0\n  lda #0')).toMatchObject({ line: 1, error: 'Line 1: bne *+2 takes 2 or 3 cycles (a branch, not taken or taken). Keeping the cycle count needs instructions that take a fixed time.' });
+    expect(at('  lda #0\n  lda $d001,x   // index')).toMatchObject({ line: 2, error: expect.stringMatching(/^Line 2: lda \$d001,x takes 4 or 5 cycles \(one more when the index crosses a page\)/) });
+    expect(at('  lda $d000,x\n  lda $d000,x')).not.toMatchObject({ line: expect.anything() });
+    // the original's own time can vary: dex / bne loop takes 4, or 5 with the branch taken
+    expect(plan(p, { start: 0x0817, end: 0x081a, source: '  nop', cycles: true })).toMatchObject({ time: { original: 4, originalMost: 5, now: 6 } });
+    // without the cycle count kept, nothing of this
+    expect(ok(plan(p, { start: 0x080d, end: 0x0815, source: '  lda #$02\n  sta $d020' }))).not.toHaveProperty('time');
+  });
+
   it('names its files safely', () => {
     expect(patchFileName('  fix: irq/nmi  ')).toBe('fix_irq_nmi.prg');
     expect(patchFileName('..')).toBe('patch.prg');

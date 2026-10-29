@@ -5,12 +5,12 @@
  * longer than the range unless "Overwrite past the range" is ticked; a shorter one leaves the rest to the fill.
  * Nothing changes until "Apply patch", and Ctrl+Z takes it back. */
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { h2, h4, patchEnd, planPatch, type Addr, type AnalysisResult, type PatchFill, type PatchLine, type PatchPlan, type Project, type RenderResult } from '@mimir/core';
+import { cycleText, h2, h4, instructionCycles, OPC, patchEnd, planPatch, type Addr, type AnalysisResult, type PatchFill, type PatchLine, type PatchPlan, type PatchTime, type Project, type RenderResult } from '@mimir/core';
 import { cx } from '../lib/util';
 import { Modal } from './Modal';
 
 /** what the dialog starts with: the range, and the code (the listing's lines, or the patch being edited) */
-export interface PatchDraft { start: Addr; end: Addr; name: string; source: string; fill: PatchFill; over: boolean; id?: string }
+export interface PatchDraft { start: Addr; end: Addr; name: string; source: string; fill: PatchFill; over: boolean; cycles: boolean; id?: string }
 
 interface PatchModalProps {
   A: AnalysisResult; R: RenderResult; project: Project; draft: PatchDraft;
@@ -37,8 +37,9 @@ export function PatchModal({ A, R, project, draft, onApply, onClose }: PatchModa
   const [source, setSource] = useState(draft.source);
   const [fill, setFill] = useState<PatchFill>(draft.fill);
   const [over, setOver] = useState(draft.over);
+  const [cycles, setCycles] = useState(draft.cycles);
   const { start, end } = draft, size = end - start;
-  const plan = useMemo(() => planPatch(A, R, project, { name, start, end, source, fill, over, id: draft.id }), [A, R, project, name, start, end, source, fill, over, draft.id]);
+  const plan = useMemo(() => planPatch(A, R, project, { name, start, end, source, fill, over, cycles, id: draft.id }), [A, R, project, name, start, end, source, fill, over, cycles, draft.id]);
   const ok = !('error' in plan);
   const apply = () => { if (ok) onApply(plan); };
   const keys = (e: KeyboardEvent) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); apply(); } };
@@ -61,7 +62,10 @@ export function PatchModal({ A, R, project, draft, onApply, onClose }: PatchModa
           <label className="field"><span>Fill the rest with</span>
             <select id="patch-fill" value={fill} onChange={e => setFill(e.target.value as PatchFill)}><option value="nop">NOP ($ea)</option><option value="keep">the bytes that are there</option></select></label>
         </div>
-        <PatchEditor value={source} onChange={setSource} start={start} end={end} lines={plan.lines} code={plan.code} errorLine={'error' in plan ? plan.line : undefined} original={!draft.id} />
+        <PatchEditor value={source} onChange={setSource} start={start} end={end} lines={plan.lines} code={plan.code} errorLine={'error' in plan ? plan.line : undefined} original={!draft.id}
+          time={cycles ? plan.time ?? null : undefined} />
+        <label className="check small"><input type="checkbox" id="patch-cycles" checked={cycles} onChange={e => setCycles(e.target.checked)} />
+          <span>Keep the cycle count: the patch must take as many cycles as the original, run straight through (the NOP fill counts too), with instructions that take a fixed time (no branches, no indexed reads that can cross a page)</span></label>
         <label className="check small"><input type="checkbox" id="patch-over" checked={over} onChange={e => setOver(e.target.checked)} />
           <span>Overwrite past the range: the code may be longer than the {size} bytes, and writes over the bytes after it</span></label>
         {ok ? sum : <div className="err-text small" role="alert">{plan.error}</div>}
@@ -83,6 +87,35 @@ interface PatchEditorProps {
   errorLine?: number;
   /** the code starts as the original's lines (a new patch): what is written over them moves them to the right */
   original?: boolean;
+  /** with the cycle count kept: the cycles against the original's (null: not counted yet); the lines get a cycles column */
+  time?: PatchTime | null;
+}
+
+/** the cycles of the instructions of a line (`4`, `2/3` for a branch, `4+` across a page), and whether they vary */
+function lineCycles(code: Uint8Array, start: Addr, ln: PatchLine): { text: string; varies: boolean } | null {
+  if (ln.len <= 0) return null;
+  const mem = new Uint8Array(0x10000);
+  mem.set(code.subarray(0, 0x10000 - start), start);
+  let sum = 0;
+  const odd: string[] = [];
+  for (let pc = ln.addr; pc < ln.addr + ln.len; pc += OPC[mem[pc]].len) {
+    const c = instructionCycles(mem, pc);
+    if (c.page || c.taken != null || c.jam) odd.push(cycleText(c)); else sum += c.base;
+  }
+  return odd.length ? { text: [...(sum ? [String(sum)] : []), ...odd].join('+'), varies: true } : { text: String(sum), varies: false };
+}
+
+/** the line at the bottom of the editor with the cycle count kept: how many cycles are left to use */
+function CycleBar({ time }: { time: PatchTime | null }) {
+  if (!time) return <div className="pe-foot small" role="status" aria-label="Cycles">Cycles: write code that assembles to count them</div>;
+  const left = time.original - time.now;
+  return (
+    <div className={cx('pe-foot small', left === 0 && !time.varies ? 'ok' : left < 0 ? 'over' : 'left')} role="status" aria-label="Cycles">
+      <span>Cycles <b>{time.now}</b> of {time.original}</span>
+      <span className="pe-left">{left > 0 ? `${left} left to use` : left < 0 ? `${-left} too many` : 'the same as the original'}</span>
+      {time.originalMost > time.original && <span className="muted">the original takes {time.original}–{time.originalMost} with branches taken and pages crossed; {time.original} counts</span>}
+    </div>
+  );
 }
 
 /** The lines of `next` that are the lines of `prev` they came from, given what changed between them (the same lines
@@ -104,7 +137,8 @@ const bare = (line: string) => line.replace(/\/\/.*$/, '').trim();
  * the lines start as the original's; typing at the start of an original instruction writes over all of it, editing
  * one changes it, and either way the original moves to the Original column on the right, out of the code.
  */
-function PatchEditor({ value, onChange, start, end, lines, code, errorLine, original }: PatchEditorProps) {
+function PatchEditor({ value, onChange, start, end, lines, code, errorLine, original, time }: PatchEditorProps) {
+  const counting = time !== undefined;
   const ta = useRef<HTMLTextAreaElement>(null), gut = useRef<HTMLDivElement>(null);
   const [cur, setCur] = useState(0);
   const [top, setTop] = useState(0);
@@ -173,7 +207,7 @@ function PatchEditor({ value, onChange, start, end, lines, code, errorLine, orig
   };
   return (
     <div className="pe">
-      <div className="pe-head small"><span className="pe-adr">Addr</span><span className="pe-hex">Bytes</span><span className="pe-title">Code at ${h4(start)}</span>
+      <div className="pe-head small"><span className="pe-adr">Addr</span><span className="pe-hex">Bytes</span>{counting && <span className="pe-cy" title="Cycles">Cy</span>}<span className="pe-title">Code at ${h4(start)}</span>
         <span className="pe-keys muted"><kbd>Tab</kbd> next instruction · <kbd>Shift</kbd>+<kbd>Tab</kbd> previous · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> apply</span>
         {anyMoved && <span className="pe-was-title" title="The original instructions you have written over: not part of the code">Original</span>}</div>
       <div className="pe-body">
@@ -181,8 +215,10 @@ function PatchEditor({ value, onChange, start, end, lines, code, errorLine, orig
           <div style={{ transform: `translateY(${-top}px)` }}>
             {text.map((l, i) => {
               const ln = lines?.[i] ?? null, hasCode = !!ln && ln.len > 0;
+              const cy = counting && hasCode && code ? lineCycles(code, start, ln!) : null;
               return <div key={i} className={cx('pe-gl', i === cur && 'cur', errorLine === i + 1 && 'err', hasCode && ln!.addr + ln!.len > end && 'past')}>
                 <span className="pe-adr">{ln && (hasCode || labelOnly(l)) ? h4(ln.addr) : ''}</span><span className="pe-hex">{hasCode ? bytesOf(ln!) : ''}</span>
+                {counting && <span className={cx('pe-cy', cy?.varies && 'varies')}>{cy?.text ?? ''}</span>}
               </div>;
             })}
           </div>
@@ -200,6 +236,7 @@ function PatchEditor({ value, onChange, start, end, lines, code, errorLine, orig
           </div>
         </div>}
       </div>
+      {counting && <CycleBar time={time ?? null} />}
     </div>
   );
 }

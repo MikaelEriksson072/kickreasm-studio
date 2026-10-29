@@ -8,6 +8,8 @@ import { hardwareInclude } from './render/include';
 import { makePrg } from './c64/prg';
 import { newId } from './project';
 import { h2, h4 } from './util/hex';
+import { instructionCycles } from './cpu/cycles';
+import { OPC } from './cpu/opcodes';
 
 const NOP = 0xea;
 
@@ -19,6 +21,8 @@ export interface PatchRequest {
   fill: PatchFill;
   /** the code may write past the end of the range, over the bytes after it */
   over: boolean;
+  /** keep the cycle count: the patch must take as many cycles as the original, with instructions of a fixed time */
+  cycles?: boolean;
   /** the patch this edits: it is written again over the bytes it found, and only other patches are in the way */
   id?: string;
 }
@@ -29,15 +33,45 @@ export interface PatchLine { addr: Addr; len: number }
 /** The assembled code, line by line (null: the assembler did not get to the line), and its bytes from the start. */
 export interface PatchCode { lines: (PatchLine | null)[]; code: Uint8Array }
 
+/**
+ * The time of the patched bytes against the original's, both run straight through from the start to the end of the
+ * range (or of the patch, when it writes past it): the new code with its fill, the original's instructions there.
+ * Counted without page crossings and with branches not taken; `originalMost` is the most the original can take.
+ */
+export interface PatchTime {
+  original: number; originalMost: number;
+  now: number;
+  /** the first instruction of the code whose time is not fixed: a branch, an indexed read that can cross a page */
+  varies?: { line?: number; why: string };
+}
+
 export interface PatchPlan extends PatchCode {
   patch: Patch;
   /** how many bytes it writes past the range (only with `over`) */
   past: number;
+  /** with the cycle count kept */
+  time?: PatchTime;
 }
 
 /** What is wrong; `line` is the line of the code it is on (1 for the first). The code's lines and bytes are there as
  *  far as the assembler got, to show where each line goes while it is being written. */
-export interface PatchError extends Partial<PatchCode> { error: string; line?: number }
+export interface PatchError extends Partial<PatchCode> { error: string; line?: number; time?: PatchTime }
+
+/** the instructions of `bytes` at `at`, run straight through: each one's address and cycles */
+function stepsOf(bytes: Uint8Array, at: Addr) {
+  const mem = new Uint8Array(0x10000);
+  mem.set(bytes.subarray(0, 0x10000 - at), at);
+  const out: { pc: Addr; c: ReturnType<typeof instructionCycles> }[] = [];
+  for (let pc = at; pc < at + bytes.length; pc += OPC[mem[pc]].len) out.push({ pc, c: instructionCycles(mem, pc) });
+  return out;
+}
+
+/** the cycles of `bytes` at `at` run straight through, and the most they can take (page crossings, branches taken) */
+export function straightCycles(bytes: Uint8Array, at: Addr): { cycles: number; most: number } {
+  let cycles = 0, most = 0;
+  for (const { c } of stepsOf(bytes, at)) { cycles += c.base; most += c.taken ?? c.base + (c.page ? 1 : 0); }
+  return { cycles, most };
+}
 
 /** the end of what patch `p` writes (excluded) */
 export const patchEnd = (p: Pick<Patch, 'start' | 'bytes'>): Addr => p.start + p.bytes.length;
@@ -162,33 +196,69 @@ export function planPatch(A: AnalysisResult, R: Pick<RenderResult, 'labels' | 'z
   const { start, end } = req;
   if (!(start >= 0 && start < end && end <= 0x10000)) return { error: 'The range is empty.' };
   const asm = assemblePatch(R, project.settings, start, req.source);
-  const fail = (error: string): PatchError => ({ lines: asm.lines, code: asm.code, error });
+  let time: PatchTime | undefined;
+  const fail = (error: string): PatchError => ({ lines: asm.lines, code: asm.code, error, ...(time ? { time } : {}) });
   if (asm.error) return { lines: asm.lines, code: asm.code, error: asm.error, ...(asm.line ? { line: asm.line } : {}) };
   const name = req.name.trim();
-  if (!name) return fail('Give the patch a name.');
-  if (project.patches.some(p => p.id !== req.id && p.name.trim().toLowerCase() === name.toLowerCase())) return fail(`There is already a patch called "${name}".`);
   const file = A.owner[start];
   if (file < 0) return fail(`$${h4(start)} is not part of any loaded file.`);
   for (let a = start; a < end; a++) if (A.owner[a] !== file) return fail(`$${h4(start)}-$${h4(end - 1)} ${A.owner[a] < 0 ? 'runs past the end of the file' : 'crosses into another file'} at $${h4(a)}.`);
   const n = asm.code.length, size = end - start;
-  if (n > size && !req.over) return fail(`The code is ${n} bytes, ${n - size} more than the ${size} of the original. Tick "Overwrite past the range" to write over the bytes after it.`);
-  if (!n && req.fill === 'keep') return fail('Write the code that replaces the original (with no code, NOPs can fill the range).');
   const len = req.fill === 'nop' ? Math.max(n, size) : n;
-  for (let a = end; a < start + len; a++) if (A.owner[a] !== file) return fail(`The code runs past the end of the file at $${h4(a)}.`);
-  const other = project.patches.find(p => p.id !== req.id && p.start < start + len && patchEnd(p) > start);
-  if (other) return fail(`It would write over the patch "${other.name}" ($${h4(other.start)}-$${h4(patchEnd(other) - 1)}${other.off ? ', switched off' : ''}).`);
-
-  const bytes = new Uint8Array(len).fill(NOP);
-  bytes.set(asm.code);
   // the bytes it writes over: as loaded, the patch being edited taken out first (when it is on)
   const edited = req.id ? project.patches.find(p => p.id === req.id) : undefined;
   const base = edited && !edited.off ? revertPatch(project.files, edited) : project.files;
+  if (req.cycles) time = patchTime(base, req, asm);
+
+  if (!name) return fail('Give the patch a name.');
+  if (project.patches.some(p => p.id !== req.id && p.name.trim().toLowerCase() === name.toLowerCase())) return fail(`There is already a patch called "${name}".`);
+  if (n > size && !req.over) return fail(`The code is ${n} bytes, ${n - size} more than the ${size} of the original. Tick "Overwrite past the range" to write over the bytes after it.`);
+  if (!n && req.fill === 'keep') return fail('Write the code that replaces the original (with no code, NOPs can fill the range).');
+  for (let a = end; a < start + len; a++) if (A.owner[a] !== file) return fail(`The code runs past the end of the file at $${h4(a)}.`);
+  const other = project.patches.find(p => p.id !== req.id && p.start < start + len && patchEnd(p) > start);
+  if (other) return fail(`It would write over the patch "${other.name}" ($${h4(other.start)}-$${h4(patchEnd(other) - 1)}${other.off ? ', switched off' : ''}).`);
+  if (time?.varies) {
+    const { line, why } = time.varies, text = line ? req.source.split('\n')[line - 1]?.replace(/\/\/.*$/, '').trim() : '';
+    return { ...fail(`${line ? `Line ${line}: ${text} ` : 'An instruction '}${why}. Keeping the cycle count needs instructions that take a fixed time.`), ...(line ? { line } : {}) };
+  }
+  if (time && time.now !== time.original) {
+    const d = time.original - time.now;
+    return fail(d > 0 ? `The patch takes ${time.now} cycles, ${d} fewer than the ${time.original} of the original: ${d} left to use.` : `The patch takes ${time.now} cycles, ${-d} more than the ${time.original} of the original.`);
+  }
+
+  const bytes = new Uint8Array(len).fill(NOP);
+  bytes.set(asm.code);
   const f = base[fileIndex(base, start, start + len)];
   if (!f) return fail(`$${h4(start)}-$${h4(start + len - 1)} is not inside one loaded file.`);
   const old = f.bytes.slice(start - f.load, start - f.load + len);
   // with `keep` the bytes after the code stay as they are: the patch writes only the code
-  const patch: Patch = { id: edited?.id ?? newId(), name, start, end, source: req.source, fill: req.fill, over: req.over, bytes, old, ...(edited?.off ? { off: true } : {}) };
-  return { patch, lines: asm.lines, code: asm.code, past: Math.max(0, n - size) };
+  const patch: Patch = { id: edited?.id ?? newId(), name, start, end, source: req.source, fill: req.fill, over: req.over, bytes, old, ...(req.cycles ? { cycles: true } : {}), ...(edited?.off ? { off: true } : {}) };
+  return { patch, lines: asm.lines, code: asm.code, past: Math.max(0, n - size), ...(time ? { time } : {}) };
+}
+
+/**
+ * The time of the patch against the original's (PatchTime): the bytes from the start to the end of the range, or of
+ * the code when it is longer, run straight through, as the original has them and as they are with the code and its
+ * fill (with `keep`, the original's bytes after the code). The code's own instructions must take a fixed time.
+ */
+function patchTime(files: readonly Pick<LoadedFile, 'load' | 'bytes'>[], req: PatchRequest, asm: PatchCode): PatchTime | undefined {
+  const { start, end } = req, n = asm.code.length, len = req.fill === 'nop' ? Math.max(n, end - start) : n;
+  const f = files[fileIndex(files, start, end)];
+  if (!f) return undefined;
+  const span = Math.min(Math.max(end, start + len), f.load + f.bytes.length);
+  const original = f.bytes.slice(start - f.load, span - f.load);
+  const now = original.slice();
+  for (let i = 0; i < Math.min(len, now.length); i++) now[i] = i < n ? asm.code[i] : NOP;
+  const o = straightCycles(original, start), w = straightCycles(now, start);
+  const time: PatchTime = { original: o.cycles, originalMost: o.most, now: w.cycles };
+  for (const { pc, c } of stepsOf(asm.code, start)) {
+    if (!c.page && c.taken == null && !c.jam) continue;
+    const i = asm.lines.findIndex(l => !!l && l.len > 0 && pc >= l.addr && pc < l.addr + l.len);
+    const why = c.jam ? 'stops the CPU' : c.taken != null ? `takes ${c.base} or ${c.taken} cycles (a branch, not taken or taken)` : `takes ${c.base} or ${c.base + 1} cycles (one more when the index crosses a page)`;
+    time.varies = { ...(i >= 0 ? { line: i + 1 } : {}), why };
+    break;
+  }
+  return time;
 }
 
 /**

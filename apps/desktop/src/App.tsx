@@ -467,7 +467,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     return out;
   };
   const editPatch = (p: Patch) => {
-    setPatchDraft({ start: p.start, end: p.end, name: p.name, source: p.source, fill: p.fill, over: p.over, id: p.id });
+    setPatchDraft({ start: p.start, end: p.end, name: p.name, source: p.source, fill: p.fill, over: p.over, cycles: !!p.cycles, id: p.id });
     setModal('patch');
   };
   /** P: the selection, else the line at the cursor (a range with a patch in it edits that patch) */
@@ -478,7 +478,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     if (hit.length === 1) { editPatch(hit[0]); return; }
     if (hit.length > 1) { toast(`The selection holds ${hit.length} patches (${hit.map(p => `"${p.name}"`).join(', ')}): edit them one at a time`, 'warn'); return; }
     if (A.owner[r.start] < 0) { toast(`$${h4(r.start)} is not part of any loaded file`, 'warn'); return; }
-    setPatchDraft({ start: r.start, end: r.end, name: `patch_${h4(r.start)}`, source: rangeLines(r.start, r.end).join('\n'), fill: 'nop', over: false });
+    setPatchDraft({ start: r.start, end: r.end, name: `patch_${h4(r.start)}`, source: rangeLines(r.start, r.end).join('\n'), fill: 'nop', over: false, cycles: false });
     setModal('patch');
   };
   const closePatch = () => { setModal(null); setPatchDraft(null); setTimeout(() => listRef.current?.focus(), 0); };

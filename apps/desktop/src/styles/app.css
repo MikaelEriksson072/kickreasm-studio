@@ -134,6 +134,16 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .pe-gl.err { background: color-mix(in srgb, var(--err) 18%, transparent); }
 .pe-gl.past .pe-adr, .pe-gl.past .pe-hex { color: var(--warn); }
 .pe-code { position: relative; flex: 1; min-width: 0; }
+/* with the cycle count kept: each line's cycles, and what is left at the bottom */
+.pe-head .pe-cy, .pe-gl .pe-cy { flex: none; width: 5ch; padding-right: 8px; text-align: right; box-sizing: content-box; }
+.pe-gl .pe-cy { color: var(--fg-2); }
+.pe-gl .pe-cy.varies { color: var(--err); }
+.pe-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 5px 10px; border-top: 1px solid var(--line); background: var(--panel-2); color: var(--fg-2); }
+.pe-foot b { color: var(--fg); }
+.pe-foot .pe-left { font-weight: 600; }
+.pe-foot.left .pe-left { color: var(--warn); }
+.pe-foot.over .pe-left { color: var(--err); }
+.pe-foot.ok .pe-left { color: var(--ok); }
 /* the original instructions written over, on the right: not part of the code */
 .pe-was { flex: none; width: 26ch; overflow: hidden; border-left: 1px solid var(--line); background: var(--panel); padding-top: 6px; font-size: 12.5px; color: var(--fg-3); user-select: none; }
 .pe-wl { height: 20px; line-height: 20px; padding: 0 10px; white-space: pre; overflow: hidden; text-overflow: ellipsis; text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--fg-3) 60%, transparent); }

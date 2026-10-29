@@ -226,9 +226,9 @@ describe('schemas', () => {
     const read = deserializeProject(serializedProjectSchema.parse(json) as SerializedProject);
     expect(read.patches.map(x => ({ ...x, id: 'a1' }))).toEqual([patch]);
     expect(serializedProjectSchema.safeParse({ ...json, patches: [{ ...json.patches[0], old: 'AAA=' }] }).success).toBe(false);
-    // one switched off keeps that
-    const off = JSON.parse(JSON.stringify(serializeProject({ ...p, patches: [{ ...patch, off: true }] })));
-    expect(deserializeProject(serializedProjectSchema.parse(off) as SerializedProject).patches[0].off).toBe(true);
+    // one switched off, one written with the cycle count kept, keeps that
+    const off = JSON.parse(JSON.stringify(serializeProject({ ...p, patches: [{ ...patch, off: true, cycles: true }] })));
+    expect(deserializeProject(serializedProjectSchema.parse(off) as SerializedProject).patches[0]).toMatchObject({ off: true, cycles: true });
     delete json.patches;
     expect(serializedProjectSchema.parse(json).patches).toEqual([]);
   });

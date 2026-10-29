@@ -172,6 +172,8 @@ export interface Patch {
   old: Uint8Array;
   /** switched off: the files hold `old` instead of `bytes`; it keeps its range and its PRG file */
   off?: boolean;
+  /** written to take as many cycles as the original, with instructions of a fixed time */
+  cycles?: boolean;
 }
 
 export interface Project {

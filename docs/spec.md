@@ -1023,6 +1023,17 @@ En patch är ny kod som användaren skriver över ett intervall av de laddade by
   koden blir av intervallets, vad resten fylls med, och byten som skrivs och byten de skriver över. Fel visas med
   radnummer i koden. Varje rad får en egen etikett före sig när den assembleras (`assemblePatch`), och etikettens
   värde är radens adress. Därför syns adresserna så långt assemblern kom, även när koden har ett fel eller är för lång.
+- **Behåll cykeltalet** (*Keep the cycle count*, sparas med patchen som `cycles`):
+  - Patchen måste ta exakt lika många cykler som originalet. Båda räknas rakt igenom från intervallets start till
+    dess slut, eller till kodens slut när den är längre (`straightCycles`). Den nya koden räknas med sin
+    NOP-utfyllnad (2 cykler per NOP), eller med originalets byte efter koden när de behålls.
+  - Bara instruktioner med fast tid får användas. En branch (2 eller 3 cykler), en indexerad läsning som kan gå över
+    en sida (`abs,x`, `abs,y`, `(zp),y`, men inte `$xx00,x`) och JAM ger fel med radnumret.
+  - Kodrutan får kolumnen *Cy* med varje rads cykler (en varierande i rött, `2/3` eller `4+`). Längst ner står
+    *Cycles N of M* och hur många som är kvar att använda, hur många för många, eller *the same as the original*.
+  - Kan originalets tid variera säger raden det (*the original takes 22–25 with branches taken and pages crossed*),
+    och det lägsta talet gäller.
+  - *Apply patch* går först när cyklerna är lika.
 - **Längden:** koden får inte bli längre än intervallet. Med *Overwrite past the range* får den skriva vidare över
   byten efter intervallet, och dialogen säger vilka. Den får aldrig gå utanför filen som håller intervallet eller in i
   en annan patch, och den måste skrivas i ett stycke från starten (ingen egen `.pc`). Utan kod fylls intervallet med NOP.

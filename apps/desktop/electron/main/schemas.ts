@@ -67,7 +67,7 @@ export const settingsSchema = toolchainSettingsSchema.partial().extend({
 
 const fileName = z.string().min(1).max(255);
 /** code the user wrote over the loaded bytes (spec 10.2): what it wrote and what was there, as many bytes */
-const patchFields = { name: z.string().min(1).max(64), start: addr, end: addr, source: z.string().max(65536), fill: z.enum(['nop', 'keep']), over: z.boolean(), off: z.boolean().optional() };
+const patchFields = { name: z.string().min(1).max(64), start: addr, end: addr, source: z.string().max(65536), fill: z.enum(['nop', 'keep']), over: z.boolean(), off: z.boolean().optional(), cycles: z.boolean().optional() };
 const base64 = z.string().max(0x20000).regex(/^[A-Za-z0-9+/]*={0,2}$/);
 const serializedPatch = z.object({ ...patchFields, bytes: base64, old: base64 })
   .refine(p => p.bytes.length === p.old.length && p.bytes.length > 0, 'the bytes written and the bytes written over differ in length');

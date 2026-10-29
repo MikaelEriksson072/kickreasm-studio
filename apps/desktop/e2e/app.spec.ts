@@ -2488,7 +2488,33 @@ test('patch: new code over the selected lines, marked as patched, saved as a PRG
     await expect(code).toHaveValue(/^fx_091e:\n        lda #\$02\n        and #\$01\n        sta COLOR_RAM\+24\*40\+39 .*\n        nop$/);
     await expect(original.locator('.pe-wl')).toHaveText(['', 'lda SID_OSC3', 'and #$0f', '', '']);
     await expect(dialog.locator('.pe-gl').nth(1)).toHaveText(/^091e\s*a9 02$/);
-    await expect(dialog.getByRole('status')).toContainText('8 of 8 bytes');
+    await expect(dialog.getByRole('status').first()).toContainText('8 of 8 bytes');
+  });
+
+  await test.step('keeping the cycle count: the cycles of each line, how many are left at the bottom, fixed times only', async () => {
+    // the original: lda SID_OSC3 (4) / and #$0f (2) / sta COLOR_RAM+999 (4) = 10 cycles
+    const bar = dialog.getByRole('status', { name: 'Cycles' });
+    await expect(bar).toHaveCount(0);
+    await dialog.locator('#patch-cycles').check();
+    // lda #$02 (2) / and #$01 (2) / sta (4) / nop (2): the same
+    await expect(bar).toContainText('Cycles 10 of 10');
+    await expect(bar).toContainText('the same as the original');
+    await expect(dialog.locator('.pe-gl .pe-cy')).toHaveText(['', '2', '2', '4', '2']);
+    await expect(dialog.getByRole('button', { name: 'Apply patch' })).toBeEnabled();
+    // 2 + 4, and 3 NOPs of fill
+    await code.fill('  lda #$02\n  sta $d020');
+    await expect(bar).toContainText('Cycles 12 of 10');
+    await expect(bar).toContainText('2 too many');
+    await expect(dialog.getByRole('alert')).toHaveText('The patch takes 12 cycles, 2 more than the 10 of the original.');
+    await code.fill('  lda #0\n  lda #0\n  lda #0\n  lda #0');
+    await expect(bar).toContainText('2 left to use');
+    // a branch takes 2 or 3
+    await code.fill('  bne *+2\n  sta $d020\n  lda #0');
+    await expect(dialog.locator('.pe-gl .pe-cy.varies')).toHaveText(['2/3']);
+    await expect(dialog.getByRole('alert')).toHaveText(/^Line 1: bne \*\+2 takes 2 or 3 cycles \(a branch, not taken or taken\)\./);
+    await expect(dialog.getByRole('button', { name: 'Apply patch' })).toBeDisabled();
+    await dialog.locator('#patch-cycles').uncheck();
+    await expect(bar).toHaveCount(0);
   });
 
   await test.step('longer code needs "Overwrite past the range"; shorter code is filled with NOPs', async () => {
