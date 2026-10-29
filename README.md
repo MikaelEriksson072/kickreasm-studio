@@ -1,10 +1,10 @@
-<p align="center"><img src="apps/desktop/build/icon.png" width="112" alt="The Mimir Studio logo: the rune ᛗ with a golden eye"></p>
+<p align="center"><img src="apps/desktop/build/icon.png" width="112" alt="The Mimir Studio logo: the rune ᛗ with a golden eye over a broken chain"></p>
 
 # Mimir Studio
 
 **Turn Commodore 64 programs back into source code you can read, change and rebuild.**
 
-*Named after Mímir, who keeps the well of wisdom in Norse myth; the logo is his rune ᛗ with the eye in his well.*
+*Named after Mímir, who keeps the well of wisdom in Norse myth; the logo is his rune ᛗ with the eye in his well, over a broken chain.*
 
 Mimir Studio is a desktop IDE for re-assembling C64 software. Open a `.prg`, a `.d64` disk image or a VICE
 snapshot. The app traces the code, recognises graphics, music, tables and text, and names every hardware register
