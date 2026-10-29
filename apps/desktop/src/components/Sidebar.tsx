@@ -192,7 +192,7 @@ function PatchesSection({ list, onGo, onEdit, onSave, onRemove, onSwitch }: Patc
           </div>
         ))}
       </div>
-      <p className="side-hint">On: written over the loaded bytes. Off: the original bytes are back. The export writes each to patches/ as a PRG.</p>
+      <p className="side-hint">On: written over the loaded bytes. Off: the original bytes are back. The export writes each one's source to patches/ (.asm).</p>
     </SideSection>
   );
 }

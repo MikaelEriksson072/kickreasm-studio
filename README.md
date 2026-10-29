@@ -66,7 +66,8 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   the hardware names. The editor shows each line's address and bytes as you type, and `Tab` steps from instruction to
   instruction. The code can be shorter (NOPs fill the rest) but not longer, unless you choose to overwrite past the
   range. The listing marks the patched bytes. Each patch can be switched off and on in the Explorer, edited, removed
-  (the original bytes come back) and saved as a PRG, and the export writes them all to `patches/`.
+  (the original bytes come back) and saved as a PRG. The export writes each one's source to `patches/`, as a `.asm`
+  file that assembles on its own.
 - **The toolchain is built in:** Kick Assembler builds, VICE (`F5`), Exomizer packing in the *Pack* view, and a
   terminal with the tools on its `PATH`.
 

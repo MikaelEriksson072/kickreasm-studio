@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   analyze, createProject, deserializeProject, exportFiles, lineText, makePrg, patchEnd, patchFileName, planPatch, render, serializeProject,
-  switchPatch, unpatchedFiles, verify, withoutPatch, withPatch, type PatchRequest, type Project,
+  assemble, patchSource, switchPatch, unpatchedFiles, verify, withoutPatch, withPatch, type PatchRequest, type Project,
 } from '../src';
 import { fromSource } from './helpers/programs';
 
@@ -19,6 +19,8 @@ const plan = (p: Project, req: Partial<PatchRequest> & Pick<PatchRequest, 'start
 };
 const ok = (r: ReturnType<typeof plan>) => { if ('error' in r) throw new Error(r.error); return r; };
 const bytesAt = (p: Project, a: number, n: number) => [...p.files[0].bytes.subarray(a - p.files[0].load, a - p.files[0].load + n)];
+/** a patch's .asm assembled on its own (no other file), as its PRG */
+const assembleAlone = (src: string) => { const r = assemble({ 'patch.asm': src }, 'patch.asm'); expect(r.errors).toEqual([]); return r.prg!; };
 
 describe('patches', () => {
   it('writes shorter code over the range and fills the rest with NOPs, or keeps the bytes there', () => {
@@ -113,7 +115,7 @@ describe('patches', () => {
     expect(plan(p, { name: 'other', start: 0x0810, end: 0x0812, source: '' })).toMatchObject({ error: 'It would write over the patch "red" ($080d-$0814, switched off).' });
     const { R } = ctx(p);
     expect(R.files['fix.asm']).not.toContain('==== patch');
-    expect(exportFiles(p, R, p.settings)['README.md']).toContain('loaded where it goes (switched off: not in the sources)');
+    expect(exportFiles(p, R, p.settings)['README.md']).toContain('loads where it goes (switched off: not in the sources)');
     // edited while off: it stays off, written over the same bytes
     const e = ok(plan(p, { id: a.id, start: 0x080d, end: 0x0815, source: '  inc $d020' })).patch;
     expect(e.off).toBe(true);
@@ -146,15 +148,46 @@ describe('patches', () => {
     expect(src.indexOf('==== patch')).toBeLessThan(src.indexOf('lda #$02'));
 
     const out = exportFiles(p, R, p.settings);
-    expect(patchFileName('red border')).toBe('red_border.prg');
-    expect([...(out['patches/red_border.prg'] as Uint8Array)]).toEqual([...makePrg(0x080d, a.bytes)]);
+    expect(Object.keys(out).filter(k => k.startsWith('patches/'))).toEqual(['patches/red_border.asm']);
+    const asm = out['patches/red_border.asm'] as string;
+    expect(asm).toBe([
+      '// Patch "red border" by Mimir Studio: $080d-$0814 of fix.prg, 8 bytes written over the original',
+      '// It assembles on its own to a PRG that loads at $080d: java -jar KickAss.jar red_border.asm',
+      '',
+      '.pc = $080d "red border"',
+      '  lda #$02',
+      '  sta $d020',
+      '  .fill 3, $ea              // the rest of the range: NOP',
+      '',
+    ].join('\n'));
+    expect([...assembleAlone(asm)]).toEqual([...makePrg(0x080d, a.bytes)]);
     expect([...(out['original/fix.prg'] as Uint8Array)]).toEqual([...makePrg(0x0801, fromSource('fix.prg', SRC).bytes)]);
-    expect(out['README.md']).toContain('- `patches/red_border.prg` — the patch "red border" as a PRG: $080d-$0814 (8 bytes), loaded where it goes');
+    expect(out['README.md']).toContain('- `patches/red_border.asm` — the patch "red border", $080d-$0814 (8 bytes), as a source of its own: it assembles to a PRG that loads where it goes');
   });
 
-  it('names its PRG file safely', () => {
+  it('as a source of its own, defines the names its code uses; with a name gone, it has the bytes', () => {
+    let p = project();
+    const source = 'wait:\n        lda #$02\n        sta VIC_BORDER_COLOR   // red\n        jmp loop';
+    const a = ok(plan(p, { name: 'red', start: 0x080d, end: 0x0817, source })).patch;
+    p = { ...p, ...withPatch(p, a) };
+    let { R } = ctx(p);
+    const asm = patchSource(R, p.settings, a, 'fix.prg');
+    expect(asm).toContain('// the names the code uses, from the program and the C64 hardware\n.label VIC_BORDER_COLOR = $d020\n.label loop = $0817\n\n.pc = $080d "red"\nwait:\n');
+    expect(asm).toContain('        .fill 2, $ea              // the rest of the range: NOP');
+    expect([...assembleAlone(asm)]).toEqual([...makePrg(0x080d, a.bytes)]);
+    // `loop` renamed: the code would not assemble, so the source has the bytes the patch writes
+    p = { ...p, labels: { [0x0817]: 'again' } };
+    ({ R } = ctx(p));
+    const bytes = patchSource(R, p.settings, a, 'fix.prg');
+    expect(bytes).toContain('// The code no longer assembles to these bytes');
+    expect(bytes).toContain('//           jmp loop\n');
+    expect(bytes).toContain('.pc = $080d "red"\n        .byte $a9, $02, $8d, $20, $d0, $4c, $17, $08\n        .byte $ea, $ea\n');
+    expect([...assembleAlone(bytes)]).toEqual([...makePrg(0x080d, a.bytes)]);
+  });
+
+  it('names its files safely', () => {
     expect(patchFileName('  fix: irq/nmi  ')).toBe('fix_irq_nmi.prg');
     expect(patchFileName('..')).toBe('patch.prg');
-    expect(patchFileName('v1.2-hack')).toBe('v1.2-hack.prg');
+    expect(patchFileName('v1.2-hack', 'asm')).toBe('v1.2-hack.asm');
   });
 });

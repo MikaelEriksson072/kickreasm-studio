@@ -45,7 +45,7 @@ export { makeShowcase, showcaseProject, type ShowcaseProgram } from './showcase'
 export { FORMATTABLE, formatOverride, lineMove, markIdOf, mergeOverride, mergeRange, moveBlockKeys, moveBytes, type BlockMerge, type ByteMove, type RangeMerge } from './edit';
 export { createProject, demoProject, serializeProject, deserializeProject, projectNameFor, withId, newId, b64enc, b64dec } from './project';
 export { buildScripts, BUILD_SCRIPTS, readme, projectScripts, projectTextFiles, exportFiles } from './export';
-export { applyPatch, assemblePatch, patchAt, patchEnd, patchesOn, patchFileName, patchPrg, planPatch, revertPatch, switchPatch, unpatchedFiles, withPatch, withoutPatch, type PatchCode, type PatchError, type PatchLine, type PatchPlan, type PatchRequest } from './patch';
+export { applyPatch, assemblePatch, patchAt, patchEnd, patchesOn, patchFileName, patchPrg, patchSource, planPatch, revertPatch, switchPatch, unpatchedFiles, withPatch, withoutPatch, type PatchCode, type PatchError, type PatchLine, type PatchPlan, type PatchRequest } from './patch';
 export { NOTES_FILE, NOTES_TEXT_FILE, notesDocument, notesExport, notesFile, notesFor, notesText, lineHtml } from './notes-doc';
 export { detectPacking, packerSignature, type PackingInfo } from './packing';
 export {

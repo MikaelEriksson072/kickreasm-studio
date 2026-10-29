@@ -2529,7 +2529,7 @@ test('patch: new code over the selected lines, marked as patched, saved as a PRG
     await expect(section.locator('.sec-sum')).toHaveText('1 on');
   });
 
-  await test.step('saved as a PRG, and exported to patches/ with the original files kept', async () => {
+  await test.step('saved as a PRG, and exported to patches/ as a source of its own, with the original files kept', async () => {
     const want = [0x1e, 0x09, 0xee, 0x20, 0xd0, 0xea, 0xea, 0xea, 0xea, 0xea];
     const file = join(work, 'red_border.prg');
     await stubDialogs(app, { save: file });
@@ -2540,10 +2540,11 @@ test('patch: new code over the selected lines, marked as patched, saved as a PRG
     await stubDialogs(app, { open: [out] });
     await page.keyboard.press('Control+e');
     await expect(toast(page, `Exported verified Kick Assembler project to ${out}`)).toBeVisible({ timeout: 90_000 });
-    expect([...readFileSync(join(out, 'patches', 'red_border.prg'))]).toEqual(want);
+    expect(readdirSync(join(out, 'patches'))).toEqual(['red_border.asm']);
+    expect(readFileSync(join(out, 'patches', 'red_border.asm'), 'utf8')).toContain('.pc = $091e "red border"\n  inc $d020\n  .fill 5, $ea');
     expect(readFileSync(join(out, 'original', 'raster-demo.prg'))).toEqual(readFileSync(join(repoDir, 'fixtures/prg/raster-demo.prg')));
     expect(readFileSync(join(out, 'raster-demo.asm'), 'utf8')).toContain('// ==== patch "red border": $091e-$0925, 8 bytes written over the original ====');
-    expect(readFileSync(join(out, 'README.md'), 'utf8')).toContain('`patches/red_border.prg`');
+    expect(readFileSync(join(out, 'README.md'), 'utf8')).toContain('`patches/red_border.asm`');
   });
 
   await test.step('removed from the Explorer: the original bytes are back; Ctrl+Z brings the patch back', async () => {

@@ -7,7 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { analyze, comparePrg, formatOverride, h4, makeDemo, OPC, openC64File, parsePrg, render, showcaseProject, type ProjectInput } from '../src';
+import { analyze, comparePrg, createProject, exportFiles, formatOverride, h4, makeDemo, makePrg, OPC, openC64File, parsePrg, planPatch, render, showcaseProject, withPatch, type ProjectInput } from '../src';
 import { findKickAssJar, runKickAssembler, writeVfs } from '../src/node';
 import { allOpcodesProgram, fromSource, randomPrg, seededProject, SETTING_VARIANTS, zeroPageProgram } from './helpers/programs';
 
@@ -115,4 +115,23 @@ describe.skipIf(!available)(`real Kick Assembler (${jar ?? 'not found'})`, () =>
     expect(failures).toEqual([]);
     expect(assembled).toBeGreaterThanOrEqual(all.length);
   }, 300_000);
+
+  it('assembles an exported patch (patches/<name>.asm) on its own to the bytes it writes', async () => {
+    // fx_091e (lda SID_OSC3 / and #$0f / sta COLOR_RAM+999) patched with a hardware name and a label of the program
+    const p = createProject({ name: 'raster-demo', files: demo().files });
+    const A = analyze(p), R = render(A, p);
+    const plan = planPatch(A, R, p, { name: 'red border', start: 0x091e, end: 0x0926, source: '        lda #$02\n        sta VIC_BORDER_COLOR\n        jmp start', fill: 'nop', over: false });
+    if ('error' in plan) throw new Error(plan.error);
+    const q = { ...p, ...withPatch(p, plan.patch) };
+    const out = exportFiles(q, render(analyze(q), q), q.settings);
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-it-'));
+    try {
+      await writeVfs(dir, { 'red_border.asm': out['patches/red_border.asm'] });
+      const run = await runKickAssembler({ java, jar: jar!, cwd: dir, entry: 'red_border.asm', outDir: 'out' });
+      expect(run.ok, run.output).toBe(true);
+      expect([...run.prg!]).toEqual([...makePrg(0x091e, plan.patch.bytes)]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

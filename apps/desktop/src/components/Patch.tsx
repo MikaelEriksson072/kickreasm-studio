@@ -65,7 +65,7 @@ export function PatchModal({ A, R, project, draft, onApply, onClose }: PatchModa
         <label className="check small"><input type="checkbox" id="patch-over" checked={over} onChange={e => setOver(e.target.checked)} />
           <span>Overwrite past the range: the code may be longer than the {size} bytes, and writes over the bytes after it</span></label>
         {ok ? sum : <div className="err-text small" role="alert">{plan.error}</div>}
-        <p className="muted small">The patch is written over the loaded bytes, and the listing marks them. Explorer → Patches switches it off and on and saves it as a PRG; the export writes it to patches/. Ctrl+Z takes it back.</p>
+        <p className="muted small">The patch is written over the loaded bytes, and the listing marks them. Explorer → Patches switches it off and on and saves it as a PRG; the export writes its source to patches/ (.asm, which assembles on its own). Ctrl+Z takes it back.</p>
       </div>
       <div className="modal-foot"><span className="grow" /><button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={!ok} onClick={apply} title="Ctrl+Enter">{draft.id ? 'Save patch' : 'Apply patch'}</button></div>

@@ -1038,9 +1038,17 @@ En patch är ny kod som användaren skriver över ett intervall av de laddade by
 - **Ta bort** lägger tillbaka de ursprungliga byten. Allt ångras med `Ctrl+Z`.
 - **Spara som PRG:** *Save patch as PRG…* (Explorer, högerklick, kommandopaletten) sparar `namn.prg` med patchens
   adress som laddadress och byten den skriver.
-- **Exporten** skriver varje patch till `patches/<namn>.prg` och listar dem i README, där avstängda märks *switched
-  off: not in the sources*. `original/` innehåller filerna som de laddades, utan patcharna, medan källkoden och `out/`
-  har de påslagna patcharna i sig.
+- **Exporten** skriver varje patch som en egen Kick Assembler-källa, `patches/<namn>.asm` (`patchSource`), och listar
+  dem i README, där avstängda märks *switched off: not in the sources*. Filen assemblerar för sig själv till en PRG som
+  laddas där patchen ska ligga:
+  - en kommentar med namnet, intervallet och filen den skrivs över;
+  - `.label` för de namn koden använder (programmets etiketter och nollsidevariabler och hårdvarunamnen);
+  - `.pc = $xxxx "namn"`, koden som den skrevs och `.fill N, $ea` för NOP-utfyllnaden.
+
+  Ger koden inte längre samma byte med programmets namn (en etikett har döpts om, till exempel), innehåller filen i
+  stället byten som `.byte`-rader och koden som kommentar. Testerna assemblerar filen ensam med den inbyggda
+  assemblern och med KickAss.jar. `original/` innehåller filerna som de laddades, utan patcharna, medan källkoden och
+  `out/` har de påslagna patcharna i sig.
 - En fil som tas bort ur projektet, eller packas upp, tar sina patchar med sig.
 
 ## 11. Kick Assembler-generatorn
