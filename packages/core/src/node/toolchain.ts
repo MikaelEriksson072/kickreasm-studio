@@ -115,6 +115,10 @@ export interface ViceLaunch {
  * A program that overwrites BASIC's work area leaves no BASIC to type into, so with via 'monitor' VICE stops at
  * the READY prompt (`-initbreak ready`) and runs the monitor commands of viceMonitorScript instead: load, then go.
  * A disk (`-8 disk.d64`) needs the inject PRG mode too: the disk image mode would put a disk of its own in drive 8.
+ * A program put straight into memory leaves the drive as it was at power on, without the disk read: on a C64 it was
+ * loaded from that disk (LOAD"*",8,1), and fast loaders count on it (We Are The Anomaly's Sparkle hangs there with
+ * the drive's light blinking). So with a disk VICE loads the PRG without RUN and types `open15,8,15,"i":close15:`
+ * (initialise: the drive reads the disk) before `run` or `sys <start>`. A snapshot brings its drive as it was.
  */
 export function viceArgv(o: Omit<ViceLaunch, 'vice'>): string[] {
   const args = [...(o.args || [])];
@@ -125,7 +129,9 @@ export function viceArgv(o: Omit<ViceLaunch, 'vice'>): string[] {
   }
   const i = args.lastIndexOf('-autostartprgmode'), mode = i >= 0 ? args[i + 1] : null;
   if (o.disk ? mode !== '1' : o.start != null && mode === '0') args.push('-autostartprgmode', '1');
-  const run = o.start == null ? ['-autostart', o.prgPath] : ['-autoload', o.prgPath, '-keybuf', `sys${o.start & 0xffff}\\n`];
+  const init = o.disk && !/\.vsf$/i.test(o.prgPath) ? 'open15,8,15,"i":close15:' : '';
+  const run = o.start == null && !init ? ['-autostart', o.prgPath]
+    : ['-autoload', o.prgPath, '-keybuf', `${init}${o.start == null ? 'run' : `sys${o.start & 0xffff}`}\\n`];
   return [...args, ...drive, ...(o.labelsPath ? ['-moncommands', o.labelsPath] : []), ...run];
 }
 

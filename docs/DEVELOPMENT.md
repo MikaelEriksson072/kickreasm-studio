@@ -194,7 +194,9 @@ fixtures/d64     disk images (mimir-demo.d64, and spindle-demo.d64, a Spindle 3 
 - **Disk images.** Mount D64… (or drop a `.d64`) lists the disk's directory in the Explorer, right under Files, the way the 1541 lists it.
   Click a PRG to open it, or + to add it to the project. `packages/core/src/c64/d64.ts` reads 35/40/42-track images,
   with or without error bytes, and follows each file's sector chain. While a disk is mounted, Build & Run puts a copy
-  of it in VICE's drive 8 (`-8`), so programs that load more parts from disk find them. See spec 13.5.
+  of it in VICE's drive 8 (`-8`), so programs that load more parts from disk find them, and types
+  `open15,8,15,"i":close15:` before `run` (or `sys`): the drive reads the disk first, as loading from it would have
+  made it, which fast loaders such as Sparkle need. See spec 13.5.
 - **VICE snapshots.** *Open PRG…* and drag and drop also take `.vsf` files. `openC64File()`
   (`packages/core/src/c64/vsf.ts`) reads the snapshot's C64MEM and MAINCPU modules and opens its RAM from `$0200` as
   `<name>.prg`, or from `$0002` (zero page and stack included) with Settings → Analysis → *VICE snapshots: include

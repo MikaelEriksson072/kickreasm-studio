@@ -1242,9 +1242,14 @@ listas men öppnas inte. Disken stannar monterad tills den matas ut, även när 
 Vid **Build & Run** läggs en kopia av den monterade disken i VICE:s drive 8 (`-8 <kopia>.d64`, i en ny byggmapp), så
 ett program som laddar fler delar från disken hittar dem, och ett program som sparar ändrar inte originalet. Det
 kräver PRG-läget inject (diskavbildsläget lägger en egen disk i drive 8), så `-autostartprgmode 1` läggs till om
-inställningarna säger något annat. `test/d64.test.ts` läser diskar som VICE:s `c1541` skrivit och låter `c1541` läsa
-och validera diskar som `makeD64` skrivit; `test/vice.integration.test.ts` kör ett program som laddar sin andra del
-från disken i riktiga VICE.
+inställningarna säger något annat. Ett program som läggs rakt i minnet lämnar drivenheten som vid påslag, utan att
+ha läst disken; på en C64 laddades det från disken (`LOAD"*",8,1`), och snabbladdare räknar med det (Sparkle i *We
+Are The Anomaly* hänger med drivens lampa blinkande). Med en disk laddas därför PRG:n utan RUN (`-autoload`) och
+VICE skriver `open15,8,15,"i":close15:` (initiera: driven läser disken) före `run` eller `sys <start>`. En snapshot
+har med sin drive som den var; start från monitorn (13.2, ett program över BASIC:s arbetsområde) initierar inte.
+`test/d64.test.ts` läser diskar som VICE:s `c1541` skrivit och låter `c1541` läsa och validera diskar som `makeD64`
+skrivit; `test/vice.integration.test.ts` kör i riktiga VICE ett program som laddar sin andra del från disken, och ett
+som läser diskens id ur driven (`M-R` av `$0012`): det finns där bara efter initieringen.
 
 ### 13.5b Spindle 3-diskar (Spins laddskript)
 

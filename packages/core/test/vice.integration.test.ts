@@ -34,12 +34,15 @@ describe('VICE command line', () => {
     expect(viceMonitorScript({ prgPath: 'p.prg', start: 0x080d })).toBe('l "p.prg" 0\ng 080d\n');
   });
 
-  it('puts a disk in drive 8, with the inject PRG mode (the disk image mode would replace it)', () => {
-    expect(viceArgv({ prgPath: 'p.prg', disk: 'd.d64' })).toEqual(['-autostartprgmode', '1', '-8', 'd.d64', '-autostart', 'p.prg']);
+  it('puts a disk in drive 8, with the inject PRG mode (the disk image mode would replace it), and has the drive read it first', () => {
+    const init = 'open15,8,15,"i":close15:';
+    expect(viceArgv({ prgPath: 'p.prg', disk: 'd.d64' })).toEqual(['-autostartprgmode', '1', '-8', 'd.d64', '-autoload', 'p.prg', '-keybuf', `${init}run\\n`]);
     expect(viceArgv({ args: ['-autostartprgmode', '1'], prgPath: 'p.prg', labelsPath: 'p.vs', start: 0x0801, disk: 'd.d64' }))
-      .toEqual(['-autostartprgmode', '1', '-8', 'd.d64', '-moncommands', 'p.vs', '-autoload', 'p.prg', '-keybuf', 'sys2049\\n']);
-    expect(viceArgv({ args: ['-autostartprgmode', '2'], prgPath: 'p.prg', disk: 'd.d64' })).toEqual(['-autostartprgmode', '2', '-autostartprgmode', '1', '-8', 'd.d64', '-autostart', 'p.prg']);
+      .toEqual(['-autostartprgmode', '1', '-8', 'd.d64', '-moncommands', 'p.vs', '-autoload', 'p.prg', '-keybuf', `${init}sys2049\\n`]);
+    expect(viceArgv({ args: ['-autostartprgmode', '2'], prgPath: 'p.prg', disk: 'd.d64' })).toEqual(['-autostartprgmode', '2', '-autostartprgmode', '1', '-8', 'd.d64', '-autoload', 'p.prg', '-keybuf', `${init}run\\n`]);
     expect(viceArgv({ prgPath: 'p.prg', start: 0x1000, via: 'monitor', scriptPath: 'p.start.mon', disk: 'd.d64' })).toEqual(['-8', 'd.d64', '-moncommands', 'p.start.mon', '-initbreak', 'ready']);
+    // a snapshot brings its drive as it was taken
+    expect(viceArgv({ prgPath: 'p.vsf', disk: 'd.d64' })).toEqual(['-autostartprgmode', '1', '-8', 'd.d64', '-autostart', 'p.vsf']);
   });
 
   it('knows which programs overwrite BASIC\'s work area', () => {
@@ -104,6 +107,24 @@ describe.skipIf(!vice)(`real VICE (${vice ?? 'not found'})`, () => {
       await writeFile(disk, makeD64({ name: 'parts', files: [{ name: 'part2', data: Uint8Array.from([0x00, 0xc0, 0xa9, 0x42, 0x8d, 0xff, 0xd7, 0x4c, 0x05, 0xc0]) }] }));
       const { argv } = await prepareVice({ args: headless(dir), prgPath, disk });
       expect(spawnSync(vice!, argv, { timeout: 90_000, windowsHide: true }).status).toBe(0x42);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('has the drive read the disk before the program starts, as loading it from the disk would', async () => {
+    // M-R of the drive's $0012: the first byte of the ID of the disk it last read ("M" of "MI"; nothing read: 0).
+    // A fast loader's drive code counts on it (Sparkle hangs without)
+    const f = fromSource('id.prg', '.pc = $0801\n.byte $0b,$08,$0a,$00,$9e,$32,$30,$36,$31,$00,$00,$00\n.pc = $080d\n lda #6\n ldx #<cmd\n ldy #>cmd\n jsr $ffbd\n lda #15\n ldx #8\n ldy #15\n jsr $ffba\n jsr $ffc0\n ldx #15\n jsr $ffc6\n jsr $ffcf\n sta $d7ff\n jmp *\ncmd: .byte $4d,$2d,$52,$12,$00,$01');
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-vice-'));
+    try {
+      const prgPath = join(dir, 'id.prg'), disk = join(dir, 'disk.d64');
+      await writeFile(prgPath, prgOf(f));
+      await writeFile(disk, makeD64({ name: 'parts', id: 'mi', files: [] }));
+      const { argv } = await prepareVice({ args: headless(dir), prgPath, disk });
+      expect(spawnSync(vice!, argv, { timeout: 90_000, windowsHide: true }).status).toBe(0x4d);
+      // only put into memory and RUN, the drive has read nothing
+      expect(spawnSync(vice!, [...headless(dir), '-8', disk, '-autostart', prgPath], { timeout: 90_000, windowsHide: true }).status).not.toBe(0x4d);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
