@@ -73,8 +73,8 @@ export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpe
           <p className="side-hint">Or drop .prg, .vsf or .d64 files on the window; with Shift they are added.</p>
         </SideSection>
         {disk && <DiskSection disk={disk} onEject={onEject} onOpenFromDisk={onOpenFromDisk} onShowSpindle={onShowSpindle} />}
-        <LoadersSection A={A} packed={packing.some(p => p?.verdict === 'packed')} onNavigate={onNavigate} />
         <QuicksaveSection {...quicksave} />
+        <LoadersSection A={A} packed={packing.some(p => p?.verdict === 'packed')} onNavigate={onNavigate} />
         <ProgramStart A={A} R={R} project={project} onNavigate={onNavigate} onSetStart={onSetStart} />
         <SideSection id="map" title="Memory map" summary={`${segs.length} block${segs.length === 1 ? '' : 's'}`}>
           <div className="mmap">
