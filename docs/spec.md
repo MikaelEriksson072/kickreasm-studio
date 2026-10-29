@@ -1027,13 +1027,17 @@ En patch är ny kod som användaren skriver över ett intervall av de laddade by
   - Patchen måste ta exakt lika många cykler som originalet. Båda räknas rakt igenom från intervallets start till
     dess slut, eller till kodens slut när den är längre (`straightCycles`). Den nya koden räknas med sin
     NOP-utfyllnad (2 cykler per NOP), eller med originalets byte efter koden när de behålls.
-  - Bara instruktioner med fast tid får användas. En branch (2 eller 3 cykler), en indexerad läsning som kan gå över
-    en sida (`abs,x`, `abs,y`, `(zp),y`, men inte `$xx00,x`) och JAM ger fel med radnumret.
-  - Kodrutan får kolumnen *Cy* med varje rads cykler (en varierande i rött, `2/3` eller `4+`). Längst ner står
-    *Cycles N of M* och hur många som är kvar att använda, hur många för många, eller *the same as the original*.
-  - Kan originalets tid variera säger raden det (*the original takes 22–25 with branches taken and pages crossed*),
-    och det lägsta talet gäller.
-  - *Apply patch* går först när cyklerna är lika.
+  - Instruktioner vars tid varierar är en branch (2 eller 3 cykler, 4 över en sida), en indexerad läsning som kan gå
+    över en sida (`abs,x`, `abs,y`, `(zp),y`, men inte `$xx00,x`) och JAM. Koden får bara ha sådana som originalet har
+    i intervallet: samma opkod som varierar på samma sätt, till exempel `bne (2/3)` eller `lda $xxxx,x (4+)`. Den måste
+    också ha alla originalets. Då varierar den nya koden precis som originalet, och lägsta och högsta tiden blir
+    desamma. Annars blir det fel: en varierande instruktion som originalet inte har ger radnumret (*…, and the original
+    has none*), och en som saknas ger *It has no bne (2/3)*. JAM går aldrig.
+  - Kodrutan får kolumnen *Cy* med varje rads cykler, där en varierande står i varningsfärg (`2/3`, `4+`). Längst ner
+    står *Cycles N of M*, eller *N–N′ of M–M′* när tiden varierar, och hur många som är kvar att använda, hur många för
+    många eller *the same as the original*. Där står också originalets varierande instruktioner (*varies as the
+    original: bne (2/3)*) eller vad koden saknar (*the code needs bne (2/3), as the original has*).
+  - *Apply patch* går först när cyklerna är lika och de varierande instruktionerna stämmer.
 - **Längden:** koden får inte bli längre än intervallet. Med *Overwrite past the range* får den skriva vidare över
   byten efter intervallet, och dialogen säger vilka. Den får aldrig gå utanför filen som håller intervallet eller in i
   en annan patch, och den måste skrivas i ett stycke från starten (ingen egen `.pc`). Utan kod fylls intervallet med NOP.

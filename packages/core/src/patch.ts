@@ -8,7 +8,7 @@ import { hardwareInclude } from './render/include';
 import { makePrg } from './c64/prg';
 import { newId } from './project';
 import { h2, h4 } from './util/hex';
-import { instructionCycles } from './cpu/cycles';
+import { cycleText, instructionCycles } from './cpu/cycles';
 import { OPC } from './cpu/opcodes';
 
 const NOP = 0xea;
@@ -41,8 +41,13 @@ export interface PatchCode { lines: (PatchLine | null)[]; code: Uint8Array }
 export interface PatchTime {
   original: number; originalMost: number;
   now: number;
-  /** the first instruction of the code whose time is not fixed: a branch, an indexed read that can cross a page */
+  /** the original's instructions whose time varies (a branch, an indexed read that can cross a page), as `bne (2/3)`:
+   *  the code may have these, the same opcode varying the same way, and must have them all */
+  originalVaries: string[];
+  /** the first instruction of the code whose time varies and that the original has no such one of */
   varies?: { line?: number; why: string };
+  /** the original's varying instructions the code does not have */
+  missing: string[];
 }
 
 export interface PatchPlan extends PatchCode {
@@ -219,8 +224,10 @@ export function planPatch(A: AnalysisResult, R: Pick<RenderResult, 'labels' | 'z
   if (other) return fail(`It would write over the patch "${other.name}" ($${h4(other.start)}-$${h4(patchEnd(other) - 1)}${other.off ? ', switched off' : ''}).`);
   if (time?.varies) {
     const { line, why } = time.varies, text = line ? req.source.split('\n')[line - 1]?.replace(/\/\/.*$/, '').trim() : '';
-    return { ...fail(`${line ? `Line ${line}: ${text} ` : 'An instruction '}${why}. Keeping the cycle count needs instructions that take a fixed time.`), ...(line ? { line } : {}) };
+    const has = time.originalVaries.length ? `the original's that vary are ${time.originalVaries.join(', ')}` : 'the original has none';
+    return { ...fail(`${line ? `Line ${line}: ${text} ` : 'An instruction '}${why}, and ${has}. Keeping the cycle count allows an instruction whose time varies only as one of the original's.`), ...(line ? { line } : {}) };
   }
+  if (time?.missing.length) return fail(`The original has ${time.originalVaries.join(', ')}, whose time varies: keeping the cycle count, the code must have the same. It has no ${time.missing.join(', ')}.`);
   if (time && time.now !== time.original) {
     const d = time.original - time.now;
     return fail(d > 0 ? `The patch takes ${time.now} cycles, ${d} fewer than the ${time.original} of the original: ${d} left to use.` : `The patch takes ${time.now} cycles, ${-d} more than the ${time.original} of the original.`);
@@ -236,10 +243,14 @@ export function planPatch(A: AnalysisResult, R: Pick<RenderResult, 'labels' | 'z
   return { patch, lines: asm.lines, code: asm.code, past: Math.max(0, n - size), ...(time ? { time } : {}) };
 }
 
+/** how an addressing mode is written after the mnemonic in the names of varying instructions */
+const MODE_TEXT: Record<string, string> = { abx: ' $xxxx,x', aby: ' $xxxx,y', izy: ' ($xx),y' };
+
 /**
  * The time of the patch against the original's (PatchTime): the bytes from the start to the end of the range, or of
  * the code when it is longer, run straight through, as the original has them and as they are with the code and its
- * fill (with `keep`, the original's bytes after the code). The code's own instructions must take a fixed time.
+ * fill (with `keep`, the original's bytes after the code). An instruction whose time varies may only be one the
+ * original has (the same opcode, varying the same way), and each of the original's must be there.
  */
 function patchTime(files: readonly Pick<LoadedFile, 'load' | 'bytes'>[], req: PatchRequest, asm: PatchCode): PatchTime | undefined {
   const { start, end } = req, n = asm.code.length, len = req.fill === 'nop' ? Math.max(n, end - start) : n;
@@ -250,14 +261,23 @@ function patchTime(files: readonly Pick<LoadedFile, 'load' | 'bytes'>[], req: Pa
   const now = original.slice();
   for (let i = 0; i < Math.min(len, now.length); i++) now[i] = i < n ? asm.code[i] : NOP;
   const o = straightCycles(original, start), w = straightCycles(now, start);
-  const time: PatchTime = { original: o.cycles, originalMost: o.most, now: w.cycles };
-  for (const { pc, c } of stepsOf(asm.code, start)) {
-    if (!c.page && c.taken == null && !c.jam) continue;
-    const i = asm.lines.findIndex(l => !!l && l.len > 0 && pc >= l.addr && pc < l.addr + l.len);
-    const why = c.jam ? 'stops the CPU' : c.taken != null ? `takes ${c.base} or ${c.taken} cycles (a branch, not taken or taken)` : `takes ${c.base} or ${c.base + 1} cycles (one more when the index crosses a page)`;
+  // the varying instructions, each as its opcode and how it varies, and as written: `bne (2/3)`, `lda $xxxx,x (4+)`
+  const varying = (bytes: Uint8Array) => stepsOf(bytes, start).filter(s => s.c.page || s.c.taken != null || s.c.jam).map(({ pc, c }) => {
+    const op = bytes[pc - start], o2 = OPC[op];
+    return { pc, c, key: `${op}/${cycleText(c)}`, name: `${o2.mn.toLowerCase()}${MODE_TEXT[o2.mode] ?? ''} (${cycleText(c)})` };
+  });
+  const wanted = varying(original);
+  const time: PatchTime = { original: o.cycles, originalMost: o.most, now: w.cycles, originalVaries: wanted.map(v => v.name), missing: [] };
+  const left = wanted.map(v => v.key);
+  for (const v of varying(now)) {
+    const k = left.indexOf(v.key);
+    if (k >= 0 && !v.c.jam) { left.splice(k, 1); continue; }
+    if (time.varies) continue;
+    const i = v.pc < start + n ? asm.lines.findIndex(l => !!l && l.len > 0 && v.pc >= l.addr && v.pc < l.addr + l.len) : -1;
+    const c = v.c, why = c.jam ? 'stops the CPU' : c.taken != null ? `takes ${c.base} or ${c.taken} cycles (a branch, not taken or taken)` : `takes ${c.base} or ${c.base + 1} cycles (one more when the index crosses a page)`;
     time.varies = { ...(i >= 0 ? { line: i + 1 } : {}), why };
-    break;
   }
+  time.missing = left.map(k => wanted.find(v => v.key === k)!.name);
   return time;
 }
 

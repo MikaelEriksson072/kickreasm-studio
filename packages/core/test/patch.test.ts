@@ -193,18 +193,38 @@ describe('patches', () => {
     expect(at('  lda #$02\n  sta $d020')).toMatchObject({ error: 'The patch takes 12 cycles, 2 more than the 10 of the original.', time: { original: 10, originalMost: 10, now: 12 } });
     expect(at('  lda #0\n  lda #0\n  lda #0\n  lda #0')).toMatchObject({ error: 'The patch takes 8 cycles, 2 fewer than the 10 of the original: 2 left to use.', time: { now: 8 } });
     const same = ok(at('  lda #$02\n  sta $d020\n  lda #$00'));
-    expect(same.time).toEqual({ original: 10, originalMost: 10, now: 10 });
+    expect(same.time).toEqual({ original: 10, originalMost: 10, now: 10, originalVaries: [], missing: [] });
     expect(same.patch.cycles).toBe(true);
     // with the bytes there kept, the original's sta $d021 after the code counts
     expect(ok(at('  lda #$02\n  sta $d020', { fill: 'keep' })).time?.now).toBe(10);
-    // a branch, an indexed read that can cross a page: not allowed; $d000,x cannot cross, so it is
-    expect(at('  bne *+2\n  lda #0\n  lda #0')).toMatchObject({ line: 1, error: 'Line 1: bne *+2 takes 2 or 3 cycles (a branch, not taken or taken). Keeping the cycle count needs instructions that take a fixed time.' });
-    expect(at('  lda #0\n  lda $d001,x   // index')).toMatchObject({ line: 2, error: expect.stringMatching(/^Line 2: lda \$d001,x takes 4 or 5 cycles \(one more when the index crosses a page\)/) });
+    // a branch, an indexed read that can cross a page: not when the original has none; $d000,x cannot cross, so it is
+    expect(at('  bne *+2\n  lda #0\n  lda #0')).toMatchObject({ line: 1, error: 'Line 1: bne *+2 takes 2 or 3 cycles (a branch, not taken or taken), and the original has none. Keeping the cycle count allows an instruction whose time varies only as one of the original\'s.' });
+    expect(at('  lda #0\n  lda $d001,x   // index')).toMatchObject({ line: 2, error: expect.stringMatching(/^Line 2: lda \$d001,x takes 4 or 5 cycles \(one more when the index crosses a page\), and the original has none/) });
     expect(at('  lda $d000,x\n  lda $d000,x')).not.toMatchObject({ line: expect.anything() });
-    // the original's own time can vary: dex / bne loop takes 4, or 5 with the branch taken
-    expect(plan(p, { start: 0x0817, end: 0x081a, source: '  nop', cycles: true })).toMatchObject({ time: { original: 4, originalMost: 5, now: 6 } });
     // without the cycle count kept, nothing of this
     expect(ok(plan(p, { start: 0x080d, end: 0x0815, source: '  lda #$02\n  sta $d020' }))).not.toHaveProperty('time');
+  });
+
+  it('keeps the cycle count where the original\'s time varies: the code must have the same varying instructions', () => {
+    const p = project();
+    // dex / bne loop: 4 cycles, 5 with the branch taken
+    const at = (source: string) => plan(p, { start: 0x0817, end: 0x081a, source, cycles: true });
+    const same = ok(at('  dey\n  bne loop'));
+    expect(same.time).toEqual({ original: 4, originalMost: 5, now: 4, originalVaries: ['bne (2/3)'], missing: [] });
+    expect([...same.patch.bytes]).toEqual([0x88, 0xd0, 0xfd]);
+    // another branch is not the same one
+    expect(at('  dex\n  beq loop')).toMatchObject({ line: 2, error: 'Line 2: beq loop takes 2 or 3 cycles (a branch, not taken or taken), and the original\'s that vary are bne (2/3). Keeping the cycle count allows an instruction whose time varies only as one of the original\'s.' });
+    // without it
+    expect(at('  nop')).toMatchObject({
+      error: 'The original has bne (2/3), whose time varies: keeping the cycle count, the code must have the same. It has no bne (2/3).',
+      time: { original: 4, originalMost: 5, now: 6, missing: ['bne (2/3)'] },
+    });
+    // an indexed read that crosses a page, as the original's: lda $d001,x is lda $xxxx,x (4+)
+    const q = { ...createProject({ files: [fromSource('ix.prg', '.pc = $c000\n lda $d001,x\n sta $d020\n rts')] }) };
+    const A = analyze(q), R = render(A, q);
+    const ix = (source: string) => planPatch(A, R, q, { name: 'ix', start: 0xc000, end: 0xc006, source, fill: 'nop', over: false, cycles: true });
+    expect(ix('  lda $d002,x\n  sta $d021')).toMatchObject({ patch: expect.anything(), time: { original: 8, originalMost: 9, now: 8, originalVaries: ['lda $xxxx,x (4+)'] } });
+    expect(ix('  lda $d002,y\n  sta $d021')).toMatchObject({ line: 1, error: expect.stringMatching(/^Line 1: lda \$d002,y takes 4 or 5 cycles .*the original's that vary are lda \$xxxx,x \(4\+\)/) });
   });
 
   it('names its files safely', () => {

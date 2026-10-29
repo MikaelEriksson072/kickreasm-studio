@@ -137,7 +137,8 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 /* with the cycle count kept: each line's cycles, and what is left at the bottom */
 .pe-head .pe-cy, .pe-gl .pe-cy { flex: none; width: 5ch; padding-right: 8px; text-align: right; box-sizing: content-box; }
 .pe-gl .pe-cy { color: var(--fg-2); }
-.pe-gl .pe-cy.varies { color: var(--err); }
+.pe-gl .pe-cy.varies { color: var(--warn); }
+.pe-foot .pe-miss { color: var(--err); }
 .pe-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 5px 10px; border-top: 1px solid var(--line); background: var(--panel-2); color: var(--fg-2); }
 .pe-foot b { color: var(--fg); }
 .pe-foot .pe-left { font-weight: 600; }

@@ -108,12 +108,15 @@ function lineCycles(code: Uint8Array, start: Addr, ln: PatchLine): { text: strin
 /** the line at the bottom of the editor with the cycle count kept: how many cycles are left to use */
 function CycleBar({ time }: { time: PatchTime | null }) {
   if (!time) return <div className="pe-foot small" role="status" aria-label="Cycles">Cycles: write code that assembles to count them</div>;
-  const left = time.original - time.now;
+  const left = time.original - time.now, fine = left === 0 && !time.varies && !time.missing.length;
   return (
-    <div className={cx('pe-foot small', left === 0 && !time.varies ? 'ok' : left < 0 ? 'over' : 'left')} role="status" aria-label="Cycles">
-      <span>Cycles <b>{time.now}</b> of {time.original}</span>
+    <div className={cx('pe-foot small', fine ? 'ok' : left < 0 ? 'over' : 'left')} role="status" aria-label="Cycles">
+      <span>Cycles <b>{time.now}</b>{time.originalMost > time.original ? `–${time.now + time.originalMost - time.original}` : ''} of {time.original}{time.originalMost > time.original ? `–${time.originalMost}` : ''}</span>
       <span className="pe-left">{left > 0 ? `${left} left to use` : left < 0 ? `${-left} too many` : 'the same as the original'}</span>
-      {time.originalMost > time.original && <span className="muted">the original takes {time.original}–{time.originalMost} with branches taken and pages crossed; {time.original} counts</span>}
+      {/* the original's instructions whose time varies: the code must have the same */}
+      {time.originalVaries.length > 0 && (time.missing.length
+        ? <span className="pe-miss">the code needs {time.missing.join(', ')}, as the original has</span>
+        : <span className="muted">varies as the original: {time.originalVaries.join(', ')}</span>)}
     </div>
   );
 }

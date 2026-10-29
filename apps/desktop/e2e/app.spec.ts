@@ -2511,7 +2511,7 @@ test('patch: new code over the selected lines, marked as patched, saved as a PRG
     // a branch takes 2 or 3
     await code.fill('  bne *+2\n  sta $d020\n  lda #0');
     await expect(dialog.locator('.pe-gl .pe-cy.varies')).toHaveText(['2/3']);
-    await expect(dialog.getByRole('alert')).toHaveText(/^Line 1: bne \*\+2 takes 2 or 3 cycles \(a branch, not taken or taken\)\./);
+    await expect(dialog.getByRole('alert')).toHaveText(/^Line 1: bne \*\+2 takes 2 or 3 cycles \(a branch, not taken or taken\), and the original has none\./);
     await expect(dialog.getByRole('button', { name: 'Apply patch' })).toBeDisabled();
     await dialog.locator('#patch-cycles').uncheck();
     await expect(bar).toHaveCount(0);
@@ -2600,4 +2600,36 @@ test('patch: new code over the selected lines, marked as patched, saved as a PRG
     await page.keyboard.press('Control+z');
     await expect(listing(page).locator('.row.patched')).toHaveCount(6);
   });
+});
+
+test('patch with the cycle count kept, where the original has a branch: the code must have the same branch', async ({ page }) => {
+  await waitForListing(page);
+  const dialog = page.getByRole('dialog');
+  const bar = dialog.getByRole('status', { name: 'Cycles' });
+  // the first `inx` / `bne` loop of the program (it colours the screen)
+  const rows = await listingRows(page);
+  const i = rows.findIndex((r, k) => /^inx\b/.test(r.text) && /^bne\b/.test(rows[k + 1]?.text ?? ''));
+  expect(i).toBeGreaterThan(0);
+  const from = parseInt(rows[i].adr, 16);
+  await goTo(page, `$${from.toString(16)}-$${(from + 2).toString(16)}`);
+  await page.keyboard.press('p');
+  await expect(dialog).toHaveAccessibleName(/^Patch \$/);
+  await dialog.locator('#patch-cycles').check();
+  await expect(bar).toContainText('the same as the original');
+  await expect(bar).toContainText(/varies as the original: bne \(2\/[34]\)/);
+  // back in the code (the cursor is still on the first instruction): inx written over with iny, the branch is still there
+  await dialog.locator('#patch-code').focus();
+  await page.keyboard.type('iny');
+  await expect(dialog.locator('#patch-code')).toHaveValue(/^\s*iny\n\s*bne /);
+  await expect(bar).toContainText('the same as the original');
+  await expect(dialog.getByRole('button', { name: 'Apply patch' })).toBeEnabled();
+  // the branch written over with a nop: it is missing
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('nop');
+  await expect(dialog.locator('#patch-code')).toHaveValue(/^\s*iny\n\s*nop$/);
+  await expect(bar).toContainText(/the code needs bne \(2\/[34]\), as the original has/);
+  await expect(dialog.getByRole('alert')).toHaveText(/^The original has bne \(2\/[34]\), whose time varies: keeping the cycle count, the code must have the same\. It has no bne/);
+  await expect(dialog.getByRole('button', { name: 'Apply patch' })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
 });
