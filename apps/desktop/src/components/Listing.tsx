@@ -1,6 +1,6 @@
 /* Listing — virtualized, interactive view of the shared line model (spec 6, "one line model, two views"). */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
-import { findBlock, h2, h4, kickMnemonic, kindInfo, lineMove, patchAt, patchEnd, typeInfo, TOP_LEVEL_DIRECTIVES, type Addr, type AnalysisResult, type Bookmark, type ByteMove, type ListingLine, type Patch, type Token } from '@mimir/core';
+import { findBlock, h2, h4, kickMnemonic, kindInfo, lineMove, OPC, patchAt, patchEnd, typeInfo, TOP_LEVEL_DIRECTIVES, undocumentedText, type Addr, type AnalysisResult, type Bookmark, type ByteMove, type ListingLine, type Patch, type Token } from '@mimir/core';
 import { cx, groupOfKind, groupOfType, ROW } from '../lib/util';
 import { Icon } from '../lib/icons';
 import type { Editing, ScrollReq, Sel } from '../lib/types';
@@ -43,13 +43,27 @@ function Toks({ tok, onToken }: { tok: Token[]; onToken: (t: Token) => void }) {
   return <>{out}</>;
 }
 
-export function LineBody({ l, onToken }: { l: ListingLine; onToken: (t: Token) => void }) {
+/** What an undocumented opcode does (a tooltip): an instruction's by its byte in `mem` (else by its mnemonic, one Kick
+ *  Assembler writes), a line written as `.byte` by its first byte. */
+function undocumentedTip(l: ListingLine, mem?: Uint8Array): string | undefined {
+  if (l.k === 'ins' && l.ill) {
+    if (mem && OPC[mem[l.a]].mn === l.mn) return undocumentedText(mem[l.a]) ?? undefined;
+    const o = OPC.find(x => x.ill && x.kick && x.mn === l.mn);
+    return (o && undocumentedText(o.op, true)) ?? undefined;
+  }
+  if (l.k === 'dat' && l.ill && /^\$[0-9a-f]{2}$/i.test(l.tok[0]?.s ?? '')) return undocumentedText(parseInt(l.tok[0].s.slice(1), 16)) ?? undefined;
+  return undefined;
+}
+
+/** A line's text. `mem`: the memory it is in, to name an undocumented opcode exactly in its tooltip. */
+export function LineBody({ l, onToken, mem }: { l: ListingLine; onToken: (t: Token) => void; mem?: Uint8Array }) {
   const ind = <span className="ind" />;
-  const cmt = 'cmt' in l && l.cmt ? <span className={cx('syn-comment', 'cmt', 'userCmt' in l && l.userCmt && 'user')}>// {l.cmt}</span> : null;
+  const ill = undocumentedTip(l, mem);
+  const cmt = 'cmt' in l && l.cmt ? <span className={cx('syn-comment', 'cmt', 'userCmt' in l && l.userCmt && 'user', ill && l.k === 'dat' && 'ill-tip')} title={l.k === 'dat' ? ill : undefined}>// {l.cmt}</span> : null;
   switch (l.k) {
     case 'lbl': return <span className="syn-label def">{l.name}<span className="syn-p">:</span></span>;
-    case 'ins': return <><span className="cp">{ind}<span className={l.ill ? 'syn-ill' : 'syn-mn'}>{kickMnemonic(l.mn)}{l.ext}</span>{l.tok.length ? ' ' : ''}<Toks tok={l.tok} onToken={onToken} /></span>{cmt}</>;
-    case 'dat': return <><span className="cp">{ind}<span className="syn-dir">{l.dir}</span> <Toks tok={l.tok} onToken={onToken} /></span>{cmt}</>;
+    case 'ins': return <><span className="cp">{ind}<span className={cx(l.ill ? 'syn-ill' : 'syn-mn', ill && 'ill-tip')} title={ill}>{kickMnemonic(l.mn)}{l.ext}</span>{l.tok.length ? ' ' : ''}<Toks tok={l.tok} onToken={onToken} /></span>{cmt}</>;
+    case 'dat': return <><span className="cp">{ind}<span className={cx('syn-dir', ill && 'ill-tip')} title={ill}>{l.dir}</span> <Toks tok={l.tok} onToken={onToken} /></span>{cmt}</>;
     case 'dir': { const top = !!l.tok[0] && TOP_LEVEL_DIRECTIVES.includes(l.tok[0].s); return <><span className="cp">{!top && ind}<Toks tok={l.tok} onToken={onToken} /></span>{cmt}</>; }
     case 'cmt': return <span className={cx('syn-comment', l.note && 'note', l.mark && 'mark')} title={l.note ? 'Double-click to edit' : l.mark ? 'Marked by the analysis: a part of a loader (Explorer → Loaders)' : undefined}>{l.raw ? l.text : l.text ? `// ${l.text}` : '//'}</span>;
     default: return null;
@@ -260,7 +274,7 @@ export function Listing({ lines, lineNo, folded, hidden, onToggleFold, excluded,
         <span className={cx('adr', byLine && 'lno')} title={tip}>{byLine ? lineNo[i] : n > 0 || l.k === 'lbl' ? h4(l.a) : ''}</span>
         <span className="hex" title={pt ? [ptTip, tip].filter(Boolean).join('\n\n') : tip}>{bytes}</span>
         {cycles && <CycleCell l={l} A={A} step={steps.get(l.a)} taken={cycles.taken} onToggle={cycles.onToggle} />}
-        <span className="src"><LineBody l={l} onToken={onToken} />{l.k === 'dir' && l.zp != null && <span className="zp-tag" title={`Zero-page variable $${h2(l.zp)}: double-click or N renames it everywhere; ; / * comment it`}>zero page</span>}{'delay' in l && l.delay && <span className="zp-tag delay-tag" title="Timing code: a branch that a timer sets goes part of the way into these instructions, so they only take time (their operands are no data)">delay</span>}{pt && pt.start === l.a && <span className="zp-tag patch-tag" title={ptTip || undefined}>patch {pt.name}</span>}</span>
+        <span className="src"><LineBody l={l} onToken={onToken} mem={A.mem} />{l.k === 'dir' && l.zp != null && <span className="zp-tag" title={`Zero-page variable $${h2(l.zp)}: double-click or N renames it everywhere; ; / * comment it`}>zero page</span>}{'delay' in l && l.delay && <span className="zp-tag delay-tag" title="Timing code: a branch that a timer sets goes part of the way into these instructions, so they only take time (their operands are no data)">delay</span>}{pt && pt.start === l.a && <span className="zp-tag patch-tag" title={ptTip || undefined}>patch {pt.name}</span>}</span>
       </div>);
   }
   let pop = null;

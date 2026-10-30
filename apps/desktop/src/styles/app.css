@@ -318,6 +318,9 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .cmt { margin-left: 2ch; }
 .cmt.user { color: var(--fg-2); font-style: italic; }
 .syn-mn { color: var(--syn-mn); } .syn-ill { color: var(--syn-ill); } .syn-dir { color: var(--syn-dir); }
+/* an undocumented opcode: its tooltip says what it does */
+.ill-tip { cursor: help; }
+.ill-tip:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
 .syn-label { color: var(--syn-label); } .syn-hw { color: var(--syn-hw); } .syn-kw { color: var(--syn-kw); }
 .syn-num { color: var(--syn-num); } .syn-str { color: var(--syn-str); } .syn-comment { color: var(--syn-comment); } .syn-p { color: var(--fg-2); }
 .def { font-weight: 600; }

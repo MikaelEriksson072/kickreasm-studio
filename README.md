@@ -119,7 +119,7 @@ This writes `Mimir-Studio-<version>-setup.exe` and a portable `.exe` to `apps/de
    also drop the file on the window. *Demo* in the Explorer loads a showcase with a guided tour (`F2`).
 2. **Read the listing.** Blocks are coloured by type. The inspector on the right shows why each block was classified
    the way it was, the memory map and a preview. `G` goes to an address or label, and `X` lists who references the
-   line.
+   line. Pointing at an undocumented opcode says what it does and which flags it changes.
 3. **Fix what the heuristics got wrong.** `N` renames, `;` comments, and `C`, `D`, `W` and `T` mark the selection as
    code, bytes, words or text. Right-click for everything else. `Ctrl+Z` undoes, and `Ctrl+C` copies the selected
    lines as source.

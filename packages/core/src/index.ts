@@ -7,6 +7,7 @@ export type { TypeGroup, TypeInfo, MarkAs } from './model';
 export { h2, h4, $2, $4, word } from './util/hex';
 
 export { OPC, ENC, MODE_LEN, KICK_ILLEGAL } from './cpu/opcodes';
+export { undocumentedOpcode, undocumentedText, type UndocumentedInfo } from './cpu/undocumented';
 export type { OpcodeInfo, AddrMode, Flow, Access } from './cpu/opcodes';
 export { decode } from './cpu/decode';
 export type { Decoded } from './cpu/decode';

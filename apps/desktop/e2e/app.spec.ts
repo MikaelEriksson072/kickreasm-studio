@@ -309,6 +309,40 @@ test('Escape closes the right-click menu, and only that: the listing does not go
   await expect(cur.locator('.adr')).not.toHaveText(at!);
 });
 
+test('pointing at an undocumented opcode says what it does and the flags it changes, in the listing and the source', async ({ page }) => {
+  await waitForListing(page);
+  // the demo's lax frame / sax temp / dcp countdown (var_092e, var_092f and var_0930 here)
+  await goTo(page, '$08e6');
+  const ill = (mn: string) => listing(page).locator('.syn-ill', { hasText: new RegExp(`^${mn}`) }).first();
+
+  await test.step('in the listing: on the mnemonic, as its tooltip', async () => {
+    await expect(ill('lax')).toHaveAttribute('title', /^lax \(\$[0-9a-f]{2}, (abs|zp)\) - undocumented opcode\nLoads A and X with the same byte\.\nA = X = M\nFlags: N Z$/);
+    await expect(ill('sax')).toHaveAttribute('title', /also called aax\nStores A AND X\.\nM = A & X\nFlags: none change$/);
+    await expect(ill('dcp')).toHaveAttribute('title', /Decrements the memory \(DEC\), then compares A with it \(CMP\)\.\n.*\nFlags: N Z C$/);
+    // a documented one has none
+    expect(await listing(page).locator('.syn-mn').first().getAttribute('title')).toBeNull();
+  });
+
+  await test.step('in the source view: Monaco says the same on the mnemonic', async () => {
+    await page.getByRole('tab', { name: 'raster-demo.asm' }).click();
+    const editor = page.locator('.mon-host .view-lines');
+    await expect(editor).toBeVisible();
+    await editor.click();
+    await page.keyboard.press('Control+f');
+    await page.keyboard.type('dcp var_0930');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    // the cursor on the mnemonic, and Monaco's Show Hover there (Ctrl+K Ctrl+I), as the pointer would
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Control+k');
+    await page.keyboard.press('Control+i');
+    const hover = page.locator('.monaco-hover').filter({ hasText: 'undocumented opcode' });
+    await expect(hover).toContainText('dcp - undocumented opcode, also called dcm', { timeout: 10_000 });
+    await expect(hover).toContainText('Decrements the memory (DEC), then compares A with it (CMP).');
+    await expect(hover).toContainText('Flags: N Z C');
+  });
+});
+
 test('set the memory configuration ($01) code runs with', async ({ page }) => {
   await waitForListing(page);
   // the first border color write in the demo, which never writes $01 (so it runs with $37)

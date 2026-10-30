@@ -1,6 +1,6 @@
 /* Hover (registers, labels, opcodes) and go-to-definition (Ctrl+click, F12) for Kick sources. */
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api';
-import { findBlock, h4, kindInfo, OPC, SYM, type AnalysisResult, type RenderResult } from '@mimir/core';
+import { findBlock, h4, kindInfo, OPC, SYM, undocumentedText, type AnalysisResult, type RenderResult } from '@mimir/core';
 import { KICKASS } from './kickass-language';
 
 /** The analysis shown in the editor; SourceView keeps it current. */
@@ -21,8 +21,13 @@ export function registerProviders(monaco: typeof Monaco): void {
         const b = findBlock(A.blocks, a);
         return { contents: [{ value: `**${name}** — $${h4(a)}` }, { value: `${b ? kindInfo(b.type).label : 'label'} · ${xs.length} reference${xs.length === 1 ? '' : 's'}${l.user ? ' · renamed by you' : ''}` }] };
       }
-      const op = OPC.find(o => o.mn.toLowerCase() === name.toLowerCase());
-      if (op) return { contents: [{ value: `**${op.mn}**${op.ill ? ' — undocumented opcode' : ''}` }] };
+      // a mnemonic; an undocumented one (also in a `.byte` line's comment) with what it does, as the first opcode of it
+      // Kick Assembler writes (an `lax` instruction is never the unstable `lax #`)
+      const ops = OPC.filter(o => o.mn.toLowerCase() === name.toLowerCase());
+      const op = ops.find(o => !o.ill) ?? ops.find(o => o.kick) ?? ops[0];
+      const text = op && op.ill ? undocumentedText(op.op, true) : null;
+      if (text) { const [head, ...rest] = text.split('\n'); return { contents: [{ value: `**${head}**` }, { value: rest.join('  \n') }] }; }
+      if (op) return { contents: [{ value: `**${op.mn}**` }] };
       return null;
     },
   });

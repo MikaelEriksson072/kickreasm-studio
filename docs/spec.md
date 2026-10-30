@@ -296,6 +296,12 @@ Alla 256 opkoder är tabellstyrda. Varje post: `mnemonic`, adresseringsläge, l�
 
 Principen: allt som har mer än en möjlig kodning, eller vars beteende är instabilt, exporteras som `.byte` med en kommentar som visar mnemonic. Då är round-trip garanterad oavsett assemblerversion.
 
+**Vad de gör:** när pekaren står på en odokumenterad opkod visas en kort beskrivning (`undocumentedText()`,
+`packages/core/src/cpu/undocumented.ts`). Den har mnemonic, opkod och adresseringsläge, andra namn (`isc` heter också
+`isb`), vad den gör i en mening och som formel, vilka flaggor den ändrar (N V Z C, eller *none change*) och, för de
+instabila, varför. I listningen sitter den på mnemonic och, för en opkod som skrivs som `.byte`, på `.byte` och
+kommentaren. I källkodsfliken visar Monaco samma text när pekaren står på mnemonic, också i en kommentar.
+
 ### 7.3 Kantfall
 
 | Fall | Hantering |
