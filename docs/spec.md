@@ -1411,6 +1411,61 @@ början av Spindle 3:s residenta sida och hela kedjan går att följa till slute
 En Sparkle-disk känns inte igen som en Spindle-disk. **Test:** `test/spindle-disk.test.ts`, med diskar som
 `test/helpers/spindle-disk.ts` skriver på samma sätt som Spindle. `fixtures/d64/spindle-demo.d64` är en av dem.
 
+### 13.5c Bitfire-diskar (d64writes kommandorad)
+
+Bitfire, Bitbreakers loader, har med flit inget laddskript: varje del laddar nästa fil (`link_load_next_comp`) eller en
+fil efter dess nummer. Det som liknar ett skript mest är kommandoraden till d64write, Bitfires diskbyggare. Den listar
+filerna i den ordning de laddas (`-b`), startprogrammet (`--boot`), sidan (`--side`), dir-arten (`-a`) och vanliga filer
+(`-s`). Bitfire lägger sina filer utanför diskens katalog, i en egen katalog på spår 18, med varje fils laddadress och
+längd. `readBitfireDisk()` (`packages/core/src/c64/bitfire-disk.ts`) läser den och sektorerna i den ordning d64write
+fyller dem. En fil som är packad med dali, Bitfires packare, packas upp. Filnamnen finns inte på disken.
+
+Formatet är d64writes (BSD-licens), och katalogen har ändrats mellan versionerna:
+- **0.x (till och med 0.7, 2020):** 6 byte per fil i 18/18, 18/17 och 18/16: spår, sektor, laddadress och längd − 1.
+  Sidan står i byte `$ff`. Varje fil börjar i en egen sektor. Filerna är packade med bitnax, och det läses inte här.
+- **1.0 och 1.1 (2022):** 4 byte per fil (laddadress, längd − 1) i 18/18 och 18/17. Sist kommer den första filens spår,
+  vilken i ordningen dess sektor är på spåret, dess första byte och sidan (`$fc`–`$ff`).
+- **Efter 1.1:** samma, men de 4 byten står först och laddadressens höga byte är − 1.
+- **1.2 och senare:** de 4 byten först, sedan en kolumn med 63 låga byte, en med höga byte − 1 och två med längd − 1.
+
+Från 1.0 följer filerna på varandra utan glapp från spår 1 sektor 0, och hela sektorn är deras. d64write fyller var
+fjärde sektor på ett spår (från 1.2 var tredje från spår 18), sedan igen från sektor 1, 2 och 3. Sidan är `$f0` + sida
+− 1. Startpositionen som en katalogsektor anger för sin första fil måste stämma med var filerna hamnar. Annars är det
+inte det formatet.
+
+**dali** skriver vart filen packas upp (2 byte) och sedan en zx0-ström:
+- Först en literal: en Elias-gamma-längd, sedan byten. Efter en literal kommer en kopia med förra offseten (0) eller en
+  ny (1). Efter en kopia kommer en literal (0) eller en ny kopia (1).
+- Talen är sammanflätad Elias-gamma: en 0 före varje bit, en 1 sist. Från 256 kommer de 8 låga bitarna först. Bitarna
+  läses uppifrån i en byte, som hämtas när den behövs.
+- En ny offset är ett tal (dess höga del + 1) och en byte: de 7 låga bitarna, sedan 1 för längd 2. Annars följer
+  längden − 1 utan sin första 0. Talet 256 avslutar strömmen.
+- En fil packad på plats har inget slut. Den slutar där skrivningen når läsningen, och resten är byten som de är.
+
+En disk räknas som en Bitfire-disk när katalogen på spår 18 har sidbyten och första filen på spår 1, sektor 0, byte 0.
+För 1.x måste katalogsektorernas startpositioner stämma, och för 0.x måste varje fil börja efter den förra. En katalog
+först (efter 1.1 och 1.2, som packar med dali) räknas bara när minst en fil packas upp. Startprogrammet är den post i
+den vanliga katalogen som pekar på spår 18. En dir-art är rader som pekar dit eller är DEL med 0 block.
+
+**I appen:**
+- Explorer säger om en monterad disk *Bitfire disk: N files the loader reads, not in the directory*, med knappen
+  **Bitfire script**.
+- Bottenpanelens flik **Bitfire script** finns då. Den har en rad per fil: nummer, var den laddas, vart den packas upp,
+  storlek (packad → uppackad), ett filnamn (`file02_3800.lz`, påhittat: numret och uppackningsadressen) och
+  anmärkningar (*packed with dali, in place*, *not packed*, var den börjar på disken).
+- Ett klick på raden öppnar filen som en PRG: uppackad där den packas upp, annars som den laddas. **+** lägger till den.
+- **Copy script** kopierar d64writes kommandorad, med en kommentar per fil ovanför.
+
+**Mätt:** alla 276 419 diskar i referensarkivet lästes på 8 minuter. 1 476 är Bitfire-diskar: 916 av 0.x, 200 av 1.0
+och 1.1, 35 efter 1.1 och 325 av 1.2 och senare. Bland dem finns The Lab, 1337, Next Level, Comaland, Eyes och
+Wonderland XIV. På 1.x-diskarna packas nästan alla filer upp, till exempel alla 47 på The Lab sida 1 och alla 73 på 1337
+sida 1. Filerna som inte packas upp laddas som de är, som Next Rounds teckentabeller. Ingen Spindle- eller Sparkle-disk
+tas för en Bitfire-disk.
+
+**Test:** `test/bitfire-disk.test.ts`, med diskar och dali-filer som `test/helpers/bitfire-disk.ts` skriver som d64write
+och dali gör. `fixtures/d64/bitfire-demo.d64` är en av dem: demot packat med slut, en tabell som inte är packad och en
+fil packad på plats.
+
 ### 13.6 Terminal
 
 **Terminal** i titelraden (och kommandopaletten) öppnar ett terminalfönster i mappen du arbetar i: den senast
@@ -1603,7 +1658,7 @@ tom inställning behålls.
 | Sidopanel | **Explorer**: filer, monterad disk (13.5) direkt under dem, VICE-quicksave, patchar (10.2, när det finns några), loaders, programstart och minneskarta (64 KB-remsa och segmentlista), var och en ett kort vars rubrik fäller ihop det (valet sparas per användare, `sideClosed`) med vad det rymmer bredvid rubriken (*1 file*, *none found*, quicksavens tid, startadressen, antal block). *Demo* och *+* (lägg till en PRG) står i Files rubrik; hjälptexterna är en rad, resten står i knapparnas tips. Pack-vyns sektioner är likadana kort. **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Exomizer (13.8) |
 | Editor | Flikar: **Listing** (interaktiv, virtualiserad; vänsterkolumnen visar adress eller radnummer), **Graphics** (allt minne som tecken, sprites eller bitmappar, 14.5), **Memory** (minnet som VICE-monitorns `m`, `i` och `ii`, 14.6), **main.asm** (Monaco), **SPEC.md** |
 | Inspektor | **Memory map** (256 × 256 heatmap, lägen Type/Bytes/Refs, zoom till laddade sidor), **Block** (intervall, evidens, konfidens, typ, etikett, kommentar), **Preview** (sprite/chars/bitmap, multicolor, text, musik- och rutininfo) |
-| Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Spindle script (Pefchain-drivers, 8.11f, och en Spindle 3-disks laddskript, 13.5b, när de finns), Statistics, Build output |
+| Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Spindle script (Pefchain-drivers, 8.11f, och en Spindle 3-disks laddskript, 13.5b, när de finns), Bitfire script (en Bitfire-disks filer och d64writes kommandorad, 13.5c, när en sådan disk är monterad), Statistics, Build output |
 | Statusrad | CPU, filer, markörens adress/etikett/blocktyp, markering, analystid, verifieringsstatus |
 
 Paneler storleksändras med drag och mins per användare. Under 900 px bredd blir sidopanel och inspektor utdragbara lådor.

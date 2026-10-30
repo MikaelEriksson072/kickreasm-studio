@@ -22,6 +22,8 @@ interface SidebarProps {
   disk: MountedDisk | null; onMount: () => void; onEject: () => void;
   /** open the Spindle script tab (a Spindle disk's load script) */
   onShowSpindle: () => void;
+  /** open the Bitfire script tab (a Bitfire disk's files) */
+  onShowBitfire: () => void;
   /** per file: packed (or maybe packed), else null */
   packing: (PackingInfo | null)[];
   /** open a file from the mounted disk (`add`: add it to the project) */
@@ -59,7 +61,7 @@ interface QuicksaveProps {
   onFavouriteKept: (q: QuicksaveEntry, on: boolean) => void;
 }
 
-export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpen, onAdd, onDemo, onRemoveFile, onSetStart, disk, onMount, onEject, onShowSpindle, onOpenFromDisk, packing, bmSel, onBmSelect, onBmGo, onBmAdd, onBmEdit, onBmDelete, bmEditing, pack, quicksave, patches }: SidebarProps) {
+export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpen, onAdd, onDemo, onRemoveFile, onSetStart, disk, onMount, onEject, onShowSpindle, onShowBitfire, onOpenFromDisk, packing, bmSel, onBmSelect, onBmGo, onBmAdd, onBmEdit, onBmDelete, bmEditing, pack, quicksave, patches }: SidebarProps) {
   const [q, setQ] = useState('');
   const [symTab, setSymTab] = useState<'labels' | 'hw'>('labels');
   if (view === 'explorer') {
@@ -86,7 +88,7 @@ export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpe
           </div>
           <p className="side-hint">Or drop .prg, .vsf or .d64 files on the window; with Shift they are added.</p>
         </SideSection>
-        {disk && <DiskSection disk={disk} onEject={onEject} onOpenFromDisk={onOpenFromDisk} onShowSpindle={onShowSpindle} />}
+        {disk && <DiskSection disk={disk} onEject={onEject} onOpenFromDisk={onOpenFromDisk} onShowSpindle={onShowSpindle} onShowBitfire={onShowBitfire} />}
         <QuicksaveSection {...quicksave} />
         {patches.list.length > 0 && <PatchesSection {...patches} />}
         <LoadersSection A={A} packed={packing.some(p => p?.verdict === 'packed')} onNavigate={onNavigate} />
@@ -256,7 +258,7 @@ function PatchesSection({ list, onGo, onEdit, onSave, onRemove, onSwitch }: Patc
 }
 
 /** The mounted .d64, listed the way the 1541 lists it. A PRG opens with a click; + adds it to the project. */
-function DiskSection({ disk, onEject, onOpenFromDisk, onShowSpindle }: { disk: MountedDisk; onEject: () => void; onOpenFromDisk: (f: D64File, add: boolean) => void; onShowSpindle: () => void }) {
+function DiskSection({ disk, onEject, onOpenFromDisk, onShowSpindle, onShowBitfire }: { disk: MountedDisk; onEject: () => void; onOpenFromDisk: (f: D64File, add: boolean) => void; onShowSpindle: () => void; onShowBitfire: () => void }) {
   const { img } = disk;
   return (
     <SideSection id="disk" title="Disk" summary={`"${img.name}"`} actions={<button className="icon-btn" title={`Eject ${disk.name}`} aria-label="Eject disk" onClick={onEject}><Icon name="eject" size={14} /></button>}>
@@ -280,6 +282,12 @@ function DiskSection({ disk, onEject, onOpenFromDisk, onShowSpindle }: { disk: M
         <div className="disk-spindle">
           <span><b>Spindle 3 disk:</b> {disk.spindle.jobs.length} job{disk.spindle.jobs.length === 1 ? '' : 's'} the loader reads, not files</span>
           <button className="btn small" onClick={onShowSpindle}>Load script</button>
+        </div>
+      )}
+      {disk.bitfire && (
+        <div className="disk-spindle">
+          <span><b>Bitfire disk:</b> {disk.bitfire.files.length} file{disk.bitfire.files.length === 1 ? '' : 's'} the loader reads, not in the directory</span>
+          <button className="btn small" onClick={onShowBitfire}>Bitfire script</button>
         </div>
       )}
       <div className="side-hint">{img.freeBlocks} blocks free{img.tracks !== 35 ? ` · ${img.tracks} tracks` : ''} · in drive 8 on Build &amp; Run</div>

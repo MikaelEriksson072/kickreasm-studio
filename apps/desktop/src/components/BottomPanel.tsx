@@ -1,7 +1,8 @@
-/* Bottom panel: analysis log, problems, cross-references, raster IRQs, the Spindle script, statistics, build output. */
+/* Bottom panel: analysis log, problems, cross-references, raster IRQs, the Spindle script, a Bitfire disk's files,
+ * statistics, build output. */
 import {
-  decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, spinChunkName, spindleCondition, spindleLabel, spindleName, spindleRoutines, spindleScript, spinScript,
-  type Addr, type AnalysisResult, type DeepReport, type RasterIrq, type RenderResult, type Settings, type SpindleChunk, type SpindleDriver, type SpindleJob,
+  BITFIRE_VERSION, bitfireFileName, d64writeScript, decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, spinChunkName, spindleCondition, spindleLabel, spindleName, spindleRoutines, spindleScript, spinScript,
+  type Addr, type AnalysisResult, type BitfireFile, type DeepReport, type RasterIrq, type RenderResult, type Settings, type SpindleChunk, type SpindleDriver, type SpindleJob,
 } from '@mimir/core';
 import { Icon, LVL_ICON } from '../lib/icons';
 import { cx, fmtBytes, GROUP_LABEL, GROUP_ORDER, groupOfType } from '../lib/util';
@@ -145,6 +146,44 @@ function SpinDiskSection({ disk, onCopy, onOpenChunk }: { disk: MountedDisk; onC
   );
 }
 
+/** The Bitfire script tab (spec 13.5c): a Bitfire disk's own files, a row each, in the order d64write wrote them (and
+ *  the loader loads them); a row opens the file as a PRG, unpacked when it is packed with dali, + adds it. */
+export function BitfirePanel({ disk, onCopy, onOpenFile }: { disk: MountedDisk; onCopy: (text: string, what: string) => void; onOpenFile: (f: BitfireFile, add: boolean) => void }) {
+  const d = disk.bitfire!;
+  const unpacked = d.files.filter(f => f.unpacked).length, n = d.files.length;
+  // what the disk's own directory holds: the boot program and other files (and a dirart)
+  const inDir = [d.boot != null ? 'the boot program' : '', d.standard.length ? `${d.standard.length} other file${d.standard.length === 1 ? '' : 's'}` : ''].filter(Boolean);
+  const dirText = inDir.length ? `; ${inDir.join(' and ')} ${inDir.length > 1 || d.standard.length > 1 ? 'are' : 'is'} in the directory${d.dirart ? `, a dirart of ${d.dirart} lines` : ''}` : '';
+  const notes = (f: BitfireFile) => [
+    f.unpacked ? (f.unpacked.inplace ? 'packed with dali, in place' : 'packed with dali') : d.format === '0.x' ? 'packed with bitnax or not packed: as it is on the disk' : 'not packed',
+    `from ${f.track}/${f.sector}${f.offset ? ` byte ${f.offset}` : ''}`,
+  ].join(' · ');
+  return (
+    <div className="xref spindle">
+      <div className="xref-head spindle-head">
+        <span>Files of {disk.name} ({BITFIRE_VERSION[d.format]}, side {d.side}): {n} file{n === 1 ? '' : 's'}{unpacked ? `, ${unpacked} unpacked` : ''} <span className="muted">· Bitfire has no load script: a part loads the next file or one by its number, so this is the order they load in; d64write's command line rebuilds the disk{dirText}; the file names are not on the disk</span></span>
+        <button className="btn small" onClick={() => onCopy(d64writeScript(d, disk.name).join('\n'), 'Copied the d64write command line')}><Icon name="copy" size={14} />Copy script</button>
+      </div>
+      <table className="tbl" aria-label="Bitfire files"><thead><tr><th>File</th><th>Loads</th><th>Unpacks to</th><th>Bytes</th><th>Name</th><th>Notes</th><th /></tr></thead><tbody>
+        {d.files.map(f => {
+          const name = bitfireFileName(f), u = f.unpacked;
+          return (
+            <tr key={f.n} title={u ? `Open ${name} unpacked, as a PRG at $${h4(u.start)}` : `Open ${name} as a PRG at $${h4(f.load)}, as it loads`} onClick={() => onOpenFile(f, false)}>
+              <td className="mono">${h2(f.n)}</td>
+              <td className="mono">${h4(f.load)}–${h4(f.end - 1)}</td>
+              <td className="mono">{u ? `$${h4(u.start)}–$${h4(u.end - 1)}` : <span className="muted">—</span>}</td>
+              <td className="mono">{u ? `${f.bytes.length} → ${u.end - u.start}` : f.bytes.length}</td>
+              <td className="mono">{name}</td>
+              <td className="muted">{notes(f)}</td>
+              <td><button className="icon-btn" title={`Add ${name} to this project`} aria-label={`Add ${name} to this project`} onClick={e => { e.stopPropagation(); onOpenFile(f, true); }}><Icon name="plus" size={13} /></button></td>
+            </tr>
+          );
+        })}
+      </tbody></table>
+    </div>
+  );
+}
+
 /** Spindle's effect drivers (spec 8.11f), a row per line of the script they were built from; a row goes to its driver. */
 function DriversSection({ A, R, onNavigate, onCopy }: { A: AnalysisResult; R: RenderResult; onNavigate: (a: Addr) => void; onCopy: (text: string, what: string) => void }) {
   const D = A.spindle;
@@ -254,4 +293,4 @@ export function BuildPanel({ build, S, names, stale, busy, onVerify, onRun, onCo
   );
 }
 
-export const BOTTOM_TABS: [BottomTab, string][] = [['log', 'Analysis log'], ['problems', 'Problems'], ['xrefs', 'Cross-references'], ['irqs', 'Raster IRQs'], ['spindle', 'Spindle script'], ['stats', 'Statistics'], ['build', 'Build output']];
+export const BOTTOM_TABS: [BottomTab, string][] = [['log', 'Analysis log'], ['problems', 'Problems'], ['xrefs', 'Cross-references'], ['irqs', 'Raster IRQs'], ['spindle', 'Spindle script'], ['bitfire', 'Bitfire script'], ['stats', 'Statistics'], ['build', 'Build output']];

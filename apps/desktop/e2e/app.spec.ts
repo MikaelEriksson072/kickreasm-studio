@@ -2415,6 +2415,54 @@ test('a mounted Spindle 3 disk: its load script in the Spindle script tab, each 
   });
 });
 
+test('a mounted Bitfire disk: its files in the Bitfire script tab, unpacked, and d64write\'s command line', async ({ app, page }) => {
+  // fixtures/d64/bitfire-demo.d64 (packages/core/test/bitfire-disk.test.ts): the raster demo packed with an end, a table
+  // that is not packed, and a file packed in place that unpacks to $2ed4-$2fff
+  await waitForListing(page);
+  await stubDialogs(app, { open: [join(repoDir, 'fixtures/d64/bitfire-demo.d64')] });
+  await page.getByRole('button', { name: 'Mount D64…' }).click();
+  await expect(toast(page, 'Mounted bitfire-demo.d64: "BITFIRE DEMO", 2 files, a Bitfire disk with 3 files of its own')).toBeVisible();
+  await expect(page.locator('.disk-spindle')).toContainText('Bitfire disk: 3 files the loader reads, not in the directory');
+  const table = page.getByRole('table', { name: 'Bitfire files' });
+
+  await test.step('the Explorer opens the tab, a row per file in the order they load', async () => {
+    await page.locator('.disk-spindle').getByRole('button', { name: 'Bitfire script' }).click();
+    await expect(page.getByRole('tab', { name: /Bitfire script/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: /Bitfire script/ })).toContainText('3');
+    await expect(page.locator('.spindle-head').first()).toContainText('Files of bitfire-demo.d64 (Bitfire 1.2 or later, side 1): 3 files, 2 unpacked');
+    await expect(table.locator('tbody tr td:nth-child(5)')).toHaveText(['file00_0801.lz', 'file01_4000.lz', 'file02_2ed4.lz']);
+    await expect(table.locator('tbody tr td:nth-child(3)')).toHaveText(['$0801–$37ff', '—', '$2ed4–$2fff']);
+    await expect(table.locator('tbody tr').nth(1).locator('td').nth(1)).toHaveText('$4000–$40ff');
+    await expect(table.locator('tbody tr').nth(1).locator('td').nth(5)).toHaveText(/^not packed · from 1\/\d+ byte \d+$/);
+    await expect(table.locator('tbody tr').nth(2).locator('td').nth(5)).toContainText('packed with dali, in place');
+  });
+
+  await test.step('a row opens its file unpacked, as a PRG where it unpacks to; + adds one as it loads', async () => {
+    await table.getByRole('row', { name: /file00_0801/ }).click();
+    await expect(toast(page, 'Loaded file00_0801.prg at $0801')).toBeVisible();
+    // the raster demo, as it was before it was packed
+    await expect(listing(page).locator('.row', { hasText: 'BasicUpstart2(start)' }).first()).toBeVisible();
+    await expect(listing(page).locator('.row', { hasText: 'jsr music.init' }).first()).toBeVisible();
+    await table.getByRole('button', { name: 'Add file01_4000.lz to this project' }).click();
+    await expect(page.locator('.file-name')).toHaveText(['file00_0801.prg', 'file01_4000.prg']);
+  });
+
+  await test.step('it copies d64write\'s command line, each file in a comment above it', async () => {
+    await page.getByRole('button', { name: 'Copy script' }).click();
+    await expect(toast(page, 'Copied the d64write command line')).toBeVisible();
+    const text = (await app.evaluate(({ clipboard }) => clipboard.readText())).replace(/\r\n/g, '\n').split('\n');
+    expect(text[0]).toBe('# d64write command line, rebuilt by Mimir Studio from bitfire-demo.d64 (Bitfire 1.2 or later): 3 files on side 1.');
+    expect(text).toContain('#   file01_4000.lz   loads at $4000-$40ff (256 bytes), not packed');
+    expect(text.slice(text.indexOf(''))).toEqual(['', 'd64write -c bitfire-demo.d64 -h "bitfire demo" -i bf --side 1 \\', '  --boot boot.prg \\',
+      '  -b file00_0801.lz \\', '  -b file01_4000.lz \\', '  -b file02_2ed4.lz \\', '  -s note.prg']);
+  });
+
+  await test.step('ejecting the disk takes the tab away', async () => {
+    await page.getByRole('button', { name: 'Eject disk' }).click();
+    await expect(page.getByRole('tab', { name: /Bitfire script/ })).toHaveCount(0);
+  });
+});
+
 test('the tab row fits a small window: the listing tools lose their labels, then move into the ⋯ menu', async ({ app, page }) => {
   await waitForListing(page);
   const row = page.locator('main.main > .tabs');

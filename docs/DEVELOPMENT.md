@@ -96,6 +96,7 @@ Playwright inspector).
 | the Explorer's sections say what they hold and fold up, and stay folded | Files says *1 file*, Loaders *none found*, Program start *$0810*; the Loaders title folds the section (`aria-expanded` false, its text gone, the summary kept), it is still folded after Blocks and back, and opens again |
 | loaders: the Explorer names the loader and lists its parts, which the listing and the source mark | the raster demo has none; `fixtures/prg/loader-demo.prg` shows *Spindle (lft)* (2-bit + ATN …) with its installer, two drive commands, `$0c00–$0cff` on the C64 and its drive code at `$3000`; a part goes to the listing, where `// ==== Spindle (lft): resident page (jsr here to load the next part) ====` and the header's *Spindle* mark it; the analysis log names it and `F7` verifies |
 | the Spindle script: a tab when Pefchain drivers are in memory, a row per script line that goes to its driver | the demo has no *Spindle script* tab; `fixtures/prg/spindle-demo.prg` (the drivers pefchain 3.1 built for five test parts) has one with 6 rows: `part1.pef space`, `part2.pef f0 = 05`, `\| f0 = 20`, `part3.pef -`, `part4.pef @`, `- stay`, then *its \| line* and *the end of the demo*; a row goes to `$1201 · part3_driver`, marked `// ==== Spindle part 3: its driver (script line "part3.pef -") ====`, and `part4_fadeout` to `$1314`; *Copy script* copies the script with `part1.pef     space      # driver $108c: …`; `F7` verifies; the demo again has no such tab and shows the log |
+| a mounted Bitfire disk: its files in the Bitfire script tab, unpacked, and d64write's command line | `fixtures/d64/bitfire-demo.d64` (written by `test/helpers/bitfire-disk.ts`) mounts with *a Bitfire disk with 3 files of its own*; the Explorer's *Bitfire script* opens the tab (count 3) with *Bitfire 1.2 or later, side 1: 3 files, 2 unpacked*, the names `file00_0801.lz`, `file01_4000.lz`, `file02_2ed4.lz`, *Unpacks to* `$0801–$37ff`, — and `$2ed4–$2fff`, and the notes *not packed · from 1/…* and *packed with dali, in place*; a row opens `file00_0801.prg` at `$0801` (the raster demo: `BasicUpstart2(start)`, `jsr music.init`), + adds `file01_4000.prg`; *Copy script* copies the comment lines and `d64write -c bitfire-demo.d64 -h "bitfire demo" -i bf --side 1` with `--boot boot.prg`, a `-b` per file and `-s note.prg`; *Eject* takes the tab away |
 | a mounted Spindle 3 disk: its load script in the Spindle script tab, each chunk opened as a PRG | `fixtures/d64/spindle-demo.d64` (written by `test/helpers/spindle-disk.ts`) mounts with *a Spindle 3 disk with 4 jobs*; the Explorer's *Load script* opens the tab with *4 jobs, 6 chunks*, the chunks `job01_0800.bin` … `job04_cf00.bin`, job 3's labels `02:` and `1f:` and job 4's *then jumps to $307a · loads under I/O*; a row opens `job01_0800.prg` at `$0800`, + adds `job02_4000.prg`; *Copy script* copies `# spin -e 0800` and a line per chunk; *Eject* takes the tab away |
 | the Raster IRQs panel lists every IRQ handler with its $d012 and $d011 and goes to it | the demo: *1 raster interrupt, 1 handler*, the row `98 ($062)`, `$62`, `$1b`, `irq_08b7`, `$0836`, *main code via $0314*; clicking `irq_08b7` and `$0836` moves the cursor there |
 | the Memory tab finds text as PETSCII and as screen codes, and bytes, and steps through the hits | `mimir` gives *2 matches*; Enter selects `$0949–$094d` (*1 of 2 matches · PETSCII*), Enter again `$0994–$0998` (*screen codes*), Shift+Enter goes back, and 10 bytes are coloured; *Bytes* `8d ?? d0` has hits and *Next match* steps; `8d 2` says *is not a byte* in red; Esc empties the field |
@@ -177,7 +178,7 @@ apps/desktop     Electron app
   electron-builder.yml  Windows packaging (NSIS installer + portable exe)
 docs/spec.md     technical specification
 fixtures/prg     test programs (raster-demo.prg, and the loader, packed and Spindle demos)
-fixtures/d64     disk images (mimir-demo.d64, and spindle-demo.d64, a Spindle 3 disk)
+fixtures/d64     disk images (mimir-demo.d64, spindle-demo.d64, a Spindle 3 disk, and bitfire-demo.d64, a Bitfire one)
 ```
 
 ## Architecture notes
@@ -412,6 +413,10 @@ the reference as a patch in `test/helpers/reference.ts`):
 28. Spindle 3 disks (spec 13.5b) are new: `readSpindleDisk` reads a disk's jobs and decrunches them (disk.c and
     pack.c of Spindle 3.1), and the Spindle script tab lists them for a mounted disk. Checked against disks spin.exe
     and pefchain.exe built (every chunk byte-identical with its file) and the four sides of Mojo.
+29. Bitfire disks (spec 13.5c) are new: `readBitfireDisk` reads the files a Bitfire disk keeps in its own directory on
+    track 18 (the four formats of d64write 0.x to 1.2) and unpacks the ones dali packed (`unpackDali`); the Bitfire
+    script tab lists them, and `d64writeScript` writes the command line that builds the disk. Checked against the
+    reference archive: of 276 419 disks, 1 476 are Bitfire disks, and the files of the 1.x ones unpack.
 
 Fixes 3–10 were found by the fast-check fuzz test, which covers more inputs (entries, comments, renames, every override
 kind, every setting, two-file projects) than the prototype harness did. Fix 11 was found while writing the e2e tests,
