@@ -786,9 +786,9 @@ test('the Terminal button opens a terminal in the project folder', async ({ work
   });
 });
 
-test('a packed PRG is reported and unpacked with the built-in unpacker, or an external one', async ({ app, page }) => {
+test('a packed PRG is reported and unpacked with Sindri, or an external unpacker', async ({ app, page }) => {
   // fixtures/prg/packed-demo.prg: the demo behind a decruncher stub (fakePack: a mover, then a decoder at $0340),
-  // which the built-in unpacker runs in its emulated C64; fake-unp64.cjs (a stand-in for unp64, run with this Node)
+  // which Sindri runs in its emulated C64; fake-unp64.cjs (a stand-in for unp64, run with this Node)
   // undoes it as an external unpacker and names its result `<name>.0810` the way unp64 does
   const fake = join(repoDir, 'packages/core/test/helpers/fake-unp64.cjs');
   await waitForListing(page);
@@ -804,8 +804,8 @@ test('a packed PRG is reported and unpacked with the built-in unpacker, or an ex
     await open();
     await expect(toast(page, 'Loaded packed-demo.prg at $0801')).toBeVisible();
     await expect(bar).toContainText('The listing shows the decruncher at $080d and the packed data, not the program.');
-    // the built-in unpacker runs every file opened and reports what it peeled off
-    await expect(bar).toContainText(/the built-in unpacker peels off 2 layers: an unknown mover at \$080d \(fingerprint [0-9a-f]{8}\), then an unknown decoder at \$0340 \(fingerprint [0-9a-f]{8}\); the program starts at \$0810/, { timeout: 30_000 });
+    // Sindri runs every file opened and reports what it peeled off
+    await expect(bar).toContainText(/Sindri peels off 2 layers: an unknown mover at \$080d \(fingerprint [0-9a-f]{8}\), then an unknown decoder at \$0340 \(fingerprint [0-9a-f]{8}\); the program starts at \$0810/, { timeout: 30_000 });
     await expect(page.locator('.file-row', { hasText: 'packed-demo.prg' }).locator('.pill.pack')).toHaveText('packed');
     await page.keyboard.press('Control+j');
     await page.getByRole('tab', { name: /Problems/ }).click();
@@ -858,7 +858,7 @@ test('a file opened from a mounted disk is unpacked with the disk in a 1541', as
   await page.getByRole('list', { name: 'Files on kernal-load.d64' }).getByRole('listitem').filter({ hasText: 'BOOT' }).click();
   const bar = page.locator('.pack-bar');
   await expect(bar).toContainText('BOOT.prg is packed.', { timeout: 30_000 });
-  await expect(bar).toContainText(/the built-in unpacker peels off 1 layer: an unknown decruncher at \$080d \(fingerprint [0-9a-f]{8}\); the program starts at \$c000/);
+  await expect(bar).toContainText(/Sindri peels off 1 layer: an unknown decruncher at \$080d \(fingerprint [0-9a-f]{8}\); the program starts at \$c000/);
   await bar.getByRole('button', { name: 'Unpack', exact: true }).click();
   await expect(toast(page, 'Unpacked BOOT.prg: 609 bytes at $c000-$c260')).toBeVisible({ timeout: 30_000 });
   const done = page.locator('.unpack-bar');
@@ -1259,7 +1259,7 @@ test('the export writes NOTES.html, or NOTES.txt when set, with the bookmarks an
   });
 });
 
-test('the installed app unpacks with the built-in unpacker: no unp64 comes with it', async ({ app, page }) => {
+test('the installed app unpacks with Sindri: no unp64 comes with it', async ({ app, page }) => {
   // only an installed (packaged) app has resources\: run with MIMIR_E2E_EXE
   const installed = process.env.MIMIR_E2E_EXE;
   test.skip(!installed, 'needs the installed app (MIMIR_E2E_EXE)');

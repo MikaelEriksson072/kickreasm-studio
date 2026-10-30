@@ -1,6 +1,6 @@
 /* =====================================================================
  * Packed (crunched) programs: is a loaded PRG a decruncher plus compressed data? Runs after analyze() and
- * changes nothing in the analysis; the app reports it and unpacks it with the built-in unpacker (unpacker.ts), or with an
+ * changes nothing in the analysis; the app reports it and unpacks it with Sindri (sindri.ts), or with an
  * external one (unp64).
  *
  * The signs, calibrated on a few hundred PRGs from the CSDB archive:

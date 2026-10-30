@@ -50,7 +50,7 @@ describe('mimir CLI', () => {
     expect(JSON.parse(c.lines.join('\n')).packing[0]).toMatchObject({ verdict: 'packed', decruncher: 0x080d, signature: null });
   });
 
-  it('unpacks a packed PRG with the built-in unpacker and prints its layers', async () => {
+  it('unpacks a packed PRG with Sindri and prints its layers', async () => {
     const packed = join(__dirname, '../../../fixtures/prg/packed-demo.prg');
     let c = capture(dir);
     expect(await main(['unpack', packed, '-o', 'unpacked.prg', '--no-roms'], c.io)).toBe(0);

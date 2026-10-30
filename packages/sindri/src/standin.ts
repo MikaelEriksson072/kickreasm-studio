@@ -1,5 +1,5 @@
 /* Stand-ins for the C64 ROMs, for when no ROM files are found. The KERNAL holds the small pieces packers run
- * through (the interrupt entries, the jump table's indirect jumps); everything else is a JAM, and the unpacker
+ * through (the interrupt entries, the jump table's indirect jumps); everything else is a JAM, and Sindri
  * traps the routines it knows (CHROUT, GETIN, clear screen, BASIC RUN, ...) before the CPU gets there.
  * initStandIn() sets up RAM and I/O as a C64 has them after it starts. */
 import type { C64, Roms } from './c64.ts';
@@ -27,7 +27,7 @@ export function standInRoms(): Roms {
   const k = (addr: number, bytes: number[]) => put(kernal, 0xe000, addr, bytes);
   // IRQ/BRK entry: save the registers, then JMP ($0316) for BRK or JMP ($0314)
   k(0xff48, [0x48, 0x8a, 0x48, 0x98, 0x48, 0xba, 0xbd, 0x04, 0x01, 0x29, 0x10, 0xf0, 0x03, 0x6c, 0x16, 0x03, 0x6c, 0x14, 0x03]);
-  // the KERNAL's IRQ handler (the unpacker updates the clock and keyboard first): ack CIA 1, restore, RTI
+  // the KERNAL's IRQ handler (Sindri updates the clock and keyboard first): ack CIA 1, restore, RTI
   k(0xea31, [0xad, 0x0d, 0xdc, 0x4c, 0x81, 0xea]);
   k(0xea7e, [0xad, 0x0d, 0xdc]);
   k(0xea81, [0x68, 0xa8, 0x68, 0xaa, 0x68, 0x40]);

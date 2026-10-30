@@ -26,7 +26,7 @@ Options:
                     (the same as --set deepAnalysis=true)
   --kickass [jar]   also assemble with the real Kick Assembler (default: auto-detect / KICKASS_JAR)
   --java <path>     Java executable used for --kickass (default: java)
-  --no-roms         unpack with the unpacker's stand-ins instead of VICE's C64 ROMs (default: the ROMs of a
+  --no-roms         unpack with Sindri's stand-ins instead of VICE's C64 ROMs (default: the ROMs of a
                     VICE installation, or the folder in C64_ROMS)
   --file <name>     unpack: the file on the D64 (default: its first PRG; * and ? as the DOS takes them)
   --disk <d64>      unpack: put this disk in the drive (a D64 given as the file is in it already), so the

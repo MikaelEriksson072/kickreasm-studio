@@ -4,7 +4,7 @@
  * the serial bus (drive.ts); without one nothing answers there.
  *
  * It also records, for every RAM address, which layer wrote it last and when, and when it was last read as data.
- * The unpacker finds the layers of a packed program from that. */
+ * Sindri finds the layers of a packed program from that. */
 import { Cpu, type Bus } from './cpu.ts';
 import { DRIVE_RATIO, type Drive } from './drive.ts';
 import { CYCLES } from './opcodes.ts';
@@ -247,7 +247,7 @@ export class C64 implements Bus {
   /**
    * Writes (from $0400) to addresses not written since `freshMark` (an instruction count), next to the one before:
    * a depacker streaming its output through memory makes many, a program rewriting its screen and variables (or
-   * now and then a variable it had not touched for a while) next to none. The unpacker tells progress from settling
+   * now and then a variable it had not touched for a while) next to none. Sindri tells progress from settling
    * with it.
    */
   fresh = 0;

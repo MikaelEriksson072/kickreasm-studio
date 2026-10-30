@@ -18,7 +18,7 @@ export function defaultToolchainSettings(bundledExo: string | null = bundledExom
   const base = Object.fromEntries(TOOLCHAIN_KEYS.map(k => [k, DEFAULT_SETTINGS[k]])) as ToolchainSettings;
   if (!existsSync(base.kickJar)) base.kickJar = findKickAssJar() ?? base.kickJar;
   if (!existsSync(base.vicePath)) base.vicePath = findVice() ?? base.vicePath;
-  // the unpacker stays empty, which is the built-in one; an external one (unp64) can be set in Settings
+  // the unpacker stays empty, which is Sindri, the built-in one; an external one (unp64) can be set in Settings
   if (!base.exomizerPath) base.exomizerPath = bundledExo ?? findExomizer() ?? '';
   return base;
 }
@@ -37,7 +37,7 @@ export class SettingsStore {
     }
     this.value = { ...defaults(), ...stored };
     // Earlier installers came with unp64 and pointed the unpacker at it, once (`bundledUnpacker` in settings.json).
-    // unp64 no longer comes with the app: when the setting is still that copy, the built-in unpacker takes over. An
+    // unp64 no longer comes with the app: when the setting is still that copy, Sindri takes over. An
     // unpacker the user picked is kept.
     if (typeof raw.bundledUnpacker === 'string') {
       if (this.value.unpackerPath === raw.bundledUnpacker) Object.assign(this.value, { unpackerPath: '', unpackerArgs: DEFAULT_SETTINGS.unpackerArgs });

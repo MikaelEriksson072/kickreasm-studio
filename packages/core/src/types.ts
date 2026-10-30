@@ -86,7 +86,7 @@ export interface Settings {
   outDir: string;
   kickArgs: string;
   viceArgs: string;
-  /** an external unpacker for packed PRGs (unp64; empty: the built-in one) and its argument template: {in} the packed
+  /** an external unpacker for packed PRGs (unp64; empty: Sindri, the built-in one) and its argument template: {in} the packed
    * PRG, {out} the result */
   unpackerPath: string;
   unpackerArgs: string;

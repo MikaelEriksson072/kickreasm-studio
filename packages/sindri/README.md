@@ -1,7 +1,8 @@
-# unpacker (@mimir/unpacker)
+# Sindri (@mimir/sindri)
 
-**A generic unpacker for Commodore 64 programs.** It runs a packed PRG in an emulated C64, follows it through its
-layers (coders, movers, decrunchers, intros in front of them) and saves the unpacked program at the moment it starts.
+**Sindri is a generic unpacker for Commodore 64 programs.** It runs a packed PRG in an emulated C64, follows it
+through its layers (coders, movers, decrunchers, intros in front of them) and saves the unpacked program at the moment
+it starts.
 With the disk the program came from, an emulated 1541 is on the serial bus, so it can go on loading: through the
 KERNAL, or with a fast loader of its own.
 It needs no knowledge of the packer: it works for old and unknown crunchers as well as for known ones, and it reports
@@ -10,7 +11,7 @@ what each layer did so that new packers can be recognised and named.
 It is written in TypeScript and runs on Node 22.18 or newer, which runs the sources as they are. It was made for
 [Mimir Studio](https://github.com/MikaelEriksson072/mimir-studio), whose built-in unpacker it is: this package is a copy
 of the standalone project, and `src/`, `data/` and `test/` are kept the same as there. Mimir runs it through
-`unpackPrg()` and reports it with `unpackLog()` (`packages/core/src/unpacker.ts`), in the app's unpacker worker and in
+`unpackPrg()` and reports it with `unpackLog()` (`packages/core/src/sindri.ts`), in the app's unpacker worker and in
 `mimir unpack`.
 
 ## How it works
@@ -110,11 +111,11 @@ saved layer 4: $0800-$e1ff (54.5 KB), start with SYS 4096 = $1000
 
 `node src/cli.ts demo.d64` unpacks a disk's first PRG with the disk in the drive. Addresses can be written `$080d`,
 `0x080d` or `2061`. In this folder, `pnpm unpack game.prg` does the same, and
-`pnpm --filter @mimir/unpacker unpack game.prg` anywhere in the repository.
+`pnpm --filter @mimir/sindri unpack game.prg` anywhere in the repository.
 
 ### ROMs
 
-The ROM files are not included. The unpacker looks for a VICE installation (in `C:\C64`, Program Files and the usual
+The ROM files are not included. Sindri looks for a VICE installation (in `C:\C64`, Program Files and the usual
 Linux and macOS places) and takes `kernal-*.bin`, `basic-*.bin` and `chargen-*.bin` from its `C64` folder, or from the
 folder in `$C64_ROMS` or `--roms`, and the 1541's `dos1541-*.bin` from the same folder or VICE's `DRIVES` folder next
 to it (without it a disk is not used). Without the C64 ROMs it runs with stand-ins: small replacements for the KERNAL routines packers
@@ -139,7 +140,7 @@ For every layer the report says what it did:
 The list was built from about 6000 intros, demos and games: each file was unpacked, and the depacker layer at the
 address unp64 names was given unp64's packer name. That gave 321 fingerprints of 135 packers (Exomizer, ECA
 Compactor, PuCrunch, the CruelCrunch and Dali versions, ByteBoozer, 1001 CardCruncher, NSU Packer, ...). On 473 other
-files the unpacker names 429 packers exactly as unp64 does, 2 by the same family and none wrongly; it names nothing
+files Sindri names 429 packers exactly as unp64 does, 2 by the same family and none wrongly; it names nothing
 where unp64 knows no name either.
 
 ## Compared with unp64

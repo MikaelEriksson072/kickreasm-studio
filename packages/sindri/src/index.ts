@@ -1,4 +1,4 @@
-/* The unpacker's API, without file-system access (that is in ./node.ts). */
+/* Sindri's API, without file-system access (that is in ./node.ts). */
 export { unpack } from './session.ts';
 export type { UnpackOptions, UnpackResult, LayerReport, Saved, StopReason, Via } from './session.ts';
 export { C64, type Roms } from './c64.ts';

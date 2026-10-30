@@ -1,4 +1,4 @@
-/* The unpacker: it starts a C64 (or the stand-ins), loads the packed PRG, types RUN, and follows the program as
+/* Sindri: it starts a C64 (or the stand-ins), loads the packed PRG, types RUN, and follows the program as
  * it peels off its layers.
  *
  * A layer begins when the CPU jumps (JMP, JSR, RTS, RTI, BRK or an interrupt) into code that the running layer

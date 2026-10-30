@@ -1,4 +1,4 @@
-/* The built-in unpacker (packages/unpacker) as Mimir uses it: fakePack's decruncher gives the demo back byte for
+/* Sindri (packages/sindri) as Mimir uses it: fakePack's decruncher gives the demo back byte for
  * byte, with the stand-ins and with VICE's ROMs when VICE is installed; the layer report and the summary the packed
  * notice shows; VICE's ROMs found next to the x64sc in the settings; an Exomizer self-extracting file named by its
  * fingerprint when Exomizer is installed; and, with VICE's 1541 DOS ROM, a program that loads its next file from the
@@ -18,7 +18,7 @@ const roms = findC64Roms();
 const modes: [string, Roms | null][] = roms ? [['stand-ins', null], ['ROMs', roms]] : [['stand-ins', null]];
 
 for (const [mode, r] of modes) {
-  describe(`the built-in unpacker with the ${mode}`, () => {
+  describe(`Sindri with the ${mode}`, () => {
     it('unpacks fakePack: the demo, byte for byte, starting at $0810', () => {
       const run = unpackPrg(packed, r);
       expect(run.unpacked).toBe(true);
@@ -29,7 +29,7 @@ for (const [mode, r] of modes) {
       expect(conclusive(run)).toBe(true);
       // fakePack is no packer the signatures know: its layers go by their fingerprints
       expect(packerNames(run)).toBeNull();
-      expect(unpackSummary(run)).toMatch(/^the built-in unpacker peels off 2 layers: an unknown mover at \$080d \(fingerprint [0-9a-f]{8}\), then an unknown decoder at \$0340 \(fingerprint [0-9a-f]{8}\); the program starts at \$0810$/);
+      expect(unpackSummary(run)).toMatch(/^Sindri peels off 2 layers: an unknown mover at \$080d \(fingerprint [0-9a-f]{8}\), then an unknown decoder at \$0340 \(fingerprint [0-9a-f]{8}\); the program starts at \$0810$/);
       const log = unpackLog(run, 'packed.prg', 0x0801, packed.length - 2).split('\n');
       expect(log.slice(0, 2)).toEqual(['packed.prg: $0801-$390c (12.3 KB), 10 SYS2061', `ROMs: ${r ? r.source : 'stand-ins (no ROM files)'}`]);
       expect(log).toContain('layer 1  $0340  jmp from $0839  decoder');
@@ -41,13 +41,13 @@ for (const [mode, r] of modes) {
       const run = unpackPrg(demo, r);
       expect(run).toMatchObject({ unpacked: false, saved: null });
       expect(packerNames(run)).toBeNull();
-      expect(unpackSummary(run)).toMatch(/^the built-in unpacker peels off no layer \(it stopped: /);
+      expect(unpackSummary(run)).toMatch(/^Sindri peels off no layer \(it stopped: /);
       expect(unpackLog(run, 'demo.prg', 0x0801, demo.length - 2).split('\n').at(-1)).toBe('nothing was unpacked');
     });
   });
 }
 
-describe('the C64 ROMs for the built-in unpacker', () => {
+describe('the C64 ROMs for Sindri', () => {
   it('are looked for in VICE\'s C64 folder: beside its bin folder, beside the program, in share/vice', () => {
     expect(viceRomFolders(join('vice', 'bin', 'x64sc.exe'))).toEqual([join('vice', 'C64'), join('vice', 'bin', 'C64'), join('vice', 'share', 'vice', 'C64')]);
     expect(viceRomFolders('  ')).toEqual([]);
@@ -66,7 +66,7 @@ describe('the C64 ROMs for the built-in unpacker', () => {
   });
 });
 
-describe.skipIf(!roms?.drive)('the built-in unpacker with the disk in a 1541', () => {
+describe.skipIf(!roms?.drive)('Sindri with the disk in a 1541', () => {
   // 10 SYS2061: LOAD "PART2",8,1 through the KERNAL, then JMP $C000
   const boot = makePrg(0x0801, Uint8Array.from([
     0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x32, 0x30, 0x36, 0x31, 0x00, 0x00, 0x00,
@@ -102,7 +102,7 @@ describe.skipIf(!EXO)('an Exomizer self-extracting file', () => {
       expect(sfx.ok).toBe(true);
       const run = unpackPrg(sfx.out!.prg, roms);
       expect(packerNames(run)).toMatch(/^Exomizer/);
-      expect(unpackSummary(run)).toMatch(/^the built-in unpacker peels off \d layers?: .*Exomizer.* \(a decruncher at \$[0-9a-f]{4}\).*; the program starts at \$0810$/);
+      expect(unpackSummary(run)).toMatch(/^Sindri peels off \d layers?: .*Exomizer.* \(a decruncher at \$[0-9a-f]{4}\).*; the program starts at \$0810$/);
       // the demo's bytes are all there, in place
       const out = parsePrg('out', run.saved!.prg), d = parsePrg('demo', demo);
       expect(out.load).toBeLessThanOrEqual(d.load);

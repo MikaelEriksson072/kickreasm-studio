@@ -35,7 +35,7 @@ Fyra designprinciper bär hela arkitekturen:
 | Prestanda | Full analys av 64 KB under 50 ms i worker; listning 60 fps vid scrollning. |
 | Arbetsflöde | Från PRG till körande om-assemblerat program i VICE på under 30 sekunder för en ny användare. |
 
-**Icke-mål i v1:** ingen inbyggd emulator (VICE används), ingen automatisk uppackning av komprimerade program (detekteras och rapporteras; uppackning med ett klick med den inbyggda uppackaren, 8.11b, eller ett externt verktyg som unp64), ingen export till andra assemblers (ACME/64tass/ca65 ligger på roadmap), inget stöd för cartridge-format (`.crt`) och diskavbilder (`.d64`) i v1 — `.d64`-import kommer i M5.
+**Icke-mål i v1:** ingen inbyggd emulator (VICE används), ingen automatisk uppackning av komprimerade program (detekteras och rapporteras; uppackning med ett klick med Sindri, den inbyggda uppackaren, 8.11b, eller ett externt verktyg som unp64), ingen export till andra assemblers (ACME/64tass/ca65 ligger på roadmap), inget stöd för cartridge-format (`.crt`) och diskavbilder (`.d64`) i v1 — `.d64`-import kommer i M5.
 
 ## 3. Teknikstack
 
@@ -173,7 +173,7 @@ mimir-studio/
 │  ├─ src/verify/{kick-subset-assembler.ts, verify.ts}
 │  └─ test/{opcodes.test.ts, trace.test.ts, roundtrip.test.ts, fuzz.test.ts}
 ├─ packages/cli/                  mimir analyse|export|verify|unpack (Node, för CI och batch)
-├─ packages/unpacker/             den inbyggda uppackaren: en emulerad C64 som följer ett packat program genom sina lager
+├─ packages/sindri/               Sindri, den inbyggda uppackaren: en emulerad C64 som följer ett packat program genom sina lager
 ├─ fixtures/{prg/, golden/}       testkorpus + förväntade .asm
 └─ docs/
 ```
@@ -651,15 +651,15 @@ så lång tid (250 ms för en hel snapshot).
 namn tillsammans med komprimerad data. *Kanske packad* betyder minst 20 % av fönstren i en fil med lite kod (under 10 %),
 eller lite kod och minst 6,4 bitar per byte. Demon och vanliga program blir inte packade. Filer under 1 KB bedöms inte.
 
-**Den inbyggda uppackaren** (`packages/unpacker`, `@mimir/unpacker`) kör varje öppnad fil i en emulerad C64, i en egen
+**Sindri, den inbyggda uppackaren** (`packages/sindri`, `@mimir/sindri`) kör varje öppnad fil i en emulerad C64, i en egen
 Web Worker. Med C64-ROM:arna från användarens VICE (mappen `C64` bredvid x64sc i inställningarna, annars en VICE den
 hittar; huvudprocessen läser dem, kanalen `toolchain:roms`) startar den maskinen, laddar filen och skriver `RUN`; utan
 dem kör den med små ersättare för KERNAL och BASIC. Ett nytt lager börjar när processorn hoppar in i kod som det
 körande lagret skrev och inte har kört. Varje lager får en sort (*mover*, *decoder*, *decruncher*, *jump*, sist
 *program*) och ett fingeravtryck av opkoderna det körde; `data/signatures.json` har 321 kända fingeravtryck från 135
 packare, och ett lager som liknar ett av dem till minst 80 % får dess namn. En fil som den skalar ett lager av visas som
-packad, även om tecknen ovan inte räckte, med lagren i notisen (`unpackSummary()` i `packages/core/src/unpacker.ts`:
-"the built-in unpacker peels off 2 layers: Exomizer v3.0 (a decruncher at $0100) …; the program starts at $1000") och
+packad, även om tecknen ovan inte räckte, med lagren i notisen (`unpackSummary()` i `packages/core/src/sindri.ts`:
+"Sindri peels off 2 layers: Exomizer v3.0 (a decruncher at $0100) …; the program starts at $1000") och
 packarnamnen i rubriken. Skalar den inget lager av fast den körde programmet tills det stod still (eller gick tillbaka
 till BASIC) och tecknen bara räcker till *kanske*, visas ingen notis. Mot unp64 på 550 intron och demos ur arkivet ger
 den samma startadress och samma byte för 488 och går ett lager djupare för 17; på 473 andra filer namnger den 429
@@ -686,23 +686,23 @@ notis. Prov mot unp64 på 100 PRG:er ur arkivet:
   rätt. Bara 9 var tveksamma: 5 *kanske* som unp64 inte känner (visas inte) och 4 *packad* (visas med "unp64 does not
   know the packer").
 
-Med unp64 kan Unpack alltså behöva köras igen på resultatet, eller med unp64:s `-c` som packar upp alla lager. Den
-inbyggda uppackaren går igenom alla lager på en gång.
+Med unp64 kan Unpack alltså behöva köras igen på resultatet, eller med unp64:s `-c` som packar upp alla lager. Sindri
+går igenom alla lager på en gång.
 
 Appen visar det på tre ställen: en notis över listningen med skälen och var uppackaren börjar, märket *packed* eller
 *packed?* på filen i Explorer, och en rad i Problems. CLI:ns `analyse` skriver en `[pack]`-rad (och `packing` med `--json`),
-och `mimir unpack fil.prg [-o ut.prg] [--no-roms]` packar upp med den inbyggda uppackaren och skriver lagerrapporten
+och `mimir unpack fil.prg [-o ut.prg] [--no-roms]` packar upp med Sindri och skriver lagerrapporten
 (`mimir unpack demo.d64 [--file NAMN]` tar diskens första PRG med disken i stationen, `--disk` sätter i en disk).
 
 **unp64 följer inte med.** Tidigare installationer innehöll unp64 2.40 av iAN CooG, vars licens bara tillåter
-icke-kommersiell spridning, och pekade uppackaren på den (`bundledUnpacker` i `settings.json`). Nu är den inbyggda
-uppackaren standard och unp64 ingår inte. Står inställningen fortfarande på den medföljande kopian töms den en gång
-(`electron/main/settings.ts`), så att den inbyggda tar över; en uppackare användaren valt själv behålls. Ett e2e-test mot
+icke-kommersiell spridning, och pekade uppackaren på den (`bundledUnpacker` i `settings.json`). Nu är Sindri
+standard och unp64 ingår inte. Står inställningen fortfarande på den medföljande kopian töms den en gång
+(`electron/main/settings.ts`), så att Sindri tar över; en uppackare användaren valt själv behålls. Ett e2e-test mot
 den installerade appen kontrollerar att `resources\unp64` saknas, att inställningen är tom och att *Unpack* packar upp.
 
-**Uppackning.** Knappen **Unpack** i notisen (eller i kommandopaletten) tar programmet som den inbyggda uppackaren sparade
+**Uppackning.** Knappen **Unpack** i notisen (eller i kommandopaletten) tar programmet som Sindri sparade
 när filen öppnades: lagret där programmet startar, med dess start som programstart (ett BASIC-program som startas med
-`RUN` får ingen, analysen hittar dess SYS-rad). Lagerrapporten (`unpackLog()`, som uppackarens egen kommandorad skriver
+`RUN` får ingen, analysen hittar dess SYS-rad). Lagerrapporten (`unpackLog()`, som Sindris egen kommandorad skriver
 den) visas under *Layer report*. Med ett externt verktyg (13.1: *Extern uppackare*, vanligen unp64) skriver knappen
 **Unpack with unp64** i stället en kopia av PRG:n i en ny byggmapp och kör verktyget där med argumentlista, aldrig via
 ett skal. Med `{out}` i argumenten används den filen; annars den största nya fil som verktyget skrev. Startadressen läses
@@ -714,10 +714,10 @@ och det går att ångra. Verktygets kommandorad och utdata visas i en rad över 
 
 Testerna packar demon med `fakePack()` (`test/helpers/fake-packer.ts`). Det är en liten men riktig packare: en
 uppackare i 6502-kod kopierar sin loop till `$0340` och avkodar programmet (xor en 16-bitars LFSR-nyckelström, ungefär
-8 bitar per byte) på plats, och demon kör i VICE efteråt. Den inbyggda uppackaren ger tillbaka demon byte för byte i
-`test/unpacker.test.ts`, med ersättarna och med VICE:s ROM:ar när VICE finns, och känner igen en Exomizer-fil (när Exomizer
+8 bitar per byte) på plats, och demon kör i VICE efteråt. Sindri ger tillbaka demon byte för byte i
+`test/sindri.test.ts`, med ersättarna och med VICE:s ROM:ar när VICE finns, och känner igen en Exomizer-fil (när Exomizer
 finns) på fingeravtrycket. Den riktiga unp64 packar upp den i `test/unpack.test.ts` när unp64 finns, och testet hoppas
-över annars. E2e-testet packar upp med den inbyggda uppackaren och sedan med en ersättare för unp64
+över annars. E2e-testet packar upp med Sindri och sedan med en ersättare för unp64
 (`test/helpers/fake-unp64.cjs`) som skriver sitt resultat och sin utdata som unp64, så att det inte beror på vad som är
 installerat.
 
@@ -1293,7 +1293,7 @@ Verifieringen är produktens kvalitetsgrind:
 | VICE | `C:\C64\VICE\bin\x64sc.exe` | Cykelexakt C64-emulering |
 | Extra VICE-argument | `-autostartprgmode 1` | Laddar PRG direkt i minnet |
 | Utdatamapp | `out` | |
-| Extern uppackare | tom: den inbyggda uppackaren | Ett externt verktyg (unp64) som packar upp packade PRG:er i stället för den inbyggda (8.11b) |
+| Extern uppackare | tom: Sindri, den inbyggda uppackaren | Ett externt verktyg (unp64) som packar upp packade PRG:er i stället för den inbyggda (8.11b) |
 | Den externa uppackarens argument | `{in}` | `{in}` = den packade PRG:n, `{out}` = ett namn för resultatet; exomizer: `desfx -o {out} {in}` |
 | VICE quicksave snapshot | tom: `C64SC.vsf`/`C64.vsf` i VICE:s inställningsmapp (`%APPDATA%\vice`) | Filen som Alt+F11 i VICE skriver och F9 öppnar (13.7b) |
 | Exomizer | den medföljande Exomizer 3.1.1 i installationen (`resources\exomizer\exomizer.exe`); i ett utvecklingsbygge den som hittas i `C:\C64` (och `win32\` i undermappar), `EXOMIZER` eller `PATH`, annars tom | Packar det byggda programmet i vyn Pack (13.8) |

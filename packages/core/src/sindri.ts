@@ -1,19 +1,19 @@
 /* =====================================================================
- * The built-in unpacker (@mimir/unpacker, packages/unpacker): it runs a packed PRG in an emulated C64, follows it
+ * Sindri, the built-in unpacker (@mimir/sindri, packages/sindri): it runs a packed PRG in an emulated C64, follows it
  * through its layers (coders, movers, decrunchers) and saves the program as it starts; with the disk the file came
  * from, a 1541 is on the serial bus and the program goes on loading. Here: a run whose result can be posted from a
  * worker, the packers the layers' fingerprints name, and the layer report the app and the CLI show.
  * ===================================================================== */
-import { unpack, type LayerReport, type Roms, type UnpackResult } from '@mimir/unpacker';
+import { unpack, type LayerReport, type Roms, type UnpackResult } from '@mimir/sindri';
 import { h4 } from './util/hex';
 
-export type { LayerReport, Roms } from '@mimir/unpacker';
+export type { LayerReport, Roms } from '@mimir/sindri';
 
-/** An unpacker run without its save() function, so that it can cross a worker boundary. */
+/** A run of Sindri without its save() function, so that it can cross a worker boundary. */
 export type UnpackRun = Omit<UnpackResult, 'save'>;
 
 /**
- * Unpack a PRG (load address first); without ROMs the unpacker runs with its stand-ins for the KERNAL and BASIC. With
+ * Unpack a PRG (load address first); without ROMs Sindri runs with its stand-ins for the KERNAL and BASIC. With
  * the D64 it came from (and the 1541 DOS ROM in `roms`), the drive reads the disk for the program's loader.
  */
 export function unpackPrg(prg: Uint8Array, roms: Roms | null = null, disk: Uint8Array | null = null): UnpackRun {
@@ -37,10 +37,10 @@ export function depackerText(l: LayerReport): string {
 
 /** What a run found, in a sentence for the packed notice: the layers it peeled off and where the program starts. */
 export function unpackSummary(run: UnpackRun): string {
-  if (!run.unpacked) return `the built-in unpacker peels off no layer (it stopped: ${stopText(run)})`;
+  if (!run.unpacked) return `Sindri peels off no layer (it stopped: ${stopText(run)})`;
   const d = depackers(run);
   const prog = run.saved ? `; the program starts at $${h4(run.saved.entry)}` : '';
-  return `the built-in unpacker peels off ${d.length} layer${d.length === 1 ? '' : 's'}: ${d.map(depackerText).join(', then ')}${prog}`;
+  return `Sindri peels off ${d.length} layer${d.length === 1 ? '' : 's'}: ${d.map(depackerText).join(', then ')}${prog}`;
 }
 
 /** The run ended where a program normally ends up (it settled, or went back to BASIC), not on a limit or a load. */
@@ -53,7 +53,7 @@ const rangeText = (r: { start: number; end: number }) => (r.start === r.end ? he
 const rangesText = (rs: { start: number; end: number }[], max = 3) => (rs.length ? rs.slice(0, max).map(rangeText).join(' ') + (rs.length > max ? ` +${rs.length - max}` : '') : '-');
 const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} bytes`);
 
-/** A layer as the unpacker's own command line reports it. */
+/** A layer as Sindri's own command line reports it. */
 function layerLines(l: LayerReport): string[] {
   const lines = [`layer ${l.index}  ${hex(l.entry)}  ${(l.via === 'start' ? 'start' : `${l.via} from ${hex(l.from ?? 0)}`).padEnd(15)} ${l.basic ? 'BASIC RUN' : l.kind}`];
   if (l.kind !== 'program' || l.index === 0) {
@@ -68,7 +68,7 @@ function layerLines(l: LayerReport): string[] {
   return lines;
 }
 
-/** The layer report of a run of `name` (a PRG of `size` bytes after its load address), as the unpacker's command line prints it. */
+/** The layer report of a run of `name` (a PRG of `size` bytes after its load address), as Sindri's command line prints it. */
 export function unpackLog(run: UnpackRun, name: string, load: number, size: number): string {
   const out = [`${name}: ${rangeText({ start: load, end: load + size - 1 })} (${kb(size)})${run.basic.length ? `, ${run.basic.slice(0, 2).join(' / ')}` : ''}`, `ROMs: ${run.roms}`];
   if (run.drive) out.push(`Drive: ${run.drive}`);

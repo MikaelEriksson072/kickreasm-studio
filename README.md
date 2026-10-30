@@ -36,7 +36,7 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   - routines nothing traced reaches, such as an init that ran before a snapshot was taken;
   - fast loaders: Spindle, Krill's loader, Bitfire, Sparkle, the Covert Bitops loader, and any other one by its drive
     code;
-  - packed programs, which Mimir's own unpacker unpacks with one click: it runs the program in an emulated C64,
+  - packed programs, which Sindri, Mimir's own unpacker, unpacks with one click: it runs the program in an emulated C64,
     reports each layer it peels off (coders, movers, decrunchers) and names the packer by its fingerprint. A file
     opened from a mounted D64 gets that disk in an emulated 1541, so a boot file's fast loader (Bitfire, Krill's,
     Sparkle, Spindle and others) goes on loading the next part;
@@ -147,7 +147,7 @@ first PRG (or `--file NAME`) with the disk in the drive.
 |---|---|
 | `packages/core` | the analysis, the Kick Assembler output and the verification (TypeScript, no UI and no I/O) |
 | `packages/cli` | the command-line front end |
-| `packages/unpacker` | the unpacker: an emulated C64 that follows a packed program through its layers (TypeScript, [its README](packages/unpacker/README.md)) |
+| `packages/sindri` | Sindri, the unpacker: an emulated C64 that follows a packed program through its layers (TypeScript, [its README](packages/sindri/README.md)) |
 | `apps/desktop` | the Electron app (React), with its end-to-end tests |
 | `fixtures` | small test programs that the project builds itself |
 | `docs` | [the specification](docs/spec.md) (in Swedish) and [the development notes](docs/DEVELOPMENT.md) |
@@ -169,7 +169,7 @@ Magnus Lind, the cruncher. Its licence lets anyone distribute it freely for **no
 as its notice (`LICENSE.txt`) stays with it. Do not sell a build that includes it. Kick Assembler, Java and VICE are
 not included: install them yourself.
 
-Packed programs are unpacked by Mimir's own unpacker (`packages/unpacker`, GPL-3.0 like the rest). It uses the C64
+Packed programs are unpacked by Sindri, Mimir's own unpacker (`packages/sindri`, GPL-3.0 like the rest). It uses the C64
 ROMs of your VICE when it finds them, and small stand-ins for the KERNAL and BASIC without them; for a disk it takes
 the 1541's DOS ROM from VICE too. unp64 by
 [iAN CooG](http://iancoog.altervista.org) no longer comes with the app; it can still be set as an external unpacker in

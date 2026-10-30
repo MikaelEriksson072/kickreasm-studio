@@ -21,7 +21,7 @@ asar: true
 
 # Exomizer for the Pack view (vendor/exomizer/README.md): installed as resources\exomizer\, where the main process
 # finds it and points the settings at it. Its notice (LICENSE.txt) comes along, as its license asks. Packed PRGs are
-# unpacked by the built-in unpacker (packages/unpacker); unp64 no longer comes with the app.
+# unpacked by Sindri (packages/sindri); unp64 no longer comes with the app.
 extraResources:
   - from: vendor/exomizer
     to: exomizer

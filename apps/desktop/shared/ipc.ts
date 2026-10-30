@@ -111,7 +111,7 @@ export interface TerminalOpenResult { dir: string }
 
 /**
  * Unpack a packed PRG (load address first) with the external unpacker of the toolchain settings (unp64; when none
- * is set, the renderer runs the built-in unpacker itself). It runs on a copy in a build folder of its own; `prg` is the file it wrote, `entry` the start address it reported.
+ * is set, the renderer runs Sindri itself). It runs on a copy in a build folder of its own; `prg` is the file it wrote, `entry` the start address it reported.
  */
 export interface UnpackRequest { name: string; prg: Uint8Array }
 export interface UnpackResponse {
@@ -120,8 +120,8 @@ export interface UnpackResponse {
 }
 /** Which packer a PRG uses, from unp64 -i (`supported` false when the unpacker is not unp64 or not set). */
 export interface IdentifyResponse { supported: boolean; known: boolean; packer: string | null; tool: string }
-/** The C64 ROMs for the built-in unpacker, read from the user's VICE (the one in the settings, else one found); null:
- * none were found, and the unpacker runs with its stand-ins. */
+/** The C64 ROMs for Sindri, read from the user's VICE (the one in the settings, else one found); null:
+ * none were found, and Sindri runs with its stand-ins. */
 export type RomsResponse = Roms | null;
 
 /**

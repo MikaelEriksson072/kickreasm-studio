@@ -1,8 +1,8 @@
 /* Best-effort discovery of a local Kick Assembler / VICE install for first-run defaults, and of VICE's C64 ROMs. */
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { Roms } from '@mimir/unpacker';
-import { findRoms, loadRoms } from '@mimir/unpacker/node';
+import type { Roms } from '@mimir/sindri';
+import { findRoms, loadRoms } from '@mimir/sindri/node';
 
 const firstExisting = (paths: string[]): string | null => paths.find(p => { try { return existsSync(p); } catch { return false; } }) ?? null;
 
@@ -40,8 +40,8 @@ export function viceRomFolders(vicePath: string): string[] {
   return [join(bin, '..', 'C64'), join(bin, 'C64'), join(bin, '..', 'share', 'vice', 'C64')];
 }
 
-/** The C64 ROMs (KERNAL, BASIC, character ROM) for the built-in unpacker: those of the VICE in the settings, else of a
- * VICE installation the unpacker finds (C64_ROMS, C:\C64, Program Files, the usual Linux and macOS places). Null: it
+/** The C64 ROMs (KERNAL, BASIC, character ROM) for Sindri: those of the VICE in the settings, else of a
+ * VICE installation Sindri finds (C64_ROMS, C:\C64, Program Files, the usual Linux and macOS places). Null: it
  * runs with its stand-ins. The ROMs are read from the user's own VICE and never shipped. */
 export function findC64Roms(vicePath = ''): Roms | null {
   for (const dir of viceRomFolders(vicePath)) {

@@ -141,7 +141,7 @@ const EXOMIZER = ['C:\\C64\\exomizer-3.1.1\\win32\\exomizer.exe', '/usr/bin/exom
 
 describe.skipIf(!EXOMIZER)('Exomizer', () => {
   it('unpacks an Exomizer 3 self-extracting file', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'unpacker-exo-'));
+    const dir = mkdtempSync(join(tmpdir(), 'sindri-exo-'));
     try {
       writeFileSync(join(dir, 'in.prg'), PROGRAM.prg);
       const p = spawnSync(EXOMIZER!, ['sfx', '0x1000', '-q', '-o', 'out.prg', 'in.prg'], { cwd: dir, encoding: 'utf8' });

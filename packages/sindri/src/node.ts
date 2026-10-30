@@ -1,5 +1,5 @@
-/* Node-only: finding and reading the C64 ROM files (BASIC, KERNAL, character ROM) and the 1541's DOS ROM. The
- * unpacker never ships them; it takes them from a folder you name, or from a VICE installation it finds (the DOS ROM
+/* Node-only: finding and reading the C64 ROM files (BASIC, KERNAL, character ROM) and the 1541's DOS ROM. Sindri
+ * never ships them; it takes them from a folder you name, or from a VICE installation it finds (the DOS ROM
  * from the same folder or VICE's DRIVES folder next to it). */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';

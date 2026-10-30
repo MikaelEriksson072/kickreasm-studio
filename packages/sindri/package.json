@@ -1,8 +1,8 @@
 {
-  "name": "@mimir/unpacker",
+  "name": "@mimir/sindri",
   "version": "0.1.0",
   "private": true,
-  "description": "A generic C64 PRG unpacker: runs the packed program in an emulated C64 and saves it when the unpacked program starts.",
+  "description": "Sindri, a generic C64 PRG unpacker: runs the packed program in an emulated C64 and saves it when the unpacked program starts.",
   "license": "GPL-3.0-only",
   "type": "module",
   "main": "./src/index.ts",

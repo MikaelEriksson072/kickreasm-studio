@@ -70,7 +70,7 @@ describe('SettingsStore', () => {
       return { dir, bundled };
     };
 
-    it('is the built-in one by default: no external unpacker is set', () => {
+    it('is Sindri, the built-in one, by default: no external unpacker is set', () => {
       expect(defaultToolchainSettings(null).unpackerPath).toBe('');
       const dir = tmp();
       expect(new SettingsStore(dir, () => toolchain(), null).get()).toMatchObject({ unpackerPath: '', unpackerArgs: '{in}' });

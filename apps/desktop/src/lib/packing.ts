@@ -1,6 +1,6 @@
-/* What the app reports about a packed file: detectPacking()'s verdict together with what the unpacker finds. The
- * built-in unpacker runs every file opened: a file it peels a layer off is packed even when the heuristics missed it,
- * and the packers its fingerprints name replace a guess from the file's text. With unp64 as an external unpacker,
+/* What the app reports about a packed file: detectPacking()'s verdict together with what the unpacker finds. Sindri,
+ * the built-in unpacker, runs every file opened: a file it peels a layer off is packed even when the heuristics missed
+ * it, and the packers its fingerprints name replace a guess from the file's text. With unp64 as an external unpacker,
  * unp64 -i does the same: it knows hundreds of packers by name. */
 import { conclusive, packerNames, unpackSummary, type PackingInfo, type UnpackRun } from '@mimir/core';
 import type { IdentifyResponse } from '../../shared/ipc';

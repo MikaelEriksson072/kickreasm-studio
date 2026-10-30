@@ -243,7 +243,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     try { const r = await kr.openDisk(); if (r) mountBytes(r.name, r.path, r.bytes); } catch (e) { toast(errorText(e), 'err'); }
   };
   const ejectDisk = () => { if (disk) toast(`Ejected ${disk.name}`, 'info'); setDisk(null); };
-  /** the disk each file opened from a mounted D64 came from: the built-in unpacker puts it in its drive */
+  /** the disk each file opened from a mounted D64 came from: Sindri puts it in its drive */
   const diskOf = useRef(new Map<string, Uint8Array>());
   const openFromDisk = (f: D64File, add: boolean) => {
     if (!disk) return;
@@ -263,11 +263,11 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     try { addFiles([withId(parsePrg(bitfireFileName(f).replace(/\.lz$/, '.prg'), makePrg(u?.start ?? f.load, u?.bytes ?? f.bytes)))], add); } catch (e) { toast(errorText(e), 'err'); }
   };
   /* ---- packed programs ---- */
-  // a decruncher in front of compressed data (detectPacking), and what the unpacker finds: the built-in unpacker runs
+  // a decruncher in front of compressed data (detectPacking), and what the unpacker finds: Sindri runs
   // every file opened (in a worker of its own, with the disk a file came from in its 1541) and keeps the result for Unpack; an external unpacker set in Settings
   // (unp64) unpacks a copy instead, and unp64 -i names the packer of every file opened
   const external = !!toolchain.unpackerPath;
-  const unpackerName = external ? (toolchain.unpackerPath.split(/[\\/]/).pop() ?? 'unp64').replace(/\.exe$/i, '') : 'the built-in unpacker';
+  const unpackerName = external ? (toolchain.unpackerPath.split(/[\\/]/).pop() ?? 'unp64').replace(/\.exe$/i, '') : 'Sindri';
   const unpackLabel = external ? `Unpack with ${unpackerName}` : 'Unpack';
   const [runs, setRuns] = useState<Record<string, UnpackRun>>({});
   const running = useRef(new Map<string, Promise<UnpackRun>>());
@@ -324,8 +324,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         const run = await runFor(f);
         const output = unpackLog(run, f.name, f.load, f.bytes.length);
         if (!run.unpacked || !run.saved) {
-          setUnpacked({ ok: false, title: `The built-in unpacker found nothing to unpack in ${f.name}: it stopped (${run.stop.reason}${run.stop.detail ? `, ${run.stop.detail}` : ''}) before a layer came off.`, output, label: 'Layer report' });
-          toast(`The built-in unpacker could not unpack ${f.name}`, 'err');
+          setUnpacked({ ok: false, title: `Sindri found nothing to unpack in ${f.name}: it stopped (${run.stop.reason}${run.stop.detail ? `, ${run.stop.detail}` : ''}) before a layer came off.`, output, label: 'Layer report' });
+          toast(`Sindri could not unpack ${f.name}`, 'err');
           return;
         }
         const names = packerNames(run);

@@ -1,6 +1,6 @@
 {
  "version": 1,
- "about": "Known depackers by the opcodes of the code they run, in address order (operands left out). Names as unp64 identifies the packers; seen = in how many sampled files. Add one with: unpacker --learn \"Name\" file.prg",
+ "about": "Known depackers by the opcodes of the code they run, in address order (operands left out). Names as unp64 identifies the packers; seen = in how many sampled files. Add one with: sindri --learn \"Name\" file.prg",
  "packers": [
   {
    "name": "1001 CardCruncher ACM",

@@ -1,4 +1,4 @@
-/* unpacker <file.prg | disk.d64> [options]: unpack a C64 program and report its layers. Run with `node src/cli.ts` (Node 22.18
+/* sindri <file.prg | disk.d64> [options]: unpack a C64 program and report its layers. Run with `node src/cli.ts` (Node 22.18
  * or newer runs the TypeScript as it is), or `pnpm unpack` in this folder. */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
@@ -8,7 +8,7 @@ import { findRoms, loadRoms } from './node.ts';
 import { d64File, d64Pick } from './d64.ts';
 import type { Range } from './analyze.ts';
 
-const HELP = `unpacker <file.prg | disk.d64> [options]
+const HELP = `sindri <file.prg | disk.d64> [options]
 
 Runs the program in an emulated C64, follows it through its layers (coders, movers, decrunchers) and saves
 the unpacked program when it starts. With a disk (a D64, or --disk) a 1541 is on the serial bus, so the
@@ -161,6 +161,6 @@ function learnSignatures(layers: LayerReport[], name: string): void {
 try {
   process.exitCode = main(process.argv.slice(2));
 } catch (e) {
-  console.error(`unpacker: ${(e as Error).message}`);
+  console.error(`sindri: ${(e as Error).message}`);
   process.exitCode = 2;
 }

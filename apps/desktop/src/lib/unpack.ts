@@ -1,5 +1,5 @@
-/* The built-in unpacker, in a worker of its own. The C64 ROMs (and the 1541's DOS ROM) come from the user's VICE
- * through the main process; outside the desktop app, or without VICE, the unpacker runs with its stand-ins. */
+/* Sindri, in a worker of its own. The C64 ROMs (and the 1541's DOS ROM) come from the user's VICE
+ * through the main process; outside the desktop app, or without VICE, Sindri runs with its stand-ins. */
 import * as Comlink from 'comlink';
 import type { UnpackRun } from '@mimir/core';
 import type { UnpackApi } from '../workers/unpack.worker';
