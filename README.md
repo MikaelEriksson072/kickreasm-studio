@@ -36,10 +36,10 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   - routines nothing traced reaches, such as an init that ran before a snapshot was taken;
   - fast loaders: Spindle, Krill's loader, Bitfire, Sparkle, the Covert Bitops loader, and any other one by its drive
     code;
-  - packed programs, which Sindri, Mimir's own unpacker, unpacks with one click: it runs the program in an emulated C64,
-    reports each layer it peels off (coders, movers, decrunchers) and names the packer by its fingerprint. A file
-    opened from a mounted D64 gets that disk in an emulated 1541, so a boot file's fast loader (Bitfire, Krill's,
-    Sparkle, Spindle and others) goes on loading the next part;
+  - packed programs, which [Sindri](https://github.com/MikaelEriksson072/Sindri), Mimir's own unpacker, unpacks with one
+    click: it runs the program in an emulated C64, reports each layer it peels off (coders, movers, decrunchers) and
+    names the packer by its fingerprint. A file opened from a mounted D64 gets that disk in an emulated 1541, so a boot
+    file's fast loader (Bitfire, Krill's, Sparkle, Spindle and others) goes on loading the next part;
   - the script of a Spindle trackmo: Pefchain builds a small driver after each part from its line of the script, and
     Mimir reads the drivers in memory back into those lines (the part, its routines and the condition that ends it,
     such as `space` or `ed = 0b`). The *Spindle script* tab lists them, and *Copy script* copies them as Pefchain reads
@@ -169,9 +169,10 @@ Magnus Lind, the cruncher. Its licence lets anyone distribute it freely for **no
 as its notice (`LICENSE.txt`) stays with it. Do not sell a build that includes it. Kick Assembler, Java and VICE are
 not included: install them yourself.
 
-Packed programs are unpacked by Sindri, Mimir's own unpacker (`packages/sindri`, GPL-3.0 like the rest). It uses the C64
-ROMs of your VICE when it finds them, and small stand-ins for the KERNAL and BASIC without them; for a disk it takes
-the 1541's DOS ROM from VICE too. unp64 by
+Packed programs are unpacked by Sindri, Mimir's own unpacker (`packages/sindri`, GPL-3.0 like the rest). It is a copy
+of its own repository, [MikaelEriksson072/Sindri](https://github.com/MikaelEriksson072/Sindri), where it also runs on its
+own from the command line. It uses the C64 ROMs of your VICE when it finds them, and small stand-ins for the KERNAL and
+BASIC without them; for a disk it takes the 1541's DOS ROM from VICE too. unp64 by
 [iAN CooG](http://iancoog.altervista.org) no longer comes with the app; it can still be set as an external unpacker in
 Settings → Toolchain.
 

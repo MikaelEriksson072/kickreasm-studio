@@ -10,7 +10,8 @@ what each layer did so that new packers can be recognised and named.
 
 It is written in TypeScript and runs on Node 22.18 or newer, which runs the sources as they are. It was made for
 [Mimir Studio](https://github.com/MikaelEriksson072/mimir-studio), whose built-in unpacker it is: this package is a copy
-of the standalone project, and `src/`, `data/` and `test/` are kept the same as there. Mimir runs it through
+of the standalone project, [MikaelEriksson072/Sindri](https://github.com/MikaelEriksson072/Sindri), and `src/`, `data/`
+and `test/` are kept the same as there. Mimir runs it through
 `unpackPrg()` and reports it with `unpackLog()` (`packages/core/src/sindri.ts`), in the app's unpacker worker and in
 `mimir unpack`.
 
