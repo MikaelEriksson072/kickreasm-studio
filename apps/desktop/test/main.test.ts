@@ -10,7 +10,7 @@ import { CHANNELS } from '../shared/ipc';
 import { assertEntryName, PathPolicy } from '../electron/main/paths';
 import { bringOldSettings } from '../electron/main/migrate';
 import { RecentFolders } from '../electron/main/recent';
-import { bundledExomizer, bundledUnp64, defaultToolchainSettings, SettingsStore } from '../electron/main/settings';
+import { bundledExomizer, defaultToolchainSettings, SettingsStore } from '../electron/main/settings';
 import { diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectSchema, quicksaveEntrySchema, quicksaveFavouriteSchema, quicksaveRenameSchema, runSchema, serializedProjectSchema } from '../electron/main/schemas';
 import { buildWithKickAssembler, packWithExomizer } from '../electron/main/toolchain';
 import { QUICKSAVE_FILE, QuicksaveHistory, QuicksaveWatcher, quicksaveFileName, quicksaveFiles, quicksaveInfo, quicksaveName, readQuicksave, viceConfigDir } from '../electron/main/quicksave';
@@ -22,7 +22,7 @@ const toolchain = (patch: Partial<ToolchainSettings> = {}): ToolchainSettings =>
 
 describe('IPC contract', () => {
   it('has exactly the channels of spec 13.4', () => {
-    expect(Object.values(CHANNELS).sort()).toEqual(['disk:open', 'export:write', 'fs:changed', 'prg:open', 'project:open', 'project:save', 'settings:get', 'settings:set', 'terminal:open', 'toolchain:build', 'toolchain:identify', 'toolchain:pack', 'toolchain:run', 'toolchain:unpack', 'vice:attach', 'vice:command', 'file:save', 'vice:quicksave', 'vice:quicksave-info', 'vice:quicksaves', 'vice:quicksave-open', 'vice:quicksave-rename', 'vice:quicksave-save', 'vice:quicksave-favourite', 'vice:quicksaved', 'vice:chargen'].sort());
+    expect(Object.values(CHANNELS).sort()).toEqual(['disk:open', 'export:write', 'fs:changed', 'prg:open', 'project:open', 'project:save', 'settings:get', 'settings:set', 'terminal:open', 'toolchain:build', 'toolchain:identify', 'toolchain:pack', 'toolchain:roms', 'toolchain:run', 'toolchain:unpack', 'vice:attach', 'vice:command', 'file:save', 'vice:quicksave', 'vice:quicksave-info', 'vice:quicksaves', 'vice:quicksave-open', 'vice:quicksave-rename', 'vice:quicksave-save', 'vice:quicksave-favourite', 'vice:quicksaved', 'vice:chargen'].sort());
   });
 });
 
@@ -61,51 +61,35 @@ describe('SettingsStore', () => {
     expect(new SettingsStore(dir, () => toolchain()).get().javaPath).toBe('java');
   });
 
-  describe('the unp64 that comes with the app', () => {
-    /** a fake install: resources\unp64\unp64.exe, plus other unpackers elsewhere */
-    const setup = () => {
-      const root = tmp(), res = join(root, 'resources');
-      mkdirSync(join(res, 'unp64'), { recursive: true });
-      const exe = process.platform === 'win32' ? 'unp64.exe' : 'unp64';
-      writeFileSync(join(res, 'unp64', exe), '');
-      mkdirSync(join(root, 'C64', 'unp64'), { recursive: true });
-      writeFileSync(join(root, 'C64', 'unp64', 'unp64.exe'), '');
-      writeFileSync(join(root, 'C64', 'exomizer.exe'), '');
-      return { dir: tmp(), res, bundled: bundledUnp64(res)!, own: join(root, 'C64', 'unp64', 'unp64.exe'), exo: join(root, 'C64', 'exomizer.exe') };
-    };
+  describe('the unpacker', () => {
     const stored = (dir: string) => JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8'));
+    /** settings.json as the installers that came with unp64 wrote it: the unpacker pointed at their copy */
+    const before = (patch: Partial<ToolchainSettings>) => {
+      const dir = tmp(), bundled = join(tmp(), 'resources', 'unp64', 'unp64.exe');
+      writeFileSync(join(dir, 'settings.json'), JSON.stringify({ ...toolchain({ unpackerPath: bundled, unpackerArgs: '{in} -x' }), ...patch, bundledUnpacker: bundled }));
+      return { dir, bundled };
+    };
 
-    it('is found in resources\\unp64 and is the default unpacker', () => {
-      const { res, bundled, dir } = setup();
-      expect(bundled).toBe(join(res, 'unp64', process.platform === 'win32' ? 'unp64.exe' : 'unp64'));
-      expect(bundledUnp64(tmp())).toBeNull();
-      expect(bundledUnp64(undefined)).toBeNull();
-      expect(defaultToolchainSettings(bundled).unpackerPath).toBe(bundled);
-      expect(new SettingsStore(dir, () => toolchain(), bundled).get().unpackerPath).toBe(bundled);
+    it('is the built-in one by default: no external unpacker is set', () => {
+      expect(defaultToolchainSettings(null).unpackerPath).toBe('');
+      const dir = tmp();
+      expect(new SettingsStore(dir, () => toolchain(), null).get()).toMatchObject({ unpackerPath: '', unpackerArgs: '{in}' });
       // nothing is written before the user saves settings
       expect(existsSync(join(dir, 'settings.json'))).toBe(false);
     });
 
-    it('takes over once from another copy of unp64, then keeps what the user picks', () => {
-      const { dir, bundled, own } = setup();
-      new SettingsStore(dir, () => toolchain(), null).set({ unpackerPath: own, unpackerArgs: '{in} -x' });
-      const s = new SettingsStore(dir, () => toolchain(), bundled);
-      expect(s.get()).toMatchObject({ unpackerPath: bundled, unpackerArgs: '{in} -x' });
-      expect(stored(dir)).toMatchObject({ unpackerPath: bundled, bundledUnpacker: bundled });
-      // the user's own unp64 again, and later no unpacker at all: both are kept from then on
-      s.set({ unpackerPath: own });
-      expect(new SettingsStore(dir, () => toolchain(), bundled).get().unpackerPath).toBe(own);
-      new SettingsStore(dir, () => toolchain(), bundled).set({ unpackerPath: '' });
-      expect(new SettingsStore(dir, () => toolchain(), bundled).get().unpackerPath).toBe('');
+    it('leaves the unp64 an earlier installer came with, once, and keeps what the user picks', () => {
+      const { dir } = before({});
+      expect(new SettingsStore(dir, () => toolchain(), null).get()).toMatchObject({ unpackerPath: '', unpackerArgs: '{in}' });
+      expect(stored(dir)).not.toHaveProperty('bundledUnpacker');
+      new SettingsStore(dir, () => toolchain(), null).set({ unpackerPath: 'C:\\C64\\unp64\\unp64.exe' });
+      expect(new SettingsStore(dir, () => toolchain(), null).get().unpackerPath).toBe('C:\\C64\\unp64\\unp64.exe');
     });
 
-    it('keeps another unpacker, and replaces one that is gone', () => {
-      const { dir, bundled, exo } = setup();
-      new SettingsStore(dir, () => toolchain(), null).set({ unpackerPath: exo, unpackerArgs: 'desfx -o {out} {in}' });
-      expect(new SettingsStore(dir, () => toolchain(), bundled).get()).toMatchObject({ unpackerPath: exo, unpackerArgs: 'desfx -o {out} {in}' });
-      const gone = tmp();
-      new SettingsStore(gone, () => toolchain(), null).set({ unpackerPath: join(tmp(), 'exomizer.exe'), unpackerArgs: 'desfx -o {out} {in}' });
-      expect(new SettingsStore(gone, () => toolchain(), bundled).get()).toMatchObject({ unpackerPath: bundled, unpackerArgs: '{in}' });
+    it('keeps an external unpacker the user picked instead of the bundled unp64', () => {
+      const { dir } = before({ unpackerPath: 'C:\\C64\\exomizer.exe', unpackerArgs: 'desfx -o {out} {in}' });
+      expect(new SettingsStore(dir, () => toolchain(), null).get()).toMatchObject({ unpackerPath: 'C:\\C64\\exomizer.exe', unpackerArgs: 'desfx -o {out} {in}' });
+      expect(stored(dir)).not.toHaveProperty('bundledUnpacker');
     });
   });
 });
@@ -124,20 +108,20 @@ describe('the Exomizer that comes with the app', () => {
     expect(bundled).toMatch(/[\\/]resources[\\/]exomizer[\\/]exomizer(\.exe)?$/);
     expect(bundledExomizer(tmp())).toBeNull();
     expect(bundledExomizer(undefined)).toBeNull();
-    expect(defaultToolchainSettings(null, bundled).exomizerPath).toBe(bundled);
+    expect(defaultToolchainSettings(bundled).exomizerPath).toBe(bundled);
     // settings saved before Exomizer was a setting get the default
     writeFileSync(join(dir, 'settings.json'), JSON.stringify(toolchain()).replace(/,"exomizerPath":""/, ''));
-    expect(new SettingsStore(dir, () => toolchain({ exomizerPath: bundled }), null, bundled).get().exomizerPath).toBe(bundled);
+    expect(new SettingsStore(dir, () => toolchain({ exomizerPath: bundled }), bundled).get().exomizerPath).toBe(bundled);
   });
 
   it('keeps another Exomizer and an empty setting, and replaces one that is gone', () => {
     const { dir, bundled, own } = setup();
-    new SettingsStore(dir, () => toolchain(), null, null).set({ exomizerPath: own });
-    expect(new SettingsStore(dir, () => toolchain(), null, bundled).get().exomizerPath).toBe(own);
-    new SettingsStore(dir, () => toolchain(), null, null).set({ exomizerPath: '' });
-    expect(new SettingsStore(dir, () => toolchain(), null, bundled).get().exomizerPath).toBe('');
-    new SettingsStore(dir, () => toolchain(), null, null).set({ exomizerPath: join(tmp(), 'gone', 'exomizer.exe') });
-    expect(new SettingsStore(dir, () => toolchain(), null, bundled).get().exomizerPath).toBe(bundled);
+    new SettingsStore(dir, () => toolchain(), null).set({ exomizerPath: own });
+    expect(new SettingsStore(dir, () => toolchain(), bundled).get().exomizerPath).toBe(own);
+    new SettingsStore(dir, () => toolchain(), null).set({ exomizerPath: '' });
+    expect(new SettingsStore(dir, () => toolchain(), bundled).get().exomizerPath).toBe('');
+    new SettingsStore(dir, () => toolchain(), null).set({ exomizerPath: join(tmp(), 'gone', 'exomizer.exe') });
+    expect(new SettingsStore(dir, () => toolchain(), bundled).get().exomizerPath).toBe(bundled);
   });
 });
 

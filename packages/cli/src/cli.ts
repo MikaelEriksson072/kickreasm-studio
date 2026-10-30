@@ -1,13 +1,13 @@
-/* mimir analyse | export | verify | demo — batch and CI front end for @mimir/core. */
+/* mimir analyse | export | verify | unpack | demo — batch and CI front end for @mimir/core. */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
   analyze, comparePrg, createProject, DEFAULT_SETTINGS, deserializeProject, detectPacking, exportFiles, h4, kindInfo, makeDemo,
-  parsePrg, projectNameFor, render, verify, type Project, type SerializedProject, type Settings,
+  parseD64, parsePrg, projectNameFor, readD64File, render, unpackLog, unpackPrg, verify, type Project, type SerializedProject, type Settings,
 } from '@mimir/core';
-import { findKickAssJar, runKickAssembler, splitArgs, writeVfs } from '@mimir/core/node';
+import { findC64Roms, findKickAssJar, findVice, runKickAssembler, splitArgs, writeVfs } from '@mimir/core/node';
 
 export interface Io { out: (s: string) => void; err: (s: string) => void; cwd: string }
 
@@ -17,6 +17,7 @@ Usage:
   mimir analyse <file.prg | project.mimir.json>... [--json]
   mimir verify  <file.prg | project.mimir.json>... [--kickass [KickAss.jar]] [--java <java>]
   mimir export  <file.prg | project.mimir.json>... -o <folder> [--name <name>] [--force]
+  mimir unpack  <file.prg | disk.d64> [--file <name>] [--disk <disk.d64>] [-o <unpacked.prg>] [--no-roms]
   mimir demo    [-o raster-demo.prg]
 
 Options:
@@ -25,6 +26,11 @@ Options:
                     (the same as --set deepAnalysis=true)
   --kickass [jar]   also assemble with the real Kick Assembler (default: auto-detect / KICKASS_JAR)
   --java <path>     Java executable used for --kickass (default: java)
+  --no-roms         unpack with the unpacker's stand-ins instead of VICE's C64 ROMs (default: the ROMs of a
+                    VICE installation, or the folder in C64_ROMS)
+  --file <name>     unpack: the file on the D64 (default: its first PRG; * and ? as the DOS takes them)
+  --disk <d64>      unpack: put this disk in the drive (a D64 given as the file is in it already), so the
+                    program can load from it with the KERNAL or its own fast loader
 `;
 
 interface Parsed { cmd: string; inputs: string[]; flags: Map<string, string | true>; sets: [string, string][] }
@@ -38,7 +44,7 @@ function parse(argv: string[]): Parsed {
     if (a === '-o' || a === '--out') { flags.set('out', rest[++i] ?? ''); continue; }
     if (a.startsWith('--')) {
       const name = a.slice(2), nextArg = rest[i + 1];
-      const takesValue = name === 'name' || name === 'java' || (name === 'kickass' && nextArg && !nextArg.startsWith('-') && /\.jar$/i.test(nextArg));
+      const takesValue = name === 'name' || name === 'java' || name === 'file' || name === 'disk' || (name === 'kickass' && nextArg && !nextArg.startsWith('-') && /\.jar$/i.test(nextArg));
       flags.set(name, takesValue ? rest[++i] : true);
       continue;
     }
@@ -82,7 +88,7 @@ function analyseCmd(p: Project, io: Io, json: boolean) {
     return 0;
   }
   for (const l of A.log) io.out(`[${l.lvl.padEnd(4)}] ${l.msg}`);
-  for (const [i, k] of packing.entries()) if (k) io.out(`[pack] ${A.files[i].name} ${k.verdict === 'packed' ? 'is packed' : 'may be packed'}${k.signature ? ` (${k.signature})` : ''}: ${k.reasons.join('; ')}. Unpack it (for example with unp64) and analyse the result.`);
+  for (const [i, k] of packing.entries()) if (k) io.out(`[pack] ${A.files[i].name} ${k.verdict === 'packed' ? 'is packed' : 'may be packed'}${k.signature ? ` (${k.signature})` : ''}: ${k.reasons.join('; ')}. Unpack it (mimir unpack ${A.files[i].name}) and analyse the result.`);
   io.out('');
   io.out('Blocks:');
   for (const b of A.blocks) {
@@ -157,6 +163,33 @@ export async function main(argv: string[], io: Io): Promise<number> {
         const written = await writeVfs(dir, exportFiles(p, R, p.settings, V, new Date()));
         io.out(`Wrote ${written.length} files to ${dir}${V.ok ? ' (round-trip verified)' : ' (round-trip FAILED, see above)'}`);
         return V.ok ? 0 : 1;
+      }
+      case 'unpack': {
+        if (inputs.length !== 1) { io.err('unpack takes one PRG'); return 2; }
+        const path = resolve(io.cwd, inputs[0]);
+        let prg: Uint8Array = new Uint8Array(readFileSync(path)), disk: Uint8Array | null = null, name = basename(path), base = basename(path).replace(/\.prg$/i, '');
+        if (/\.d64$/i.test(path)) {
+          // a disk: its first PRG (or the one named), with the disk in the drive
+          disk = prg;
+          const want = flags.get('file');
+          const re = typeof want === 'string' ? new RegExp(`^${want.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\?/g, '.').replace(/\*.*$/, '.*')}${want.includes('*') ? '' : '$'}`, 'i') : null;
+          const f = parseD64(disk).files.find(e => e.type === 'PRG' && e.track && (!re || re.test(e.name)));
+          if (!f) { io.err(typeof want === 'string' ? `no PRG named "${want}" on ${name}` : `no PRG on ${name}`); return 2; }
+          prg = readD64File(disk, f);
+          name = `${name}: "${f.name}"`;
+          base = `${basename(path).replace(/\.d64$/i, '')}-${f.name.replace(/[^A-Za-z0-9 _-]/g, '_').trim() || 'file'}`;
+        }
+        const diskFlag = flags.get('disk');
+        if (typeof diskFlag === 'string') disk = new Uint8Array(readFileSync(resolve(io.cwd, diskFlag)));
+        if (prg.length < 3) { io.err(`${path} is too short to be a PRG`); return 2; }
+        const run = unpackPrg(prg, flags.has('no-roms') ? null : findC64Roms(findVice() ?? ''), disk);
+        io.out(unpackLog(run, name, prg[0] | (prg[1] << 8), prg.length - 2));
+        if (!run.unpacked || !run.saved) return 1;
+        const out = flags.get('out');
+        const target = typeof out === 'string' && out ? resolve(io.cwd, out) : join(dirname(path), `${base}-unpacked.prg`);
+        writeFileSync(target, run.saved.prg);
+        io.out(`Wrote ${target} (${run.saved.prg.length} bytes, start $${h4(run.saved.entry)})`);
+        return 0;
       }
       case 'demo': {
         const d = makeDemo();

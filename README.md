@@ -36,7 +36,10 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   - routines nothing traced reaches, such as an init that ran before a snapshot was taken;
   - fast loaders: Spindle, Krill's loader, Bitfire, Sparkle, the Covert Bitops loader, and any other one by its drive
     code;
-  - packed programs, which the bundled unp64 unpacks with one click;
+  - packed programs, which Mimir's own unpacker unpacks with one click: it runs the program in an emulated C64,
+    reports each layer it peels off (coders, movers, decrunchers) and names the packer by its fingerprint. A file
+    opened from a mounted D64 gets that disk in an emulated 1541, so a boot file's fast loader (Bitfire, Krill's,
+    Sparkle, Spindle and others) goes on loading the next part;
   - the script of a Spindle trackmo: Pefchain builds a small driver after each part from its line of the script, and
     Mimir reads the drivers in memory back into those lines (the part, its routines and the condition that ends it,
     such as `space` or `ed = 0b`). The *Spindle script* tab lists them, and *Copy script* copies them as Pefchain reads
@@ -132,7 +135,8 @@ pnpm mimir analyse game.prg
 ```
 
 `analyse`, `verify [--kickass]`, `export -o <folder>` and `demo` take `.prg` files or saved projects (`.mimir.json`).
-`--deep` runs the deep analysis.
+`--deep` runs the deep analysis. `unpack game.prg [-o unpacked.prg]` unpacks a packed program and prints its layers; `unpack demo.d64` takes the disk's
+first PRG (or `--file NAME`) with the disk in the drive.
 
 ## Project layout
 
@@ -140,6 +144,7 @@ pnpm mimir analyse game.prg
 |---|---|
 | `packages/core` | the analysis, the Kick Assembler output and the verification (TypeScript, no UI and no I/O) |
 | `packages/cli` | the command-line front end |
+| `packages/unpacker` | the unpacker: an emulated C64 that follows a packed program through its layers (TypeScript, [its README](packages/unpacker/README.md)) |
 | `apps/desktop` | the Electron app (React), with its end-to-end tests |
 | `fixtures` | small test programs that the project builds itself |
 | `docs` | [the specification](docs/spec.md) (in Swedish) and [the development notes](docs/DEVELOPMENT.md) |
@@ -156,14 +161,16 @@ This runs the unit, round-trip, fuzz and differential tests of every package. `p
 
 ## Third-party tools
 
-The installer includes two tools, unchanged from their own releases, from `apps/desktop/vendor/`:
-
-- unp64 2.40 by [iAN CooG](http://iancoog.altervista.org), the generic C64 unpacker;
-- Exomizer 3.1.1 by Magnus Lind, the cruncher.
-
-Their licence lets anyone distribute them freely for **non-commercial, non-profit** use, as long as their notices
-(`unp64.txt`, `LICENSE.txt`) stay with them. Do not sell a build that includes them. Kick Assembler, Java and VICE are
+The installer includes one tool, unchanged from its own release, from `apps/desktop/vendor/`: Exomizer 3.1.1 by
+Magnus Lind, the cruncher. Its licence lets anyone distribute it freely for **non-commercial, non-profit** use, as long
+as its notice (`LICENSE.txt`) stays with it. Do not sell a build that includes it. Kick Assembler, Java and VICE are
 not included: install them yourself.
+
+Packed programs are unpacked by Mimir's own unpacker (`packages/unpacker`, GPL-3.0 like the rest). It uses the C64
+ROMs of your VICE when it finds them, and small stand-ins for the KERNAL and BASIC without them; for a disk it takes
+the 1541's DOS ROM from VICE too. unp64 by
+[iAN CooG](http://iancoog.altervista.org) no longer comes with the app; it can still be set as an external unpacker in
+Settings → Toolchain.
 
 ## License
 
@@ -171,5 +178,4 @@ Mimir Studio is free software: you can redistribute it and/or modify it under th
 [GNU General Public License, version 3](LICENSE) (GPL-3.0-only). It is distributed in the hope that it will be useful,
 but without any warranty; see the license for details.
 
-The bundled unp64 and Exomizer are separate programs under their own licence (see above), which the GPL does not
-change.
+The bundled Exomizer is a separate program under its own licence (see above), which the GPL does not change.

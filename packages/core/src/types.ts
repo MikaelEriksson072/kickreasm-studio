@@ -86,7 +86,8 @@ export interface Settings {
   outDir: string;
   kickArgs: string;
   viceArgs: string;
-  /** an external unpacker for packed PRGs (unp64) and its argument template: {in} the packed PRG, {out} the result */
+  /** an external unpacker for packed PRGs (unp64; empty: the built-in one) and its argument template: {in} the packed
+   * PRG, {out} the result */
   unpackerPath: string;
   unpackerArgs: string;
   /** Exomizer 3, which packs the built PRG or chosen blocks of it (the Pack view) */

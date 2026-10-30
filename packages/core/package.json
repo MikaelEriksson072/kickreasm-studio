@@ -16,6 +16,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json"
   },
+  "dependencies": {
+    "@mimir/unpacker": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "fast-check": "^3.23.2",

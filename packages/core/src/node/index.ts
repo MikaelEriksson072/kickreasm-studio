@@ -1,6 +1,6 @@
 export { splitArgs, safeJoin, writeVfs, runKickAssembler, launchVice, prepareVice, viceArgv, viceMonitorScript } from './toolchain';
 export type { KickRunOptions, KickRunResult, ViceLaunch, ViceStart } from './toolchain';
-export { findExomizer, findKickAssJar, findUnp64, findVice } from './detect';
+export { findC64Roms, findExomizer, findKickAssJar, findUnp64, findVice, viceRomFolders } from './detect';
 export { launchTerminal, terminalCommand, windowsStartLine } from './terminal';
 export type { TerminalCommand, TerminalLaunch } from './terminal';
 export { canIdentify, identifyPacker, pickUnpacked, runUnpacker, UNPACK_OUT, unpackArgs, unpackEntry, unpackInputName, unpackPacker } from './unpack';

@@ -108,7 +108,7 @@ export function diagnostics(ctx: Ctx, blocks: Block[]): void {
   for (const b of blocks) b.entropy = entropy(b.start, b.end);
   let dataBytes = 0, dataH = 0;
   for (const b of blocks) if (b.type === 'data' && b.end - b.start >= 256) { dataBytes += b.end - b.start; dataH += b.entropy * (b.end - b.start); }
-  if (dataBytes >= 2048 && dataH / dataBytes > 7.2) L('warn', `Unclassified data has very high entropy (${(dataH / dataBytes).toFixed(2)} bits/byte). The program is probably crunched; unpack it (for example with unp64) and load the result.`, null, 'data');
+  if (dataBytes >= 2048 && dataH / dataBytes > 7.2) L('warn', `Unclassified data has very high entropy (${(dataH / dataBytes).toFixed(2)} bits/byte). The program is probably crunched; unpack it (Unpack in the app, or mimir unpack) and load the result.`, null, 'data');
 }
 
 export function statistics(ctx: Ctx, tm: Uint8Array, blocks: Block[], labels: Map<Addr, LabelInfo>, t0: number): Stats {

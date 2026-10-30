@@ -19,12 +19,10 @@ electronDist: node_modules/electron/dist
 
 asar: true
 
-# unp64 for packed PRGs (vendor/unp64/README.md) and Exomizer for the Pack view (vendor/exomizer/README.md): installed
-# as resources\unp64\ and resources\exomizer\, where the main process finds them and points the settings at them.
-# Their notices (unp64.txt, LICENSE.txt) come along, as their license asks.
+# Exomizer for the Pack view (vendor/exomizer/README.md): installed as resources\exomizer\, where the main process
+# finds it and points the settings at it. Its notice (LICENSE.txt) comes along, as its license asks. Packed PRGs are
+# unpacked by the built-in unpacker (packages/unpacker); unp64 no longer comes with the app.
 extraResources:
-  - from: vendor/unp64
-    to: unp64
   - from: vendor/exomizer
     to: exomizer
 

@@ -70,7 +70,8 @@ export const DEFAULT_SETTINGS: Settings = {
   // toolchain (used by the Electron main process and the CLI)
   javaPath: 'java', kickJar: 'C:\\C64\\KickAssembler\\KickAss.jar', vicePath: 'C:\\C64\\VICE\\bin\\x64sc.exe',
   outDir: 'out', kickArgs: '-vicesymbols -showmem', viceArgs: '-autostartprgmode 1',
-  // an external unpacker for packed PRGs (unp64): its path and arguments ({in} the packed PRG, {out} the result)
+  // an external unpacker for packed PRGs (unp64; empty: the built-in one): its path and arguments ({in} the packed PRG,
+  // {out} the result)
   unpackerPath: '', unpackerArgs: '{in}',
   // Exomizer 3 for the Pack view (the installed app comes with one)
   exomizerPath: '',

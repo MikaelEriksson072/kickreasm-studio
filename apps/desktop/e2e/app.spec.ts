@@ -752,53 +752,86 @@ test('the Terminal button opens a terminal in the project folder', async ({ work
   });
 });
 
-test('a packed PRG is reported and unpacked with an external unpacker', async ({ app, page }) => {
-  // fixtures/prg/packed-demo.prg: the demo behind a decruncher stub, packed so fake-unp64.cjs (a stand-in for unp64,
-  // run with this Node) unpacks it to `<name>.0810` the way unp64 names its files
+test('a packed PRG is reported and unpacked with the built-in unpacker, or an external one', async ({ app, page }) => {
+  // fixtures/prg/packed-demo.prg: the demo behind a decruncher stub (fakePack: a mover, then a decoder at $0340),
+  // which the built-in unpacker runs in its emulated C64; fake-unp64.cjs (a stand-in for unp64, run with this Node)
+  // undoes it as an external unpacker and names its result `<name>.0810` the way unp64 does
   const fake = join(repoDir, 'packages/core/test/helpers/fake-unp64.cjs');
   await waitForListing(page);
   const bar = page.locator('.pack-bar');
-
-  await test.step('opening it shows the packed notice, the Explorer badge and a problem', async () => {
+  const done = page.locator('.unpack-bar');
+  const open = async () => {
     await stubDialogs(app, { open: [join(repoDir, 'fixtures/prg/packed-demo.prg')] });
     await page.keyboard.press('Control+o');
-    await expect(toast(page, 'Loaded packed-demo.prg at $0801')).toBeVisible();
     await expect(bar).toContainText('packed-demo.prg is packed.');
+  };
+
+  await test.step('opening it shows the packed notice with the layers, the Explorer badge and a problem', async () => {
+    await open();
+    await expect(toast(page, 'Loaded packed-demo.prg at $0801')).toBeVisible();
     await expect(bar).toContainText('The listing shows the decruncher at $080d and the packed data, not the program.');
+    // the built-in unpacker runs every file opened and reports what it peeled off
+    await expect(bar).toContainText(/the built-in unpacker peels off 2 layers: an unknown mover at \$080d \(fingerprint [0-9a-f]{8}\), then an unknown decoder at \$0340 \(fingerprint [0-9a-f]{8}\); the program starts at \$0810/, { timeout: 30_000 });
     await expect(page.locator('.file-row', { hasText: 'packed-demo.prg' }).locator('.pill.pack')).toHaveText('packed');
     await page.keyboard.press('Control+j');
     await page.getByRole('tab', { name: /Problems/ }).click();
     await expect(page.locator('.loglist')).toContainText('packed-demo.prg is packed');
-  });
-
-  await test.step('without an unpacker the button opens the settings', async () => {
-    // an installed unp64 is found by default: clear it first, so the test runs the same everywhere
-    await page.getByRole('button', { name: 'Settings' }).click();
-    await page.locator('#set-unpackerPath').fill('');
-    await page.getByRole('button', { name: 'Save settings' }).click();
-    await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
-    await bar.getByRole('button', { name: 'Set up an unpacker…' }).click();
-    await page.locator('#set-unpackerPath').fill(process.execPath);
-    await page.locator('#set-unpackerArgs').fill(`"${fake}" {in}`);
-    await page.getByRole('button', { name: 'Save settings' }).click();
-    await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
+    await expect(page.locator('.loglist')).toContainText('Unpack it (Unpack) to see the program.');
   });
 
   await test.step('Unpack replaces it with the program and sets its start', async () => {
-    await bar.getByRole('button', { name: /^Unpack with / }).click();
+    await bar.getByRole('button', { name: 'Unpack', exact: true }).click();
     await expect(toast(page, 'Unpacked packed-demo.prg: 12287 bytes at $0801-$37ff')).toBeVisible({ timeout: 30_000 });
-    const done = page.locator('.unpack-bar');
-    await expect(done).toContainText('packed-demo-unpacked.prg, $0801-$37ff, starting at $0810 (set as the program start).');
-    await done.locator('summary').click();
-    await expect(done).toContainText('Unpacked packed-demo.prg with node (FakePack)');
-    await expect(done.locator('.unpack-log')).toContainText('return to mem: $0810');
-    await expect(done.locator('.unpack-log')).toContainText('saved $0801-$37ff as packed-demo.prg.0810');
+    await expect(done).toContainText('Unpacked packed-demo.prg: packed-demo-unpacked.prg, $0801-$37ff, starting at $0810 (set as the program start).');
+    await done.getByText('Layer report').click();
+    await expect(done.locator('.unpack-log')).toContainText('layer 0  $080d  start           mover');
+    await expect(done.locator('.unpack-log')).toContainText('layer 1  $0340  jmp from $0839  decoder');
+    await expect(done.locator('.unpack-log')).toContainText('saved layer 2: $0801-$37ff (12.0 KB), start with SYS 2064 = $0810');
     await expect(bar).toHaveCount(0);
     await expect(page.locator('.file-name')).toHaveText(['packed-demo-unpacked.prg']);
     await expect(page.locator('.side-sec', { hasText: 'Program start' })).toContainText('set by you');
     await page.keyboard.press('F7');
     await expect(statusBar(page)).toContainText('✓ round-trip verified', { timeout: 90_000 });
   });
+
+  await test.step('an external unpacker set in Settings runs instead', async () => {
+    await page.getByRole('button', { name: 'Dismiss the unpacker result' }).click();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await expect(page.locator('#set-unpackerPath')).toHaveValue('');
+    await page.locator('#set-unpackerPath').fill(process.execPath);
+    await page.locator('#set-unpackerArgs').fill(`"${fake}" {in}`);
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
+    await open();
+    await bar.getByRole('button', { name: 'Unpack with node' }).click();
+    await expect(done).toContainText('Unpacked packed-demo.prg with node (FakePack): packed-demo-unpacked.prg, $0801-$37ff, starting at $0810 (set as the program start).', { timeout: 30_000 });
+    await done.getByText('node output').click();
+    await expect(done.locator('.unpack-log')).toContainText('return to mem: $0810');
+    await expect(done.locator('.unpack-log')).toContainText('saved $0801-$37ff as packed-demo.prg.0810');
+    await expect(page.locator('.file-name')).toHaveText(['packed-demo-unpacked.prg']);
+  });
+});
+
+test('a file opened from a mounted disk is unpacked with the disk in a 1541', async ({ app, page }) => {
+  // fixtures/d64/kernal-load.d64: BOOT loads PART2 ($c000) with LOAD "PART2",8,1 through the KERNAL and jumps to it.
+  // The 1541 needs VICE's DOS ROM, which a machine without VICE does not have.
+  const vice = 'C:\\C64\\VICE';
+  const drives = () => { try { return readdirSync(vice).some(d => existsSync(join(vice, d, 'DRIVES'))); } catch { return false; } };
+  test.skip(!process.env.C64_ROMS && !drives(), 'needs VICE\'s ROMs');
+  await waitForListing(page);
+  await stubDialogs(app, { open: [join(repoDir, 'fixtures/d64/kernal-load.d64')] });
+  await page.getByRole('button', { name: 'Mount D64…' }).click();
+  await page.getByRole('list', { name: 'Files on kernal-load.d64' }).getByRole('listitem').filter({ hasText: 'BOOT' }).click();
+  const bar = page.locator('.pack-bar');
+  await expect(bar).toContainText('BOOT.prg is packed.', { timeout: 30_000 });
+  await expect(bar).toContainText(/the built-in unpacker peels off 1 layer: an unknown decruncher at \$080d \(fingerprint [0-9a-f]{8}\); the program starts at \$c000/);
+  await bar.getByRole('button', { name: 'Unpack', exact: true }).click();
+  await expect(toast(page, 'Unpacked BOOT.prg: 609 bytes at $c000-$c260')).toBeVisible({ timeout: 30_000 });
+  const done = page.locator('.unpack-bar');
+  await expect(done).toContainText('BOOT-unpacked.prg, $c000-$c260, starting at $c000 (set as the program start).');
+  await done.getByText('Layer report').click();
+  await expect(done.locator('.unpack-log')).toContainText(/Drive: 1541 with "LOADER DISK" LD, \d+ bytes read/);
+  await expect(page.locator('.file-name')).toHaveText(['BOOT-unpacked.prg']);
 });
 
 test('file dialogs open in the folder they were last used in', async ({ app, page, userData }) => {
@@ -1192,18 +1225,16 @@ test('the export writes NOTES.html, or NOTES.txt when set, with the bookmarks an
   });
 });
 
-test('the installed app comes with unp64, and the unpacker setting points to it', async ({ app, page }) => {
-  // only an installed (packaged) app has resources\unp64: run with MIMIR_E2E_EXE
+test('the installed app unpacks with the built-in unpacker: no unp64 comes with it', async ({ app, page }) => {
+  // only an installed (packaged) app has resources\: run with MIMIR_E2E_EXE
   const installed = process.env.MIMIR_E2E_EXE;
   test.skip(!installed, 'needs the installed app (MIMIR_E2E_EXE)');
-  const exe = join(dirname(installed!), 'resources', 'unp64', 'unp64.exe');
-  expect(existsSync(exe)).toBe(true);
-  expect(existsSync(join(dirname(exe), 'unp64.txt'))).toBe(true);
+  expect(existsSync(join(dirname(installed!), 'resources', 'unp64'))).toBe(false);
   await waitForListing(page);
 
-  await test.step('a fresh profile uses the bundled unp64', async () => {
+  await test.step('a fresh profile has no external unpacker', async () => {
     await page.getByRole('button', { name: 'Settings' }).click();
-    await expect(page.locator('#set-unpackerPath')).toHaveValue(exe);
+    await expect(page.locator('#set-unpackerPath')).toHaveValue('');
     await expect(page.locator('#set-unpackerArgs')).toHaveValue('{in}');
     await page.getByRole('button', { name: 'Cancel' }).click();
   });
@@ -1212,11 +1243,11 @@ test('the installed app comes with unp64, and the unpacker setting points to it'
     await stubDialogs(app, { open: [join(repoDir, 'fixtures/prg/packed-demo.prg')] });
     await page.keyboard.press('Control+o');
     const bar = page.locator('.pack-bar');
-    await bar.getByRole('button', { name: 'Unpack with unp64' }).click();
-    await expect(toast(page, /^Unpacked packed-demo\.prg: \d+ bytes at \$0[0-9a-f]{3}-\$[0-9a-f]{4}/)).toBeVisible({ timeout: 30_000 });
+    await bar.getByRole('button', { name: 'Unpack', exact: true }).click();
+    await expect(toast(page, 'Unpacked packed-demo.prg: 12287 bytes at $0801-$37ff')).toBeVisible({ timeout: 30_000 });
     const done = page.locator('.unpack-bar');
     await expect(done).toContainText('starting at $0810 (set as the program start).');
-    await expect(done.locator('.unpack-log')).toContainText('return to mem: $0810');
+    await expect(done.locator('.unpack-log')).toContainText('saved layer 2: $0801-$37ff (12.0 KB), start with SYS 2064 = $0810');
     await expect(page.locator('.file-name')).toHaveText(['packed-demo-unpacked.prg']);
   });
 });

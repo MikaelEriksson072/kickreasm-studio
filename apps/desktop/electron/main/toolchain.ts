@@ -3,9 +3,9 @@
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { KickProblem, ToolchainSettings } from '@mimir/core';
-import { canIdentify, identifyPacker, launchTerminal, launchVice, runExomizer, runKickAssembler, runUnpacker, splitArgs } from '@mimir/core/node';
+import { canIdentify, findC64Roms, identifyPacker, launchTerminal, launchVice, runExomizer, runKickAssembler, runUnpacker, splitArgs } from '@mimir/core/node';
 import { rm } from 'node:fs/promises';
-import type { BuildRequest, BuildResult, IdentifyResponse, PackRequest, PackResponse, RunRequest, RunResult, TerminalOpenResult, UnpackRequest, UnpackResponse } from '../../shared/ipc';
+import type { BuildRequest, BuildResult, IdentifyResponse, PackRequest, PackResponse, RomsResponse, RunRequest, RunResult, TerminalOpenResult, UnpackRequest, UnpackResponse } from '../../shared/ipc';
 import { createBuildFolder } from './project-fs';
 import { assertEntryName, type PathPolicy } from './paths';
 
@@ -32,9 +32,17 @@ export async function buildWithKickAssembler(req: BuildRequest, settings: Toolch
   return { ok: outputs.every(o => o.ok), stdout, problems, prg: outputs[0]?.prg ?? undefined, outputs, commands, ms: Date.now() - t0 };
 }
 
+/** The C64 ROMs for the built-in unpacker (which runs in the renderer): those of the user's VICE, looked up once
+ * per VICE path. */
+let roms: { vicePath: string; roms: RomsResponse } | null = null;
+export function c64Roms(vicePath: string): RomsResponse {
+  if (roms?.vicePath !== vicePath) roms = { vicePath, roms: findC64Roms(vicePath) };
+  return roms.roms;
+}
+
 /** Unpack a packed PRG with the configured external unpacker (unp64), in a build folder of its own. */
 export async function unpackWithTool(req: UnpackRequest, settings: ToolchainSettings): Promise<UnpackResponse> {
-  if (!settings.unpackerPath) throw new Error('No unpacker is set. Set unp64 in Settings → Toolchain → Unpacker.');
+  if (!settings.unpackerPath) throw new Error('No external unpacker is set: the built-in one runs in the app. Set one (unp64) in Settings → Toolchain → Unpacker.');
   if (!existsSync(settings.unpackerPath)) throw new Error(`Unpacker not found at "${settings.unpackerPath}". Set the path in Settings → Toolchain.`);
   const dir = await createBuildFolder('unpack');
   const r = await runUnpacker({ exe: settings.unpackerPath, args: settings.unpackerArgs, dir, name: req.name, prg: req.prg });

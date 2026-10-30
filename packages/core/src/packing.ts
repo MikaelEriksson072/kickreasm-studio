@@ -1,6 +1,7 @@
 /* =====================================================================
  * Packed (crunched) programs: is a loaded PRG a decruncher plus compressed data? Runs after analyze() and
- * changes nothing in the analysis; the app reports it and offers an external unpacker (unp64).
+ * changes nothing in the analysis; the app reports it and unpacks it with the built-in unpacker (unpacker.ts), or with an
+ * external one (unp64).
  *
  * The signs, calibrated on a few hundred PRGs from the CSDB archive:
  *  - compressed data: 1 KB windows with at least 7.2 bits of entropy per byte (code is near 6, text and

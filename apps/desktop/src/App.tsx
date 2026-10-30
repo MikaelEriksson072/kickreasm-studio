@@ -7,16 +7,17 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import {
   bankRange, buildScripts, comparePrg, createProject, cyclePath, d64FileName, detectPacking, makePrg, mergeOverride, portName, portText, deserializeProject, exportFiles, findBlock, h2, h4, kindInfo, lineMove, lineText, MARK_AS, MARK_TYPE, moveBlockKeys,
   formatOverride, openC64File, overwritesSystemArea, parseVsf, patchSnapshot, editRanges, showcaseProject, parseD64, parsePrg, projectNameFor, rangeCover, readD64File, readSpindleDisk, spinChunkName, projectTextFiles, shellWord, SYSTEM_AREA, TOOLCHAIN_KEYS, validLabel, withId,
-  patchAt, patchEnd, patchesOn, patchFileName, patchPrg, switchPatch, withoutPatch, withPatch,
+  patchAt, patchEnd, patchesOn, patchFileName, patchPrg, switchPatch, withoutPatch, withPatch, packerNames, unpackLog,
   type Addr, type AnalysisResult, type Block, type Bookmark, type BuildScript, type ByteMove, type D64File, type NumberFormat, type Override, type PackingInfo, type PackPrefs, type KickProblem, type ListingLine, type LoadedFile, type Patch, type PatchPlan, type Project, type RenderResult,
-  type SerializedProject, type Settings, type SpindleChunk, type SpindleDisk, type SpindleJob, type Token, type ToolchainSettings, type VerifyResult,
+  type SerializedProject, type Settings, type SpindleChunk, type SpindleDisk, type SpindleJob, type Token, type ToolchainSettings, type UnpackRun, type VerifyResult,
 } from '@mimir/core';
 import { useProject } from './store/project';
 import { useUi, type Activity } from './store/ui';
 import { useAnalysis, verifyInWorker } from './lib/analysis';
 import { cx, errorText, filesKey, ROW, uid } from './lib/util';
 import { foldLines } from './lib/fold';
-import { withIdentified } from './lib/packing';
+import { withIdentified, withUnpackRun } from './lib/packing';
+import { unpackBuiltIn } from './lib/unpack';
 import { packDefaults, packKeyOf } from './lib/pack';
 import { Icon, LVL_ICON } from './lib/icons';
 import type { BuildState, Command, ContextMenuState, Editing, KickBuild, MountedDisk, NavOptions, ScrollReq, Sel, Toast, ToastKind, UiProblem } from './lib/types';
@@ -109,8 +110,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   const [disk, setDisk] = useState<MountedDisk | null>(null);
   /** the folder of the last Kick Assembler export in this session (the terminal opens there) */
   const [exportDir, setExportDir] = useState<string | null>(null);
-  /** the last run of the external unpacker (shown above the listing with its output) */
-  const [unpacked, setUnpacked] = useState<{ ok: boolean; title: string; output: string } | null>(null);
+  /** the last unpack (shown above the listing with the layer report, or the external unpacker's output) */
+  const [unpacked, setUnpacked] = useState<{ ok: boolean; title: string; output: string; label: string } | null>(null);
   /** the last pack with Exomizer (the Pack view shows it) */
   const [packRes, setPackRes] = useState<PackResult | null>(null);
   // a packed file belongs to the program it was packed from: other files (a new project, an added PRG) drop it
@@ -238,18 +239,41 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     try { const r = await kr.openDisk(); if (r) mountBytes(r.name, r.path, r.bytes); } catch (e) { toast(errorText(e), 'err'); }
   };
   const ejectDisk = () => { if (disk) toast(`Ejected ${disk.name}`, 'info'); setDisk(null); };
+  /** the disk each file opened from a mounted D64 came from: the built-in unpacker puts it in its drive */
+  const diskOf = useRef(new Map<string, Uint8Array>());
   const openFromDisk = (f: D64File, add: boolean) => {
     if (!disk) return;
-    try { addFiles([withId(parsePrg(d64FileName(f), readD64File(disk.bytes, f)))], add); } catch (e) { toast(`"${f.name}": ${errorText(e)}`, 'err'); }
+    try {
+      const file = withId(parsePrg(d64FileName(f), readD64File(disk.bytes, f)));
+      diskOf.current.set(file.id, disk.bytes);
+      addFiles([file], add);
+    } catch (e) { toast(`"${f.name}": ${errorText(e)}`, 'err'); }
   };
   /** a chunk of a Spindle disk's job, as a PRG at its address */
   const openChunk = (j: SpindleJob, c: SpindleChunk, add: boolean) => {
     try { addFiles([withId(parsePrg(spinChunkName(j, c).replace(/\.bin$/, '.prg'), makePrg(c.start, c.bytes)))], add); } catch (e) { toast(errorText(e), 'err'); }
   };
   /* ---- packed programs ---- */
-  // a decruncher in front of compressed data (detectPacking), and what unp64 -i says about each file when unp64 is
-  // the unpacker; the external unpacker then turns it into the program
-  const unpackerName = toolchain.unpackerPath ? (toolchain.unpackerPath.split(/[\\/]/).pop() ?? 'unp64').replace(/\.exe$/i, '') : 'unp64';
+  // a decruncher in front of compressed data (detectPacking), and what the unpacker finds: the built-in unpacker runs
+  // every file opened (in a worker of its own, with the disk a file came from in its 1541) and keeps the result for Unpack; an external unpacker set in Settings
+  // (unp64) unpacks a copy instead, and unp64 -i names the packer of every file opened
+  const external = !!toolchain.unpackerPath;
+  const unpackerName = external ? (toolchain.unpackerPath.split(/[\\/]/).pop() ?? 'unp64').replace(/\.exe$/i, '') : 'the built-in unpacker';
+  const unpackLabel = external ? `Unpack with ${unpackerName}` : 'Unpack';
+  const [runs, setRuns] = useState<Record<string, UnpackRun>>({});
+  const running = useRef(new Map<string, Promise<UnpackRun>>());
+  const runFor = (f: LoadedFile): Promise<UnpackRun> => {
+    let p = running.current.get(f.id);
+    if (!p) {
+      p = unpackBuiltIn(makePrg(f.load, f.bytes), diskOf.current.get(f.id) ?? null);
+      running.current.set(f.id, p);
+      p.then(r => setRuns(m => ({ ...m, [f.id]: r })), () => running.current.delete(f.id));
+    }
+    return p;
+  };
+  useEffect(() => {
+    if (!external) for (const f of project.files) runFor(f).catch(() => { /* the heuristics still report it */ });
+  }, [project.files, external]); // eslint-disable-line react-hooks/exhaustive-deps
   const [identified, setIdentified] = useState<Record<string, IdentifyResponse>>({});
   const asked = useRef(new Set<string>());
   const idKey = (f: LoadedFile) => `${f.id}:${toolchain.unpackerPath}`;
@@ -264,34 +288,57 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   }, [project.files, toolchain.unpackerPath]); // eslint-disable-line react-hooks/exhaustive-deps
   const packing = useMemo(() => A.files.map((af, i): PackingInfo | null => {
     const f = project.files[i];
-    return withIdentified(detectPacking(A, i), f ? identified[idKey(f)] : undefined, { index: i, size: af.bytes.length, entry: A.entry }, unpackerName);
-  }), [A, identified, project.files, unpackerName]); // eslint-disable-line react-hooks/exhaustive-deps
+    const h = detectPacking(A, i), at = { index: i, size: af.bytes.length, entry: A.entry };
+    return external ? withIdentified(h, f ? identified[idKey(f)] : undefined, at, unpackerName) : withUnpackRun(h, f ? runs[f.id] : undefined, at);
+  }), [A, identified, runs, project.files, external, unpackerName]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Put the unpacked PRG in place of file `i` (a project of its own when it was the only file); says where it went. */
+  const takeUnpacked = (i: number, f: LoadedFile, prg: Uint8Array, start: number | null | undefined): string => {
+    const out = withId(parsePrg(`${f.name.replace(/\.prg$/i, '')}-unpacked.prg`, prg));
+    const entry = start != null && start >= out.load && start < out.load + out.bytes.length ? start : null;
+    if (project.files.length === 1) { replace({ ...createProject({ name: projectNameFor(out.name), files: [out], settings: project.settings }), entryPoint: entry }); resetView(); }
+    else update(`Unpack ${f.name}`, d => {
+      // a patch written over the packed file has nothing to stand on in the unpacked one
+      const was = d.files[i];
+      d.files[i] = out;
+      d.patches = d.patches.filter(p => !(p.start >= was.load && patchEnd(p) <= was.load + was.bytes.length));
+    });
+    const at = `$${h4(out.load)}-$${h4(out.load + out.bytes.length - 1)}`;
+    toast(`Unpacked ${f.name}: ${out.bytes.length} bytes at ${at}`, 'ok');
+    return `${out.name}, ${at}${entry != null ? `, starting at $${h4(entry)}${project.files.length === 1 ? ' (set as the program start)' : ''}` : ''}`;
+  };
   const unpackFile = async (i: number) => {
-    if (!kr) return needDesktop();
     const f = project.files[i];
     if (!f) return;
-    if (!toolchain.unpackerPath) { toast('No unpacker is set: give the path to unp64 in Settings → Toolchain', 'warn'); setModal('settings'); return; }
+    if (!external) {
+      setBuildBusy('Unpacking');
+      try {
+        const run = await runFor(f);
+        const output = unpackLog(run, f.name, f.load, f.bytes.length);
+        if (!run.unpacked || !run.saved) {
+          setUnpacked({ ok: false, title: `The built-in unpacker found nothing to unpack in ${f.name}: it stopped (${run.stop.reason}${run.stop.detail ? `, ${run.stop.detail}` : ''}) before a layer came off.`, output, label: 'Layer report' });
+          toast(`The built-in unpacker could not unpack ${f.name}`, 'err');
+          return;
+        }
+        const names = packerNames(run);
+        // a BASIC program starts with RUN: the analysis finds its SYS line itself
+        const where = takeUnpacked(i, f, run.saved.prg, run.saved.basic ? null : run.saved.entry);
+        setUnpacked({ ok: true, title: `Unpacked ${f.name}${names ? ` (${names})` : ''}: ${where}.`, output, label: 'Layer report' });
+      } catch (e) { toast(errorText(e), 'err'); } finally { setBuildBusy(null); }
+      return;
+    }
+    if (!kr) return needDesktop();
     setBuildBusy(`Unpacking with ${unpackerName}`);
     try {
       const r = await kr.unpack({ name: f.name, prg: makePrg(f.load, f.bytes) });
       const output = `> ${r.argv.map(a => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}\n${r.output.trim()}`;
+      const label = `${unpackerName} output`;
       if (!r.ok || !r.prg) {
-        setUnpacked({ ok: false, title: `${unpackerName} could not unpack ${f.name}: ${r.error ?? 'no result'}.`, output });
+        setUnpacked({ ok: false, title: `${unpackerName} could not unpack ${f.name}: ${r.error ?? 'no result'}.`, output, label });
         toast(`${unpackerName} could not unpack ${f.name}`, 'err');
         return;
       }
-      const out = withId(parsePrg(`${f.name.replace(/\.prg$/i, '')}-unpacked.prg`, r.prg));
-      const entry = r.entry != null && r.entry >= out.load && r.entry < out.load + out.bytes.length ? r.entry : null;
-      if (project.files.length === 1) { replace({ ...createProject({ name: projectNameFor(out.name), files: [out], settings: project.settings }), entryPoint: entry }); resetView(); }
-      else update(`Unpack ${f.name}`, d => {
-        // a patch written over the packed file has nothing to stand on in the unpacked one
-        const was = d.files[i];
-        d.files[i] = out;
-        d.patches = d.patches.filter(p => !(p.start >= was.load && patchEnd(p) <= was.load + was.bytes.length));
-      });
-      const at = `$${h4(out.load)}-$${h4(out.load + out.bytes.length - 1)}`;
-      setUnpacked({ ok: true, title: `Unpacked ${f.name} with ${unpackerName}${r.packer ? ` (${r.packer})` : ''}: ${out.name}, ${at}${entry != null ? `, starting at $${h4(entry)}${project.files.length === 1 ? ' (set as the program start)' : ''}` : ''}.`, output: `${output}\n\nKept ${r.name} from ${r.dir}` });
-      toast(`Unpacked ${f.name}: ${out.bytes.length} bytes at ${at}`, 'ok');
+      const where = takeUnpacked(i, f, r.prg, r.entry);
+      setUnpacked({ ok: true, title: `Unpacked ${f.name} with ${unpackerName}${r.packer ? ` (${r.packer})` : ''}: ${where}.`, output: `${output}\n\nKept ${r.name} from ${r.dir}`, label });
     } catch (e) { toast(errorText(e), 'err'); } finally { setBuildBusy(null); }
   };
   const openProject = async () => {
@@ -873,7 +920,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     { id: 'mount', label: 'Mount D64 disk image…', run: () => void mountDisk() },
     { id: 'quicksave', label: 'Open the VICE quicksave snapshot (Alt+F11 in VICE saves one)', key: 'F9', run: () => void openQuicksave() },
     { id: 'quicksave-follow', label: followQuicksave ? 'Stop opening each new VICE quicksave' : 'Open each new VICE quicksave (Alt+F11 in VICE) by itself', run: () => setUi({ followQuicksave: !followQuicksave }) },
-    ...packing.flatMap((p, i) => (p ? [{ id: `unpack-${i}`, label: `Unpack ${project.files[i]?.name} with ${unpackerName}`, run: () => void unpackFile(i) }] : [])),
+    ...packing.flatMap((p, i) => (p ? [{ id: `unpack-${i}`, label: external ? `Unpack ${project.files[i]?.name} with ${unpackerName}` : `Unpack ${project.files[i]?.name}`, run: () => void unpackFile(i) }] : [])),
     { id: 'terminal', label: 'Open a terminal in the project folder (VICE on PATH, kickass runs Kick Assembler)', run: () => void openTerminal() },
     ...(disk ? [{ id: 'eject', label: `Eject ${disk.name}`, run: ejectDisk }] : []),
     { id: 'demo', label: 'Load the showcase demo (every block type, with a guided tour)', run: loadDemo },
@@ -1100,8 +1147,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       update('Follow the memory configuration ($01) and VIC bank', d => { d.settings.bankTracking = true; });
       toast('Following the memory configuration ($01) and VIC bank: I/O accesses are written as registers', 'ok');
     } } } : l)),
-    ...packing.flatMap((p, i) => (p ? [{ lvl: 'warn' as const, msg: `${A.files[i].name} ${p.verdict === 'packed' ? 'is packed' : 'may be packed'}${p.signature ? ` (${p.signature})` : ''}: ${p.reasons.join('; ')}. Unpack it (Unpack with ${unpackerName}) to see the program.`, addr: p.decruncher, cat: 'packing' }] : [])),
-  ], [A, R, kickProblems, packing, unpackerName]);
+    ...packing.flatMap((p, i) => (p ? [{ lvl: 'warn' as const, msg: `${A.files[i].name} ${p.verdict === 'packed' ? 'is packed' : 'may be packed'}${p.signature ? ` (${p.signature})` : ''}: ${p.reasons.join('; ')}. Unpack it (${unpackLabel}) to see the program.`, addr: p.decruncher, cat: 'packing' }] : [])),
+  ], [A, R, kickProblems, packing, unpackLabel]);
   // the Spindle script tab is there when the analysis found Spindle's drivers
   const bottomTabs = BOTTOM_TABS.filter(([k]) => k !== 'spindle' || A.spindle.length > 0 || !!disk?.spindle);
   const shownBottom = bottomTabs.some(([k]) => k === bottom) ? bottom : 'log';
@@ -1203,11 +1250,11 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
               </div>}
               {packing.map((p, i) => p && !packHidden.has(project.files[i]?.id ?? String(i)) && <div key={`pack-${i}`} className="welcome preview-bar pack-bar" role="status">
                 <div><b>{project.files[i]?.name} {p.verdict === 'packed' ? 'is packed' : 'may be packed'}{p.signature ? ` (${p.signature})` : ''}.</b> {p.reasons.join('; ')}. The listing shows the decruncher{p.decruncher != null ? ` at $${h4(p.decruncher)}` : ''} and the packed data, not the program.</div>
-                <button className="btn small primary" disabled={!!buildBusy} onClick={() => void unpackFile(i)}>{toolchain.unpackerPath ? `Unpack with ${unpackerName}` : 'Set up an unpacker…'}</button>
+                <button className="btn small primary" disabled={!!buildBusy} onClick={() => void unpackFile(i)}>{unpackLabel}</button>
                 <button className="icon-btn" aria-label="Dismiss the packed notice" onClick={() => setPackHidden(s => new Set([...s, project.files[i]?.id ?? String(i)]))}><Icon name="x" size={14} /></button>
               </div>)}
               {unpacked && <div className={cx('welcome preview-bar unpack-bar', !unpacked.ok && 'bad')} role="status">
-                <div><b>{unpacked.title}</b><details><summary>{unpackerName} output</summary><pre className="unpack-log">{unpacked.output}</pre></details></div>
+                <div><b>{unpacked.title}</b><details><summary>{unpacked.label}</summary><pre className="unpack-log">{unpacked.output}</pre></details></div>
                 <button className="icon-btn" aria-label="Dismiss the unpacker result" onClick={() => setUnpacked(null)}><Icon name="x" size={14} /></button>
               </div>}
               {dataAsCode && <div className="welcome preview-bar">

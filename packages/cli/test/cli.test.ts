@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main } from '../src/cli';
@@ -44,10 +44,37 @@ describe('mimir CLI', () => {
     const packed = join(__dirname, '../../../fixtures/prg/packed-demo.prg');
     let c = capture(dir);
     expect(await main(['analyse', packed], c.io)).toBe(0);
-    expect(c.lines.join('\n')).toMatch(/\[pack\] packed-demo\.prg is packed: \d+% of the file looks compressed .* Unpack it \(for example with unp64\)/);
+    expect(c.lines.join('\n')).toMatch(/\[pack\] packed-demo\.prg is packed: \d+% of the file looks compressed .* Unpack it \(mimir unpack packed-demo\.prg\)/);
     c = capture(dir);
     expect(await main(['analyse', packed, '--json'], c.io)).toBe(0);
     expect(JSON.parse(c.lines.join('\n')).packing[0]).toMatchObject({ verdict: 'packed', decruncher: 0x080d, signature: null });
+  });
+
+  it('unpacks a packed PRG with the built-in unpacker and prints its layers', async () => {
+    const packed = join(__dirname, '../../../fixtures/prg/packed-demo.prg');
+    let c = capture(dir);
+    expect(await main(['unpack', packed, '-o', 'unpacked.prg', '--no-roms'], c.io)).toBe(0);
+    expect(c.lines.join('\n')).toMatch(/^packed-demo\.prg: \$0801-\$390c \(12\.3 KB\), 10 SYS2061\nROMs: stand-ins \(no ROM files\)\nlayer 0  \$080d  start  /);
+    expect(c.lines.join('\n')).toContain('layer 2  $0810  jmp from $036f  program');
+    expect(c.lines.at(-1)).toBe(`Wrote ${join(dir, 'unpacked.prg')} (12289 bytes, start $0810)`);
+    c = capture(dir);
+    expect(await main(['analyse', 'unpacked.prg', '--json'], c.io)).toBe(0);
+    expect(JSON.parse(c.lines.join('\n'))).toMatchObject({ entry: 0x0810, packing: [null] });
+    // the demo itself is not packed: nothing is written
+    c = capture(dir);
+    expect(await main(['unpack', 'unpacked.prg', '-o', 'again.prg'], c.io)).toBe(1);
+    expect(c.lines.join('\n').split('\n').at(-1)).toBe('nothing was unpacked');
+    expect(existsSync(join(dir, 'again.prg'))).toBe(false);
+  });
+
+  it('unpacks a D64\'s first PRG with the disk in the drive', async () => {
+    const disk = join(__dirname, '../../../fixtures/d64/mimir-demo.d64');
+    const c = capture(dir);
+    expect(await main(['unpack', disk, '--file', 'sprite', '-o', 'sprite.prg'], c.io)).toBe(1);
+    expect(c.lines.join('\n')).toMatch(/^mimir-demo\.d64: "SPRITE": \$c000-/);
+    c.lines.length = 0;
+    expect(await main(['unpack', disk, '--file', 'nothing'], c.io)).toBe(2);
+    expect(c.lines).toEqual(['ERR no PRG named "nothing" on mimir-demo.d64']);
   });
 
   it('rejects unknown settings and commands', async () => {

@@ -32,7 +32,7 @@ pnpm test
 | `pnpm test` | All Vitest suites: core (round-trip, fast-check fuzz, differential vs. the prototype, real KickAss.jar when installed), CLI, desktop main process |
 | `pnpm typecheck` | `tsc` for every package (main/preload, renderer and the e2e tests separately) |
 | `pnpm build` | CLI bundle (`packages/cli/dist`) and the Electron app (`apps/desktop/out`) |
-| `pnpm mimir <cmd>` | CLI from source: `analyse`, `verify [--kickass]`, `export -o <dir>`, `demo` |
+| `pnpm mimir <cmd>` | CLI from source: `analyse`, `verify [--kickass]`, `export -o <dir>`, `unpack <file.prg \| disk.d64>`, `demo` |
 | `pnpm --filter @mimir/desktop e2e` | Builds the app and runs the Playwright-for-Electron tests in `apps/desktop/e2e` |
 | `pnpm --filter @mimir/desktop package` | Builds the app and packages it for Windows with electron-builder (installer + portable exe in `apps/desktop/release/<version>/`) |
 
@@ -106,8 +106,9 @@ Playwright inspector).
 | cycle counting: cycles per line, a block's total, and branches taken or not | *Cycles* shows `6` on `inc VIC_IRQ_STATUS`, `4+` on `lda colors_0939,y` and `2/3` on `beq loop_08c2`; the `sub_0866` header counts `$0866–$08ad`: 104 cycles (status bar too); clicking `beq skip_0895`'s `2/3` marks it taken: 95, the skipped lines are dimmed and the inspector's box is ticked; unticking it gives 104 again; *Cycles* off removes the column and the section |
 | timing code: a delay a timer sets the branch into is marked, and what it reads gets no label | a PRG written by the test (`lda $dc06 / eor #$07 / sta smc+1 / bpl * / lda #$a9 / lda #$a9 / lda $eaa5`, loaded up to `$eaff`) shows `bpl delay_0817` with *0-7 bytes into the delay, by CIA1_TB_LO ($dc06)*, the comment line *delay: the bpl at $0815 goes 0-7 bytes into it … 8 down to 0 cycles*, three rows marked *delay*, `lda $eaa5` and no `data_eaa5`; `F7` verifies |
 | Problems warns when bank tracking is off and I/O is written as labels, and turns it on | a dump from `$0801` over `$d000-$d02f` (written by the test) with *Follow the memory configuration* unticked shows `sta …_d020` and a Problems row *Bank tracking is off … 2 I/O addresses … written as labels* (address `$d020`); its *Turn on* button ticks the setting, the row goes away, the listing shows `sta VIC_BORDER_COLOR`, and `Ctrl+Z` brings the row back |
-| the installed app comes with unp64, and the unpacker setting points to it | only with `MIMIR_E2E_EXE`: `resources\unp64\unp64.exe` and `unp64.txt` are installed, a fresh profile shows that path and `{in}` in Settings, and *Unpack with unp64* turns `packed-demo.prg` back into the demo starting at `$0810` |
-| a packed PRG is reported and unpacked with an external unpacker | `fixtures/prg/packed-demo.prg` (the demo packed by `fakePack`, a real 6502 decruncher) shows *packed-demo.prg is packed.*, the *packed* badge and a Problems entry; with the unpacker cleared in Settings, *Set up an unpacker…* opens the settings, where it becomes Node with `packages/core/test/helpers/fake-unp64.cjs {in}` (a stand-in that writes and prints like unp64); *Unpack* opens `packed-demo-unpacked.prg` with the start `$0810`, names the packer (FakePack), shows the output, and `F7` verifies |
+| the installed app unpacks with the built-in unpacker: no unp64 comes with it | only with `MIMIR_E2E_EXE`: there is no `resources\unp64`, a fresh profile has an empty external unpacker and `{in}` in Settings, and *Unpack* turns `packed-demo.prg` back into the demo (12287 bytes at `$0801-$37ff`) starting at `$0810` |
+| a packed PRG is reported and unpacked with the built-in unpacker, or an external one | `fixtures/prg/packed-demo.prg` (the demo packed by `fakePack`, a real 6502 decruncher) shows *packed-demo.prg is packed.* with the built-in unpacker's layers (*an unknown mover at $080d …, then an unknown decoder at $0340 …; the program starts at $0810*), the *packed* badge and a Problems entry; *Unpack* opens `packed-demo-unpacked.prg` with the start `$0810`, the *Layer report* lists layers 0-2, and `F7` verifies; with Node and `packages/core/test/helpers/fake-unp64.cjs {in}` (a stand-in that writes and prints like unp64) as the external unpacker in Settings, *Unpack with node* does the same, names the packer (FakePack) and shows its output |
+| a file opened from a mounted disk is unpacked with the disk in a 1541 | needs VICE's ROMs: `fixtures/d64/kernal-load.d64` mounted, its `BOOT` (it loads `PART2` with `LOAD "PART2",8,1` and jumps to `$c000`) shows *BOOT.prg is packed.* with *the built-in unpacker peels off 1 layer … the program starts at $c000*; *Unpack* opens `BOOT-unpacked.prg` (609 bytes at `$c000-$c260`, start `$c000`), and the *Layer report* has the `Drive: 1541 with "LOADER DISK" LD` line |
 | file dialogs open in the folder they were last used in | the stubbed dialogs record their options: the first Open PRG has no start folder, Mount D64 then starts in the PRG's folder, Open PRG again in `fixtures/prg` and Mount D64 in `fixtures/d64`; `recent-folders.json` in the profile holds both for the next start |
 | mount a .d64 and open its PRG files | *Mount D64…* (stubbed dialog) lists `fixtures/d64/mimir-demo.d64`: `"MIMIR DEMO"`, `49 "RASTER DEMO" PRG`, `1 "SPRITE" PRG`, `1 "NOTES" SEQ` (not openable), 613 blocks free, in a *Disk* section right under Files (above *VICE quicksave*); a click opens RASTER DEMO, + adds SPRITE at `$c000`, `F7` verifies; *Eject* removes the disk and keeps the project |
 
@@ -128,14 +129,9 @@ writes to `apps/desktop/release/<version>/`:
 - `Mimir-Studio-<version>-portable.exe`: single exe that runs without installing
 - `win-unpacked/`: the unpacked app (`Mimir Studio.exe`)
 
-The installer also contains unp64 2.40 (iAN CooG) in `resources\unp64\`. It comes unchanged from
-`apps/desktop/vendor/unp64` via `extraResources`, with its `unp64.txt` notice. Its license (Exomizer's) allows free
-distribution for non-commercial use only. On the first start after an install, the app points Settings → Toolchain →
-Unpacker at it. That replaces an empty or missing unpacker, or another copy of unp64, and happens once
-(`bundledUnpacker` in `settings.json`). After that, whatever is picked in Settings is kept.
-
-Exomizer 3.1.1 (Magnus Lind) is in `resources\exomizer\` the same way, from `apps/desktop/vendor/exomizer` with its
-`LICENSE.txt` (the same non-commercial license). Settings → Toolchain → Exomizer points at it unless another one is set;
+The installer contains Exomizer 3.1.1 (Magnus Lind) in `resources\exomizer\`. It comes unchanged from
+`apps/desktop/vendor/exomizer` via `extraResources`, with its `LICENSE.txt` notice (free distribution for
+non-commercial use only). Settings → Toolchain → Exomizer points at it unless another one is set;
 a setting that points at a file that is gone gets the bundled one, and an empty setting is kept.
 
 The package holds `out/` and the production dependencies (only `zod`; `@mimir/core` is bundled into `out/` by
@@ -169,11 +165,13 @@ packages/core    @mimir/core: pure TypeScript engine (no DOM, no I/O)
   src/node       '@mimir/core/node': spawn KickAss.jar / x64sc (argv arrays, no shell)
   test/          Vitest + fast-check; reference/ holds the original prototype engine as an oracle
 packages/cli     mimir command line (tsup bundle)
+packages/unpacker  @mimir/unpacker: the built-in unpacker, an emulated C64 (6510, VIC-II raster, CIAs) that follows a
+                 packed program through its layers; data/signatures.json names packers by fingerprint (see its README)
 apps/desktop     Electron app
   electron/main  window, IPC allowlist (zod), path policy, toolchain runner, settings, file watcher
   electron/preload  contextBridge -> window.kr
   shared/ipc.ts  the typed IPC contract (spec 13.4)
-  src/           React 18 renderer: components, Zustand + Immer stores, analysis Web Worker (Comlink), Monaco
+  src/           React 18 renderer: components, Zustand + Immer stores, analysis and unpacker Web Workers (Comlink), Monaco
   test/          Vitest: main-process logic, undo/redo
   e2e/           Playwright for Electron: UI flows in the built (or packaged) app
   electron-builder.yml  Windows packaging (NSIS installer + portable exe)
@@ -239,10 +237,17 @@ fixtures/d64     disk images (mimir-demo.d64, and spindle-demo.d64, a Spindle 3 
 - **Packed programs.** `detectPacking()` (`packages/core/src/packing.ts`) reports a decruncher in front of compressed
   data. The signs are 1 KB windows with at least 7.2 bits/byte, almost no code that can be traced, and packer names in
   the bytes. The app shows a notice above the listing, a *packed* badge in the Explorer and a Problems entry, and
-  `analyse` prints a `[pack]` line. When the unpacker is unp64, `unp64 file -i` also names the packer of every file opened.
-  **Unpack with unp64** runs the external unpacker set in Settings → Toolchain on a copy of the PRG. It uses `{in}`/`{out}`
-  in its arguments, picks up the file it wrote with its start address (`name.prg.xxxx`, or "return to mem: $xxxx"), and
-  opens the result with that start. Checked against unp64 on 100 archive PRGs; see spec 8.11b.
+  `analyse` prints a `[pack]` line. The built-in unpacker (`packages/unpacker`, run through `unpackPrg()` in
+  `packages/core/src/unpacker.ts`) runs every file opened, in a Web Worker of its own (`src/workers/unpack.worker.ts`),
+  with the C64 ROMs of the VICE in the settings (`findC64Roms()`, read by the main process, `toolchain:roms`) or its
+  stand-ins. A file it peels a layer off is packed even when the signs missed it, and the notice lists the layers with
+  the packers their fingerprints name (`unpackSummary()`). **Unpack** opens the program it saved, with its start, and
+  the *Layer report* (`unpackLog()`, as the unpacker's own command line prints it); `mimir unpack` does the same on
+  the command line. A file opened from a mounted D64 is unpacked with that disk in an emulated 1541 (the main process
+  reads VICE's DOS ROM with the C64 ROMs): the drive runs behind the C64 and catches up at every access to the serial
+  port, so the program's own fast loader goes on loading its next parts, and the report has a `Drive:` line. An external unpacker set in Settings → Toolchain (unp64) runs instead: **Unpack with unp64** runs it
+  on a copy of the PRG with `{in}`/`{out}` in its arguments, picks up the file it wrote with its start address
+  (`name.prg.xxxx`, or "return to mem: $xxxx"), and `unp64 file -i` names the packer of every file opened. See spec 8.11b.
 - **Terminal.** The title bar's Terminal button opens PowerShell (through `cmd /c start`, so it gets a console of its
   own) in the last export folder, else the project's folder, else the folder last picked in a dialog. VICE is on PATH
   there and `kickass <file.asm>` runs KickAss.jar with the configured Java (`packages/core/src/node/terminal.ts`, spec 13.6).

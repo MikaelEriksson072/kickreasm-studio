@@ -10,7 +10,7 @@ import type { PathPolicy } from './paths';
 import type { RecentFolders, RecentKind } from './recent';
 import type { SettingsStore } from './settings';
 import { createBuildFolder, readDiskImage, readPrgFiles, readProjectFile, writeExportFolder, writeProjectFile, type ExportWatcher } from './project-fs';
-import { buildWithKickAssembler, identifyWithTool, openTerminal, packWithExomizer, runInVice, unpackWithTool } from './toolchain';
+import { buildWithKickAssembler, c64Roms, identifyWithTool, openTerminal, packWithExomizer, runInVice, unpackWithTool } from './toolchain';
 import { viceAttach, viceCommand } from './vice-monitor';
 import { quicksaveFileName, quicksaveFiles, quicksaveInfo, readQuicksave, type QuicksaveHistory, type QuicksaveWatcher } from './quicksave';
 import { charRomFiles, readCharRom } from './chargen';
@@ -140,6 +140,7 @@ export function registerIpc(deps: IpcDeps): void {
   handle(CHANNELS.toolchainRun, runSchema, req => runInVice(req, settings.get(), policy));
   handle(CHANNELS.toolchainUnpack, unpackSchema, req => unpackWithTool(req, settings.get()));
   handle(CHANNELS.toolchainIdentify, unpackSchema, req => identifyWithTool(req, settings.get()));
+  handle(CHANNELS.toolchainRoms, z.undefined().or(z.object({}).strict()), () => c64Roms(settings.get().vicePath));
   handle(CHANNELS.toolchainPack, packSchema, req => packWithExomizer(req, settings.get(), policy));
   handle(CHANNELS.fileSave, fileSaveSchema, async (req, e): Promise<FileSaveResult | null> => {
     const win = windowOf(e.sender);

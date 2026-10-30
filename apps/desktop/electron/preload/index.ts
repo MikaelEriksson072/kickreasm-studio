@@ -21,6 +21,7 @@ const api: KrApi = {
   openTerminal: req => invoke(CHANNELS.terminalOpen, req ?? {}),
   unpack: req => invoke(CHANNELS.toolchainUnpack, req),
   identifyPacker: req => invoke(CHANNELS.toolchainIdentify, req),
+  c64Roms: () => invoke(CHANNELS.toolchainRoms),
   pack: req => invoke(CHANNELS.toolchainPack, req),
   saveFile: req => invoke(CHANNELS.fileSave, req),
   viceAttach: req => invoke(CHANNELS.viceAttach, req ?? {}),

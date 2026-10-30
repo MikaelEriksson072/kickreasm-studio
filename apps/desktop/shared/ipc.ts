@@ -3,7 +3,7 @@
  * process registers exactly these channels and the preload exposes
  * exactly these functions as `window.kr`.
  * ===================================================================== */
-import type { ExomizerReport, KickProblem, LoadedFile, PackCheck, PackPrefs, Project, ToolchainSettings } from '@mimir/core';
+import type { ExomizerReport, KickProblem, LoadedFile, PackCheck, PackPrefs, Project, Roms, ToolchainSettings } from '@mimir/core';
 
 export const CHANNELS = {
   projectOpen: 'project:open',
@@ -16,6 +16,7 @@ export const CHANNELS = {
   terminalOpen: 'terminal:open',
   toolchainUnpack: 'toolchain:unpack',
   toolchainIdentify: 'toolchain:identify',
+  toolchainRoms: 'toolchain:roms',
   toolchainPack: 'toolchain:pack',
   fileSave: 'file:save',
   viceAttach: 'vice:attach',
@@ -109,8 +110,8 @@ export interface TerminalOpenRequest { dir?: string }
 export interface TerminalOpenResult { dir: string }
 
 /**
- * Unpack a packed PRG (load address first) with the external unpacker of the toolchain settings (unp64). It runs
- * on a copy in a build folder of its own; `prg` is the file it wrote, `entry` the start address it reported.
+ * Unpack a packed PRG (load address first) with the external unpacker of the toolchain settings (unp64; when none
+ * is set, the renderer runs the built-in unpacker itself). It runs on a copy in a build folder of its own; `prg` is the file it wrote, `entry` the start address it reported.
  */
 export interface UnpackRequest { name: string; prg: Uint8Array }
 export interface UnpackResponse {
@@ -119,6 +120,9 @@ export interface UnpackResponse {
 }
 /** Which packer a PRG uses, from unp64 -i (`supported` false when the unpacker is not unp64 or not set). */
 export interface IdentifyResponse { supported: boolean; known: boolean; packer: string | null; tool: string }
+/** The C64 ROMs for the built-in unpacker, read from the user's VICE (the one in the settings, else one found); null:
+ * none were found, and the unpacker runs with its stand-ins. */
+export type RomsResponse = Roms | null;
 
 /**
  * Pack with Exomizer (spec 13.8): the built PRGs (load address first, one per project file in order) are copied to a
@@ -182,6 +186,7 @@ export interface KrApi {
   openTerminal(req?: TerminalOpenRequest): Promise<TerminalOpenResult>;
   unpack(req: UnpackRequest): Promise<UnpackResponse>;
   identifyPacker(req: UnpackRequest): Promise<IdentifyResponse>;
+  c64Roms(): Promise<RomsResponse>;
   pack(req: PackRequest): Promise<PackResponse>;
   saveFile(req: FileSaveRequest): Promise<FileSaveResult | null>;
   viceAttach(req?: ViceAttachRequest): Promise<ViceResult>;

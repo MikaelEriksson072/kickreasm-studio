@@ -5,8 +5,8 @@ export default defineConfig({
   format: ['esm'],
   platform: 'node',
   target: 'node20',
-  // @mimir/core ships TypeScript sources: bundle it into the executable
-  noExternal: ['@mimir/core'],
+  // @mimir/core and @mimir/unpacker ship TypeScript sources: bundle them into the executable
+  noExternal: ['@mimir/core', '@mimir/unpacker'],
   banner: { js: '#!/usr/bin/env node' },
   clean: true,
 });
