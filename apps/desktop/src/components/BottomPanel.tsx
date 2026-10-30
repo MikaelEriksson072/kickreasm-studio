@@ -147,21 +147,22 @@ function SpinDiskSection({ disk, onCopy, onOpenChunk }: { disk: MountedDisk; onC
 }
 
 /** The Bitfire script tab (spec 13.5c): a Bitfire disk's own files, a row each, in the order d64write wrote them (and
- *  the loader loads them); a row opens the file as a PRG, unpacked when it is packed with dali, + adds it. */
+ *  the loader loads them); a row opens the file as a PRG, unpacked when it is packed (bitnax for 0.x, else dali), +
+ *  adds it. */
 export function BitfirePanel({ disk, onCopy, onOpenFile }: { disk: MountedDisk; onCopy: (text: string, what: string) => void; onOpenFile: (f: BitfireFile, add: boolean) => void }) {
   const d = disk.bitfire!;
-  const unpacked = d.files.filter(f => f.unpacked).length, n = d.files.length;
+  const unpacked = d.files.filter(f => f.unpacked).length, n = d.files.length, packer = d.format === '0.x' ? 'bitnax' : 'dali';
   // what the disk's own directory holds: the boot program and other files (and a dirart)
   const inDir = [d.boot != null ? 'the boot program' : '', d.standard.length ? `${d.standard.length} other file${d.standard.length === 1 ? '' : 's'}` : ''].filter(Boolean);
   const dirText = inDir.length ? `; ${inDir.join(' and ')} ${inDir.length > 1 || d.standard.length > 1 ? 'are' : 'is'} in the directory${d.dirart ? `, a dirart of ${d.dirart} lines` : ''}` : '';
   const notes = (f: BitfireFile) => [
-    f.unpacked ? (f.unpacked.inplace ? 'packed with dali, in place' : 'packed with dali') : d.format === '0.x' ? 'packed with bitnax or not packed: as it is on the disk' : 'not packed',
+    f.unpacked ? `packed with ${packer}${f.unpacked.inplace ? ', in place' : ''}` : d.format === '0.x' ? 'not packed (or bitnax copying from memory before it): as it is on the disk' : 'not packed',
     `from ${f.track}/${f.sector}${f.offset ? ` byte ${f.offset}` : ''}`,
   ].join(' · ');
   return (
     <div className="xref spindle">
       <div className="xref-head spindle-head">
-        <span>Files of {disk.name} ({BITFIRE_VERSION[d.format]}, side {d.side}): {n} file{n === 1 ? '' : 's'}{unpacked ? `, ${unpacked} unpacked` : ''} <span className="muted">· Bitfire has no load script: a part loads the next file or one by its number, so this is the order they load in; d64write's command line rebuilds the disk{dirText}; the file names are not on the disk</span></span>
+        <span>Files of {disk.name} ({BITFIRE_VERSION[d.format]}{d.oldBitnax ? ', packed as in 2014–2015' : ''}, side {d.side}): {n} file{n === 1 ? '' : 's'}{unpacked ? `, ${unpacked} unpacked` : ''} <span className="muted">· Bitfire has no load script: a part loads the next file or one by its number, so this is the order they load in; d64write's command line rebuilds the disk{dirText}; the file names are not on the disk</span></span>
         <button className="btn small" onClick={() => onCopy(d64writeScript(d, disk.name).join('\n'), 'Copied the d64write command line')}><Icon name="copy" size={14} />Copy script</button>
       </div>
       <table className="tbl" aria-label="Bitfire files"><thead><tr><th>File</th><th>Loads</th><th>Unpacks to</th><th>Bytes</th><th>Name</th><th>Notes</th><th /></tr></thead><tbody>

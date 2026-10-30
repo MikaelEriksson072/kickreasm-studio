@@ -415,9 +415,13 @@ the reference as a patch in `test/helpers/reference.ts`):
     pack.c of Spindle 3.1), and the Spindle script tab lists them for a mounted disk. Checked against disks spin.exe
     and pefchain.exe built (every chunk byte-identical with its file) and the four sides of Mojo.
 29. Bitfire disks (spec 13.5c) are new: `readBitfireDisk` reads the files a Bitfire disk keeps in its own directory on
-    track 18 (the four formats of d64write 0.x to 1.2) and unpacks the ones dali packed (`unpackDali`); the Bitfire
-    script tab lists them, and `d64writeScript` writes the command line that builds the disk. Checked against the
-    reference archive: of 276 419 disks, 1 476 are Bitfire disks, and the files of the 1.x ones unpack.
+    track 18 (the four formats of d64write 0.x to 1.2) and unpacks the ones bitnax (0.x, `unpackBitnax`) and dali
+    (1.x, `unpackDali`) packed; the Bitfire script tab lists them, and `d64writeScript` writes the command line that
+    builds the disk. bitnax is read as lz.c and resident.asm of Bitfire 0.7 have it (the same from 2016), and as
+    Bitfire's first demos (2014-2015, Comaland) pack, with the offsets in another order: a disk takes the order that
+    unpacks more of its files. Checked against the reference archive: of 276 419 disks, 1 476 are Bitfire disks; the
+    files of the 1.x ones unpack, and on the 916 0.x ones 23 466 of 24 836 files do (the rest are not packed, or a few
+    copy from memory before them).
 
 Fixes 3–10 were found by the fast-check fuzz test, which covers more inputs (entries, comments, renames, every override
 kind, every setting, two-file projects) than the prototype harness did. Fix 11 was found while writing the e2e tests,

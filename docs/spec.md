@@ -1424,11 +1424,12 @@ fil efter dess nummer. Det som liknar ett skript mest är kommandoraden till d64
 filerna i den ordning de laddas (`-b`), startprogrammet (`--boot`), sidan (`--side`), dir-arten (`-a`) och vanliga filer
 (`-s`). Bitfire lägger sina filer utanför diskens katalog, i en egen katalog på spår 18, med varje fils laddadress och
 längd. `readBitfireDisk()` (`packages/core/src/c64/bitfire-disk.ts`) läser den och sektorerna i den ordning d64write
-fyller dem. En fil som är packad med dali, Bitfires packare, packas upp. Filnamnen finns inte på disken.
+fyller dem. En fil som är packad med Bitfires packare, bitnax (0.x) eller dali (1.x), packas upp. Filnamnen finns inte
+på disken.
 
 Formatet är d64writes (BSD-licens), och katalogen har ändrats mellan versionerna:
 - **0.x (till och med 0.7, 2020):** 6 byte per fil i 18/18, 18/17 och 18/16: spår, sektor, laddadress och längd − 1.
-  Sidan står i byte `$ff`. Varje fil börjar i en egen sektor. Filerna är packade med bitnax, och det läses inte här.
+  Sidan står i byte `$ff`. Varje fil börjar i en egen sektor. Filerna är packade med bitnax.
 - **1.0 och 1.1 (2022):** 4 byte per fil (laddadress, längd − 1) i 18/18 och 18/17. Sist kommer den första filens spår,
   vilken i ordningen dess sektor är på spåret, dess första byte och sidan (`$fc`–`$ff`).
 - **Efter 1.1:** samma, men de 4 byten står först och laddadressens höga byte är − 1.
@@ -1448,6 +1449,25 @@ inte det formatet.
   längden − 1 utan sin första 0. Talet 256 avslutar strömmen.
 - En fil packad på plats har inget slut. Den slutar där skrivningen når läsningen, och resten är byten som de är.
 
+**bitnax** (`unpackBitnax()`) läses som `lz.c` och `resident.asm` i Bitfire 0.7 (BSD-licens, bara lästa). Strömmen är
+densamma i hela GitHub-historiken, från första incheckningen 2016 till 0.7:
+- Först kommer vart filen packas upp och var uppackningen slutar (2 byte vardera; med `--overlap` bara den första).
+  Bitarna läses uppifrån i en byte, som hämtas när den behövs, mellan de andra byten.
+- En typbit kommer före varje literal (1) och kopia (0), men inte före kopian efter en literal kortare än 256.
+- En literals längd är en 1 och biten för varje bit efter den första, sedan en 0 (256 blir 0). Sedan kommer byten.
+- En kopias längd är 0 för 2. Annars kommer en 1 och sedan varje bit av längd − 1 efter den första, följd av 0, den
+  sista av 1. Längden 257 avslutar strömmen.
+- 2 bitar till ger ett prefix på 3 bitar, och det anger offsetens bitar: 8, 3, 6 eller 10 efter en kopia på 2, annars
+  4, 7, 10 eller 13. Sedan kommer offset − 1. Under 8 bitar är bitarna inverterade, annars kommer de höga bitarna och
+  sedan den låga byten inverterad.
+- En fil packad på plats (standard) slutar vid slutadressen, och resten är byten som de är. En fil som packas upp någon
+  annanstans (`--load-addr`) slutar också där, och efter den kommer slutet.
+- Bitfires första demos (2014–2015, som Comaland, Comaland 100 % och Fantasmolytic) har ingen slutadress, alltid
+  slutet och offseten i en annan ordning: 3, 6, 8 och 10 efter en kopia på 2. En disk har en depacker, så den ordning
+  som packar upp flest filer gäller för hela disken (`oldBitnax`).
+- En kopia från minnet före filens början (packad med en ordbok, `--full-dict`) går inte att packa upp, eftersom det
+  minnet är okänt. Den filen lämnas packad.
+
 En disk räknas som en Bitfire-disk när katalogen på spår 18 har sidbyten och första filen på spår 1, sektor 0, byte 0.
 För 1.x måste katalogsektorernas startpositioner stämma, och för 0.x måste varje fil börja efter den förra. En katalog
 först (efter 1.1 och 1.2, som packar med dali) räknas bara när minst en fil packas upp. Startprogrammet är den post i
@@ -1458,7 +1478,8 @@ den vanliga katalogen som pekar på spår 18. En dir-art är rader som pekar dit
   **Bitfire script**.
 - Bottenpanelens flik **Bitfire script** finns då. Den har en rad per fil: nummer, var den laddas, vart den packas upp,
   storlek (packad → uppackad), ett filnamn (`file02_3800.lz`, påhittat: numret och uppackningsadressen) och
-  anmärkningar (*packed with dali, in place*, *not packed*, var den börjar på disken).
+  anmärkningar (*packed with dali, in place*, *packed with bitnax*, *not packed*, var den börjar på disken). En disk
+  packad som de första demona säger *packed as in 2014–2015* i rubriken.
 - Ett klick på raden öppnar filen som en PRG: uppackad där den packas upp, annars som den laddas. **+** lägger till den.
 - **Copy script** kopierar d64writes kommandorad, med en kommentar per fil ovanför.
 
@@ -1468,9 +1489,24 @@ Wonderland XIV. På 1.x-diskarna packas nästan alla filer upp, till exempel all
 sida 1. Filerna som inte packas upp laddas som de är, som Next Rounds teckentabeller. Ingen Spindle- eller Sparkle-disk
 tas för en Bitfire-disk.
 
-**Test:** `test/bitfire-disk.test.ts`, med diskar och dali-filer som `test/helpers/bitfire-disk.ts` skriver som d64write
-och dali gör. `fixtures/d64/bitfire-demo.d64` är en av dem: demot packat med slut, en tabell som inte är packad och en
-fil packad på plats.
+**Mätt, bitnax:** på de 916 0.x-diskarna (159 olika, räknat efter innehåll) packas 23 466 av 24 836 filer upp (4 483 av
+4 834 på de olika), 20 208 av dem på plats. 653 diskar (102 olika) packas upp helt. 92 diskar (15 olika) är packade som
+de första demona, och där packas 2 323 filer upp. Alla 1 476 Bitfire-diskar läses och packas upp på 9 sekunder. Några
+av diskarna:
+- Comaland sida 1–4: 20 av 22, 21 av 22, 17 av 17 och 42 av 42. På sida 1 är de två som inte packas upp data och en
+  tabell som inte är packade. På sida 2 är det 18 KB tät data på `$6c00` som inte går att läsa som bitnax.
+- The Ghost sida A och B: 17 av 17 och 45 av 45.
+- Eyes sida A och B: 38 av 38 och 29 av 29.
+- 2600: 38 av 39. Den sista är musikrutinen på `$e600`, som inte är packad.
+
+Av filerna som inte packas upp är 12 olika packade med ordbok. Resten ser ut som filer som inte är packade: samplingar,
+tabeller, musik och BASIC-program.
+
+**Test:** `test/bitfire-disk.test.ts`, med diskar, dali-filer och bitnax-filer som `test/helpers/bitfire-disk.ts`
+skriver som d64write, dali och bitnax gör (egna enkla packare, ingen kod från Bitfire). bitnax-testerna täcker literaler
+(också 256 med en typbit efter), kopior med alla 8 offsetbredder, filer packade på plats, för någon annanstans, med
+`--overlap` och som de första demona, och filer som inte är bitnax. `fixtures/d64/bitfire-demo.d64` är en av diskarna:
+demot packat med slut, en tabell som inte är packad och en fil packad på plats.
 
 ### 13.6 Terminal
 

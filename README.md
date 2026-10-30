@@ -48,8 +48,8 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
     jobs back, decrunched, so every chunk opens as a PRG at its address. *Copy script* copies the script as Spin
     reads it (the file names are not on the disk);
   - the files of a Bitfire disk: Bitfire has no load script, as each part loads the next file, but its disk keeps the
-    files in a directory of their own in the order they load. The *Bitfire script* tab lists them, unpacked when dali
-    packed them (Bitfire 1.x), and *Copy script* copies the d64write command line that builds the disk.
+    files in a directory of their own in the order they load. The *Bitfire script* tab lists them, unpacked when bitnax
+    (Bitfire 0.x) or dali (1.x) packed them, and *Copy script* copies the d64write command line that builds the disk.
 - **A deep analysis that works the problems down.** Tick *Deep analysis* in the Problems tab. Every guess (a routine
   nothing traced reaches, a pointer-table target, an interrupt handler) is then traced on trial and kept only when it
   leads to no problem. Calls into ROM are not followed into the RAM below, and `$01` is followed through the stack.

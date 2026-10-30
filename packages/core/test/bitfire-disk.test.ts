@@ -1,11 +1,11 @@
 /* Bitfire disks (c64/bitfire-disk.ts, spec 13.5c). The disks are built the way d64write writes them, and the packed
- * files the way dali writes them (test/helpers/bitfire-disk.ts). The reader was also checked against released Bitfire
- * disks: every file of the 1.x ones unpacks, and the files of the 0.x ones follow each other. */
+ * files the way dali and bitnax write them (test/helpers/bitfire-disk.ts). The reader was also checked against released
+ * Bitfire disks: every file of the 1.x ones unpacks, and of the 0.x ones all but the ones not packed (spec 13.5c). */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { d64writeScript, makeD64, parseD64, readBitfireDisk, sectorsOnTrack, unpackDali } from '../src';
-import { Dali, makeBitfireDisk, packDali, type FakeBitfireFile } from './helpers/bitfire-disk';
+import { d64writeScript, makeD64, parseD64, readBitfireDisk, sectorsOnTrack, unpackBitnax, unpackDali } from '../src';
+import { Bitnax, Dali, makeBitfireDisk, packBitnax, packDali, type FakeBitfireFile } from './helpers/bitfire-disk';
 
 /** the bytes of literals and copies (an offset of 0: the last one again), as a plain decoder makes them */
 function expand(steps: ([number[]] | [number, number])[]): number[] {
@@ -57,6 +57,78 @@ describe('dali, Bitfire 1.x packer', () => {
   });
 });
 
+/** the steps of a bitnax file: a literal of 256 (a type bit after it) and one of 3, longer matches with each of the 4
+ *  offset widths (and of 256), matches of 2 with each of theirs, a literal and a match */
+const naxSteps = (): ([number[]] | [number, number])[] => [
+  [Array.from({ length: 256 }, (_, i) => (i * 5 + 1) & 0xff)], [[9, 8, 7]],
+  [256, 10], [100, 100], [255, 600], [200, 800], [3, 1050], [2, 5], [2, 50], [2, 250], [2, 1020], [[0x41]], [4, 2],
+];
+/** the steps written, with the end after them or not */
+function naxStream(steps: ([number[]] | [number, number])[], end: boolean, old = false): number[] {
+  const w = new Bitnax(old);
+  for (const s of steps) if (s.length === 1) w.literal(s[0]); else w.match(s[0], s[1]);
+  if (end) w.end();
+  return w.out;
+}
+/** a file packed in place for $1000 by hand: the steps, then 40 bytes as they are after the end address */
+function naxInPlace(): { bytes: number[]; plain: number[]; load: number } {
+  const coded = expand(naxSteps()), tail = Array.from({ length: 40 }, (_, i) => (i * 11) & 0xff), stop = 0x1000 + coded.length;
+  const bytes = [0x00, 0x10, stop & 0xff, stop >> 8, ...naxStream(naxSteps(), false), ...tail];
+  return { bytes, plain: [...coded, ...tail], load: stop + tail.length - bytes.length };
+}
+
+describe('bitnax, Bitfire 0.x packer', () => {
+  it('unpacks a file packed in place: literals, matches with each of the 8 offset widths, the rest as it is from the end address', () => {
+    const { bytes, plain, load } = naxInPlace();
+    const u = unpackBitnax(Uint8Array.from(bytes), load);
+    expect(u).toMatchObject({ start: 0x1000, end: 0x1000 + plain.length, inplace: true });
+    expect([...u!.bytes]).toEqual(plain);
+    // another end address: it is not reached where the reading is
+    expect(unpackBitnax(Uint8Array.from([...bytes.slice(0, 2), bytes[2] + 1, ...bytes.slice(3)]), load)).toBeNull();
+  });
+
+  it('unpacks a file for somewhere else (--load-addr): it stops at the end address, before the end', () => {
+    const plain = expand(naxSteps()), stop = 0x1000 + plain.length;
+    const u = unpackBitnax(Uint8Array.from([0x00, 0x10, stop & 0xff, stop >> 8, ...naxStream(naxSteps(), true)]), 0x8000);
+    expect(u).toMatchObject({ start: 0x1000, end: stop, inplace: false });
+    expect([...u!.bytes]).toEqual(plain);
+    // ending with a literal, it reads the end (no end address is checked after a literal)
+    const more: ([number[]] | [number, number])[] = [...naxSteps(), [[1, 2, 3]]], stop2 = stop + 3;
+    const v = unpackBitnax(Uint8Array.from([0x00, 0x10, stop2 & 0xff, stop2 >> 8, ...naxStream(more, true)]), 0x8000);
+    expect([...v!.bytes]).toEqual(expand(more));
+  });
+
+  it('unpacks a file packed with --overlap, and as Bitfire\'s first demos pack: no end address, the end', () => {
+    const plain = expand(naxSteps());
+    for (const old of [false, true]) {
+      const bytes = [0x00, 0x10, ...naxStream(naxSteps(), true, old)];
+      const u = unpackBitnax(Uint8Array.from(bytes), 0x8000, old);
+      expect(u).toMatchObject({ start: 0x1000, end: 0x1000 + plain.length, inplace: false });
+      expect([...u!.bytes]).toEqual(plain);
+      // a byte more after the end, or the offsets in the other order: not this file
+      expect(unpackBitnax(Uint8Array.from([...bytes, 0]), 0x8000, old)).toBeNull();
+      expect(unpackBitnax(Uint8Array.from(bytes), 0x8000, !old)).toBeNull();
+    }
+  });
+
+  it('packs a program in each way the reader unpacks', () => {
+    const demo = [...readFileSync(join(__dirname, '../../../fixtures/prg/raster-demo.prg'))].slice(2);
+    for (const how of ['inplace', 'elsewhere', 'overlap', 'old'] as const) {
+      const { bytes, load } = packBitnax(demo, 0x0801, how);
+      const u = unpackBitnax(Uint8Array.from(bytes), how === 'inplace' ? load : 0xc000, how === 'old');
+      expect(u).toMatchObject({ start: 0x0801, end: 0x0801 + demo.length, inplace: how === 'inplace' });
+      expect([...u!.bytes]).toEqual(demo);
+    }
+  });
+
+  it('is no packed file for other bytes, a match from before where it unpacks to, or an end address before its start', () => {
+    expect(unpackBitnax(new TextEncoder().encode('MIMIR STUDIO READS BITFIRE DISKS'), 0x2000)).toBeNull();
+    expect(unpackBitnax(Uint8Array.from([0x00, 0x10, 0x00, 0x20]), 0x2000)).toBeNull();
+    expect(unpackBitnax(Uint8Array.from([0x00, 0x10, 0x10, 0x10, ...naxStream([[[1, 2]], [2, 5]], true)]), 0x2000)).toBeNull();
+    expect(unpackBitnax(Uint8Array.from([0x00, 0x20, 0x00, 0x10, ...naxStream(naxSteps(), true)]), 0x8000)).toBeNull();
+  });
+});
+
 const offset = (t: number, s: number) => { let n = 0; for (let k = 1; k < t; k++) n += sectorsOnTrack(k); return (n + s) * 256; };
 
 describe('a Bitfire disk', () => {
@@ -78,12 +150,29 @@ describe('a Bitfire disk', () => {
     expect([...d.files[2].unpacked!.bytes]).toEqual(withEnd.plain);
   });
 
-  it('reads the files of format 0.x, each from a sector of its own (bitnax is not unpacked)', () => {
-    const d = readBitfireDisk(makeBitfireDisk('0.x', files))!;
-    expect(d.format).toBe('0.x');
-    expect(d.files.map(f => [f.load, f.track, f.sector])).toEqual([[inplace.load, 1, 0], [0x4000, 1, 4], [0x9000, 1, 16]]);
+  it('reads the files of format 0.x, each from a sector of its own, and unpacks the ones bitnax packed', () => {
+    const nax = naxInPlace(), plain = expand(naxSteps()), stop = 0x1000 + plain.length;
+    const elsewhere = [0x00, 0x10, stop & 0xff, stop >> 8, ...naxStream(naxSteps(), true)];
+    const d = readBitfireDisk(makeBitfireDisk('0.x', [{ load: nax.load, bytes: nax.bytes }, { load: 0x4000, bytes: raw }, { load: 0x9000, bytes: elsewhere }]))!;
+    expect(d).toMatchObject({ format: '0.x', oldBitnax: false });
+    // track 1 is filled every 4th sector: 0, 4, 8 ...; a file of 2 sectors, then 600 bytes in 3
+    expect(nax.bytes.length).toBeGreaterThan(256);
+    expect(d.files.map(f => [f.load, f.track, f.sector])).toEqual([[nax.load, 1, 0], [0x4000, 1, 8], [0x9000, 1, 20]]);
+    expect(d.files.map(f => f.unpacked && [f.unpacked.start, f.unpacked.end, f.unpacked.inplace])).toEqual([[0x1000, 0x1000 + nax.plain.length, true], null, [0x1000, stop, false]]);
+    expect([...d.files[0].unpacked!.bytes]).toEqual(nax.plain);
     expect([...d.files[1].bytes]).toEqual(raw);
-    expect(d.files.every(f => !f.unpacked)).toBe(true);
+    expect([...d.files[2].unpacked!.bytes]).toEqual(plain);
+    const s = d64writeScript(d, 'nax.d64');
+    expect(s).toContain('#   file01_4000.lz   loads at $4000-$4257 (600 bytes), not packed (or bitnax copying from memory before it)');
+    expect(s).toContain(`#   file02_1000.lz   loads at $9000-$${(0x9000 + elsewhere.length - 1).toString(16)} (${elsewhere.length} bytes), unpacks to $1000-$${(stop - 1).toString(16)} (${plain.length} bytes)`);
+  });
+
+  it('unpacks a 0.x disk packed as Bitfire\'s first demos are, with the offsets in the other order', () => {
+    const old = [0x00, 0x10, ...naxStream(naxSteps(), true, true)];
+    const d = readBitfireDisk(makeBitfireDisk('0.x', [{ load: 0x8000, bytes: old }, { load: 0x4000, bytes: raw }, { load: 0x9000, bytes: old }]))!;
+    expect(d.oldBitnax).toBe(true);
+    expect(d.files.map(f => f.unpacked?.end)).toEqual([0x1000 + expand(naxSteps()).length, undefined, 0x1000 + expand(naxSteps()).length]);
+    expect(d64writeScript(d, 'old.d64')[0]).toBe('# d64write command line, rebuilt by Mimir Studio from old.d64 (Bitfire 0.x, packed as in 2014-2015): 3 files on side 1.');
   });
 
   it('follows the sectors past track 17, every 3rd from 1.2 on, and checks where the second directory sector says its first file starts', () => {

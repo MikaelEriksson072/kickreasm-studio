@@ -3,11 +3,12 @@
  * builder, which lists the files in the order they load (`-b`), the boot program (`--boot`), the side (`--side`) and
  * the ordinary files (`-s`). Bitfire keeps its files out of the disk's directory, in a directory of its own on track 18:
  * each file's load address and length, and where the first file of the sector starts. Reading it back, and the sectors
- * in the order d64write fills them, gives every file; one packed with dali, Bitfire's packer, is unpacked.
+ * in the order d64write fills them, gives every file; one packed with Bitfire's packer, bitnax (0.x) or dali (1.x), is
+ * unpacked.
  *
  * The formats are those of d64write (BSD licence), which changed over the versions:
  * - up to 0.7 (2020): 6 bytes a file in 18/18, 18/17 and 18/16 (its track and sector, load address, length - 1), the
- *   side in byte $ff; a file starts in a sector of its own; packed with bitnax, which is not read here;
+ *   side in byte $ff; a file starts in a sector of its own; packed with bitnax;
  * - 1.0 and 1.1 (2022): 4 bytes a file (load address, length - 1) in 18/18 and 18/17, then the first file's track,
  *   its sector's number on the track (the n-th d64write filled) and its first byte, and the side in $fc-$ff;
  * - after 1.1: the same with those 4 bytes first and the load address's high byte - 1;
@@ -21,7 +22,19 @@
  * match (1). Numbers are interlaced Elias gamma (a 0 before each further bit, a 1 at the end), 8 low bits first from 256
  * on; bits come from the top of a byte, read when they are needed. A new offset is a number (its high part + 1) and a
  * byte (7 low bits, then 1 for length 2, else the length - 1 follows without its first 0); 256 ends the stream. A file
- * packed in place has no end: it ends where its writing reaches its reading, the rest being the bytes as they are. */
+ * packed in place has no end: it ends where its writing reaches its reading, the rest being the bytes as they are.
+ *
+ * bitnax (Bitfire 0.x, lz.c and resident.asm of 0.7; the same from 2016 to 0.7) writes where the file unpacks to and
+ * where unpacking ends (2 bytes each; with --overlap only the first), then the stream. Bits come from the top of a byte,
+ * read when they are needed, between the bytes. A type bit comes before each literal (1) and match (0), but not before
+ * the match that follows a literal shorter than 256. A literal's length is a 1 and the bit for each of its bits after
+ * the first, then a 0 (256 is 0); its bytes follow. A match's length is a 0 for 2, else a 1, then each bit of length - 1
+ * after the first, followed by 0, the last by 1 (257 ends the stream). 2 bits more make a prefix of 3 that gives the
+ * offset's bits (after a match of 2: 8, 3, 6 or 10, else 4, 7, 10 or 13); offset - 1 follows, its bits inverted when it
+ * has fewer than 8, else its high bits and then its low byte inverted. A file packed in place (the default) ends at the
+ * end address, the rest being the bytes as they are; one unpacked elsewhere has the end after that. Bitfire's first
+ * demos (2014-2015: Comaland, Fantasmolytic) have no end address, always the end, and the offsets in another order: 3,
+ * 6, 8 and 10 after a match of 2. */
 import type { Addr } from '../types';
 import { parseD64, petsciiName, sectorOffset, sectorsOnTrack } from './d64';
 
@@ -41,7 +54,7 @@ export interface BitfireFile {
   load: Addr; end: Addr; bytes: Uint8Array;
   /** where it starts: the sector, and the byte in it */
   track: number; sector: number; offset: number;
-  /** what it unpacks to (dali); null: not packed with dali, or a bitnax file of Bitfire 0.x */
+  /** what it unpacks to (bitnax for 0.x, else dali); null: not packed, or bitnax that copies from memory before it */
   unpacked: BitfireUnpacked | null;
 }
 
@@ -56,6 +69,8 @@ export interface BitfireDisk {
   boot: string | null; standard: string[];
   /** the lines of a dirart (`-a`), each leading to the boot program or a DEL entry; 0: none */
   dirart: number;
+  /** 0.x: packed as Bitfire's first demos are (2014-2015), bitnax's offsets in another order */
+  oldBitnax: boolean;
 }
 
 const SIZES: Record<number, 35 | 40> = { 174848: 35, 175531: 35, 196608: 40, 197376: 40 };
@@ -115,6 +130,65 @@ export function unpackDali(data: Uint8Array, load: Addr): BitfireUnpacked | null
         if (dst === src) return done();
         state = bit() ? 'match' : 'lit';
       }
+    }
+  } catch { return null; }
+}
+
+/** the bits of a match's offset after each of the 8 prefixes (0-3 after a match of 2 bytes, 4-7 after a longer one): as
+ *  bitnax writes them from 2016, and in the order of Bitfire's first demos (2014-2015) */
+const OFFSET_BITS = { new: [8, 3, 6, 10, 4, 7, 10, 13], old: [3, 6, 8, 10, 4, 7, 10, 13] };
+
+/** A bitnax file unpacked (Bitfire 0.x), read from its place in memory; null when it is not one, or when a match copies
+ *  from memory before where it unpacks to (packed with a dictionary). `old`: packed as Bitfire's first demos are
+ *  (2014-2015), with the offsets in another order. */
+export function unpackBitnax(data: Uint8Array, load: Addr, old = false): BitfireUnpacked | null {
+  // from 2016 the end address follows where it unpacks to, unless it was packed with --overlap
+  return (!old && bitnax(data, load, true, OFFSET_BITS.new)) || bitnax(data, load, false, old ? OFFSET_BITS.old : OFFSET_BITS.new);
+}
+
+function bitnax(data: Uint8Array, load: Addr, withEnd: boolean, offsetBits: number[]): BitfireUnpacked | null {
+  const head = withEnd ? 4 : 2;
+  if (data.length <= head || load + data.length > 0x10000) return null;
+  const mem = new Uint8Array(0x10000);
+  mem.set(data, load);
+  const end = load + data.length, start = data[0] | (data[1] << 8), stop = withEnd ? data[2] | (data[3] << 8) : -1;
+  if (withEnd && stop < start) return null;
+  let src = load + head, dst = start, bits = 0, left = 0;
+  const byte = () => { if (src >= end) throw new RangeError('past the end'); return mem[src++]; };
+  const bit = () => { if (!left) { bits = byte(); left = 8; } return (bits >> --left) & 1; };
+  // a longer match's length - 1: a 1, then each bit followed by 0, the last by 1; 8 bits (0) end the stream
+  const longer = () => { let n = 1; do n = ((n << 1) | bit()) & 0xff; while (!bit()); return n; };
+  const upTo = (e: number, inplace: boolean): BitfireUnpacked => ({ start, end: e, bytes: mem.slice(start, e), inplace });
+  // at the end address: packed in place (the reading is there too, the rest of the file is the rest as it is), or
+  // unpacked elsewhere with at most the end left (a type bit and the match that ends, 18 bits; it is not read, and the
+  // writing may have reached it)
+  const atStop = () => src === stop ? upTo(end, true) : end - src <= 3 ? upTo(stop, false) : null;
+  try {
+    for (let typed = true; ;) {
+      if (typed && bit()) {
+        // a literal: a 1, then a bit after each 1 until a 0 (256 is 0)
+        let n = 1;
+        while (bit()) n = ((n << 1) | bit()) & 0xff;
+        for (let i = 0; i < (n || 256); i++, dst++) { if (dst > 0xffff) return null; mem[dst] = byte(); }
+        // a match follows, but after 256 a type bit (and the end is checked, by its high byte when its low one is 0)
+        typed = !n;
+        if (typed && withEnd && !(stop & 0xff) && dst >> 8 === stop >> 8) return dst === stop ? atStop() : null;
+        continue;
+      }
+      // a match: its length - 1 (1 after a 0), the prefix's 2 bits more, the offset's bits and, from 8, its low byte
+      const long = bit(), n = long ? longer() : 1;
+      // the end, with all of the file read (not checked against the end address: with --relocate-to bitnax moves that
+      // twice, past the end)
+      if (!n) return src === end ? upTo(dst, false) : null;
+      const w = offsetBits[(long << 2) | (bit() << 1) | bit()];
+      let v = 0;
+      for (let i = 0; i < (w & 7); i++) v = (v << 1) | bit();
+      // the offset - 1: its bits inverted under 8, else its high bits and its low byte inverted
+      const offset = (w < 8 ? ~v & ((1 << w) - 1) : (v << 8) | (~byte() & 0xff)) + 1;
+      if (offset > dst - start) return null;
+      for (let i = 0; i <= n; i++, dst++) { if (dst > 0xffff) return null; mem[dst] = mem[dst - offset]; }
+      if (dst === stop) return atStop();
+      typed = true;
     }
   } catch { return null; }
 }
@@ -200,6 +274,13 @@ export function readBitfireDisk(image: Uint8Array): BitfireDisk | null {
       files.push({ n, load: e.load, end: e.load + e.len, bytes, track: first.track, sector: first.sector, offset: pos & 0xff, unpacked: format === '0.x' ? null : unpackDali(bytes, e.load) });
       pos += format === '0.x' ? Math.ceil(e.len / 256) * 256 : e.len;
     }
+    // 0.x: one depacker for the disk, the order of the offsets that unpacks more of its files
+    let oldBitnax = false;
+    if (format === '0.x') {
+      const [now, then] = [false, true].map(old => files.map(f => unpackBitnax(f.bytes, f.load, old)));
+      oldBitnax = then.filter(Boolean).length > now.filter(Boolean).length;
+      files.forEach((f, i) => { f.unpacked = (oldBitnax ? then : now)[i]; });
+    }
     // the directory: the boot program on track 18, other files; a dirart's lines lead to the boot program or are DEL,
     // with 0 blocks
     const img = parseD64(image);
@@ -211,7 +292,7 @@ export function readBitfireDisk(image: Uint8Array): BitfireDisk | null {
     return {
       score: files.filter(f => f.unpacked).length,
       disk: {
-        format, side, files, header: text(0x90, 16), id: text(0xa2, 5), boot: boot?.name ?? null, dirart: art > 1 ? art : 0,
+        format, side, files, header: text(0x90, 16), id: text(0xa2, 5), boot: boot?.name ?? null, dirart: art > 1 ? art : 0, oldBitnax,
         standard: img.files.filter(f => f.type !== 'DEL' && f.track !== 18 && f.blocks > 0).map(f => f.name),
       },
     };
@@ -233,14 +314,14 @@ const shellName = (name: string) => { const s = name.toLowerCase(); return /^[\w
 export function d64writeScript(disk: BitfireDisk, name: string): string[] {
   const n = disk.files.length;
   const out = [
-    `# d64write command line, rebuilt by Mimir Studio from ${name} (${BITFIRE_VERSION[disk.format]}): ${n} file${n === 1 ? '' : 's'} on side ${disk.side}.`,
+    `# d64write command line, rebuilt by Mimir Studio from ${name} (${BITFIRE_VERSION[disk.format]}${disk.oldBitnax ? ', packed as in 2014-2015' : ''}): ${n} file${n === 1 ? '' : 's'} on side ${disk.side}.`,
     '# Bitfire has no load script: a part loads the next file (link_load_next_comp) or one by its number, so this is the',
     '# order they load in. The file names are made up: each is the file as it is on the disk, named after its number and',
-    '# where it unpacks to (or loads, when it is not packed with dali).',
+    `# where it unpacks to (or loads, when it is not packed with ${disk.format === '0.x' ? 'bitnax' : 'dali'}).`,
   ];
   for (const f of disk.files) {
     const u = f.unpacked;
-    const what = u ? `unpacks to $${hx(u.start, 4)}-$${hx(u.end - 1, 4)} (${u.end - u.start} bytes)` : disk.format === '0.x' ? 'packed with bitnax or not packed (not read here)' : 'not packed';
+    const what = u ? `unpacks to $${hx(u.start, 4)}-$${hx(u.end - 1, 4)} (${u.end - u.start} bytes)` : disk.format === '0.x' ? 'not packed (or bitnax copying from memory before it)' : 'not packed';
     out.push(`#   ${bitfireFileName(f).padEnd(16)} loads at $${hx(f.load, 4)}-$${hx(f.end - 1, 4)} (${f.bytes.length} bytes), ${what}`);
   }
   if (disk.dirart) out.push(`# The directory is a dirart of ${disk.dirart} lines (dirart.prg and boot.prg are made-up names).`);
