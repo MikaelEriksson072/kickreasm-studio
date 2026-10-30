@@ -63,7 +63,7 @@ export async function readQuicksave(files: string[], opts: { zeroPage?: boolean 
 export const KEPT_QUICKSAVES = 5;
 
 const entryId = z.string().regex(/^[a-z0-9]{1,32}$/);
-const indexSchema = z.array(z.object({ id: entryId, name: z.string().min(1).max(80), saved: z.number(), size: z.number().int().min(0) })).max(64);
+const indexSchema = z.array(z.object({ id: entryId, name: z.string().min(1).max(80), saved: z.number(), size: z.number().int().min(0), favourite: z.boolean().optional() })).max(256);
 
 /** a quicksave's name as it starts: `quicksave 2026-10-29 12:43:30` (when VICE saved it, local time) */
 export function quicksaveName(saved: number): string {
@@ -74,13 +74,16 @@ export function quicksaveName(saved: number): string {
 /** a name as a file name: what Windows does not allow in one becomes `-` */
 export const quicksaveFileName = (name: string): string => `${name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-').replace(/[. ]+$/, '') || 'quicksave'}.vsf`; // eslint-disable-line no-control-regex
 
+const gone = `That quicksave is no longer kept (only the newest ${KEPT_QUICKSAVES} and the favourites are)`;
+
 /** a whole snapshot (VICE writes it in pieces: one that does not parse yet is not one) */
 const whole = (bytes: Uint8Array) => { if (!isVsf(bytes)) return false; try { parseVsf(bytes); return true; } catch { return false; } };
 
 /**
  * The newest quicksaves VICE wrote, kept in a folder of the app's (`<user data>/quicksaves`, with `index.json`): each new
  * one is copied there with a name the user can change, so the next Alt+F11 does not take it. The newest
- * KEPT_QUICKSAVES stay; one saved to a folder of the user's stays there. One thing at a time, in order.
+ * KEPT_QUICKSAVES stay, and the favourites besides them until they are favourites no more; one saved to a folder of the
+ * user's stays there. One thing at a time, in order.
  */
 export class QuicksaveHistory {
   private queue: Promise<unknown> = Promise.resolve();
@@ -100,10 +103,11 @@ export class QuicksaveHistory {
     await writeFile(join(this.dir, 'index.json'), JSON.stringify(list, null, 1));
   }
 
-  /** the kept quicksaves, the newest first */
+  /** the kept quicksaves, the favourites among them, the newest first */
   list(): Promise<QuicksaveEntry[]> { return this.run(() => this.read()); }
 
-  /** Keep the quicksave VICE wrote at `path` at `saved` (once: the same save again is not a new one). */
+  /** Keep the quicksave VICE wrote at `path` at `saved` (once: the same save again is not a new one). Of the others the
+   *  newest `keep` stay, and every favourite. */
   add(path: string, saved: number): Promise<QuicksaveEntry[]> {
     return this.run(async () => {
       const list = await this.read();
@@ -117,10 +121,12 @@ export class QuicksaveHistory {
       const id = `${Math.round(saved).toString(36)}${Math.random().toString(36).slice(2, 6)}`.toLowerCase().replace(/[^a-z0-9]/g, '');
       await mkdir(this.dir, { recursive: true });
       await writeFile(this.file(id), bytes);
-      const next = [{ id, name: quicksaveName(saved), saved, size: bytes.length }, ...list].sort((a, b) => b.saved - a.saved);
-      for (const old of next.slice(this.keep)) await rm(this.file(old.id), { force: true });
-      await this.write(next.slice(0, this.keep));
-      return next.slice(0, this.keep);
+      const all: QuicksaveEntry[] = [{ id, name: quicksaveName(saved), saved, size: bytes.length }, ...list].sort((a, b) => b.saved - a.saved);
+      const drop = new Set(all.filter(e => !e.favourite).slice(this.keep).map(e => e.id));
+      for (const old of drop) await rm(this.file(old), { force: true });
+      const next = all.filter(e => !drop.has(e.id));
+      await this.write(next);
+      return next;
     });
   }
 
@@ -132,11 +138,23 @@ export class QuicksaveHistory {
     });
   }
 
+  /** Make the kept quicksave a favourite, which stays, or one no more: then it is one of the others again, and goes when
+   *  VICE saves a new quicksave if it is not among the newest `keep` of them (not before). */
+  favourite(id: string, on: boolean): Promise<QuicksaveEntry[]> {
+    return this.run(async () => {
+      const list = await this.read();
+      if (!list.some(e => e.id === id)) throw new Error(gone);
+      const next = list.map(e => (e.id !== id ? e : on ? { ...e, favourite: true } : { id: e.id, name: e.name, saved: e.saved, size: e.size }));
+      await this.write(next);
+      return next;
+    });
+  }
+
   /** the kept quicksave: its entry and bytes */
   get(id: string): Promise<{ entry: QuicksaveEntry; bytes: Uint8Array }> {
     return this.run(async () => {
       const entry = (await this.read()).find(e => e.id === id);
-      if (!entry) throw new Error('That quicksave is no longer kept (only the newest 5 are)');
+      if (!entry) throw new Error(gone);
       return { entry, bytes: new Uint8Array(await readFile(this.file(id))) };
     });
   }

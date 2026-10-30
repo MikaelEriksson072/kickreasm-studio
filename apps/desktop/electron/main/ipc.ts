@@ -17,7 +17,7 @@ import { charRomFiles, readCharRom } from './chargen';
 import { openC64File } from '@mimir/core';
 import { openedPrg } from './project-fs';
 import {
-  buildSchema, diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectOpenSchema, projectSaveSchema, quicksaveEntrySchema, quicksaveRenameSchema, quicksaveSaveSchema,
+  buildSchema, diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectOpenSchema, projectSaveSchema, quicksaveEntrySchema, quicksaveFavouriteSchema, quicksaveRenameSchema, quicksaveSaveSchema,
   quicksaveSchema, runSchema, terminalOpenSchema, unpackSchema, toolchainSettingsSchema, viceAttachSchema, viceCommandSchema,
 } from './schemas';
 
@@ -165,6 +165,7 @@ export function registerIpc(deps: IpcDeps): void {
     return { found: true, path: history.file(req.id), saved: entry.saved, files: [openedPrg(openC64File(quicksaveFileName(entry.name), bytes, { zeroPage: req.zeroPage }))] };
   });
   handle(CHANNELS.viceQuicksaveRename, quicksaveRenameSchema, req => history.rename(req.id, req.name));
+  handle(CHANNELS.viceQuicksaveFavourite, quicksaveFavouriteSchema, req => history.favourite(req.id, req.on));
   handle(CHANNELS.viceQuicksaveSave, quicksaveSaveSchema, async (req, e): Promise<FileSaveResult | null> => {
     const { entry, bytes } = await history.get(req.id);
     const win = windowOf(e.sender), start = recent.folder('snapshot'), file = quicksaveFileName(entry.name);

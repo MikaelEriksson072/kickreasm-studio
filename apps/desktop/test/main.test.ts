@@ -11,7 +11,7 @@ import { assertEntryName, PathPolicy } from '../electron/main/paths';
 import { bringOldSettings } from '../electron/main/migrate';
 import { RecentFolders } from '../electron/main/recent';
 import { bundledExomizer, bundledUnp64, defaultToolchainSettings, SettingsStore } from '../electron/main/settings';
-import { diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectSchema, quicksaveEntrySchema, quicksaveRenameSchema, runSchema, serializedProjectSchema } from '../electron/main/schemas';
+import { diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectSchema, quicksaveEntrySchema, quicksaveFavouriteSchema, quicksaveRenameSchema, runSchema, serializedProjectSchema } from '../electron/main/schemas';
 import { buildWithKickAssembler, packWithExomizer } from '../electron/main/toolchain';
 import { QUICKSAVE_FILE, QuicksaveHistory, QuicksaveWatcher, quicksaveFileName, quicksaveFiles, quicksaveInfo, quicksaveName, readQuicksave, viceConfigDir } from '../electron/main/quicksave';
 import { readDiskImage, readPrgFiles, readProjectFile, writeProjectFile } from '../electron/main/project-fs';
@@ -22,7 +22,7 @@ const toolchain = (patch: Partial<ToolchainSettings> = {}): ToolchainSettings =>
 
 describe('IPC contract', () => {
   it('has exactly the channels of spec 13.4', () => {
-    expect(Object.values(CHANNELS).sort()).toEqual(['disk:open', 'export:write', 'fs:changed', 'prg:open', 'project:open', 'project:save', 'settings:get', 'settings:set', 'terminal:open', 'toolchain:build', 'toolchain:identify', 'toolchain:pack', 'toolchain:run', 'toolchain:unpack', 'vice:attach', 'vice:command', 'file:save', 'vice:quicksave', 'vice:quicksave-info', 'vice:quicksaves', 'vice:quicksave-open', 'vice:quicksave-rename', 'vice:quicksave-save', 'vice:quicksaved', 'vice:chargen'].sort());
+    expect(Object.values(CHANNELS).sort()).toEqual(['disk:open', 'export:write', 'fs:changed', 'prg:open', 'project:open', 'project:save', 'settings:get', 'settings:set', 'terminal:open', 'toolchain:build', 'toolchain:identify', 'toolchain:pack', 'toolchain:run', 'toolchain:unpack', 'vice:attach', 'vice:command', 'file:save', 'vice:quicksave', 'vice:quicksave-info', 'vice:quicksaves', 'vice:quicksave-open', 'vice:quicksave-rename', 'vice:quicksave-save', 'vice:quicksave-favourite', 'vice:quicksaved', 'vice:chargen'].sort());
   });
 });
 
@@ -214,6 +214,38 @@ describe('VICE quicksave snapshots', () => {
     expect(quicksaveName(t0)).toBe('quicksave 2026-10-29 12:43:30');
     expect(quicksaveEntrySchema.safeParse({ id: '../x' }).success).toBe(false);
     expect(quicksaveRenameSchema.safeParse({ id: 'abc', name: '   ' }).success).toBe(false);
+  });
+
+  it('keeps a favourite when VICE saves newer ones; one that is no favourite now goes like the others, at the next save', async () => {
+    const vice = tmp(), dir = join(tmp(), 'quicksaves'), qs = join(vice, 'C64SC.vsf');
+    writeFileSync(qs, vsf());
+    const h = new QuicksaveHistory(dir);
+    const t0 = new Date(2026, 9, 30, 9, 0, 0).getTime(), at = (i: number) => t0 + i * 1000;
+    const [first] = await h.add(qs, at(0));
+    expect((await h.favourite(first.id, true)).find(e => e.id === first.id)).toMatchObject({ favourite: true });
+    for (let i = 1; i <= 7; i++) await h.add(qs, at(i));
+    // the favourite and the newest 5 of the others
+    let list = await h.list();
+    expect(list.map(e => e.saved)).toEqual([7, 6, 5, 4, 3, 0].map(at));
+    expect(list.filter(e => e.favourite).map(e => e.id)).toEqual([first.id]);
+    expect(readdirSync(dir).filter(f => f.endsWith('.vsf'))).toHaveLength(6);
+    // kept after a restart, with its name
+    await h.rename(first.id, 'title screen');
+    expect((await new QuicksaveHistory(dir).list()).find(e => e.id === first.id)).toMatchObject({ name: 'title screen', favourite: true });
+    // no favourite now: still there until VICE saves a new one, then it goes, being older than the newest 5
+    list = await h.favourite(first.id, false);
+    expect(list).toHaveLength(6);
+    expect(list.find(e => e.id === first.id)).not.toHaveProperty('favourite');
+    list = await h.add(qs, at(8));
+    expect(list.map(e => e.saved)).toEqual([8, 7, 6, 5, 4].map(at));
+    expect(existsSync(h.file(first.id))).toBe(false);
+    await expect(h.favourite(first.id, true)).rejects.toThrow(/no longer kept \(only the newest 5 and the favourites are\)/);
+    // a newer one made a favourite and back stays: it is among the newest 5
+    expect((await h.favourite(list[1].id, true)).filter(e => e.favourite)).toHaveLength(1);
+    expect(await h.favourite(list[1].id, false)).toHaveLength(5);
+    expect(await h.add(qs, at(9))).toHaveLength(5);
+    expect(quicksaveFavouriteSchema.safeParse({ id: 'abc', on: true }).success).toBe(true);
+    expect(quicksaveFavouriteSchema.safeParse({ id: 'abc' }).success).toBe(false);
   });
 });
 

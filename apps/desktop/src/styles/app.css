@@ -761,6 +761,10 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .qs-name { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 6px; border: 0; border-radius: 6px; background: none; color: var(--fg); text-align: left; cursor: pointer; font: inherit; }
 .qs-name:hover, .qs-name:focus-visible { background: var(--row-hover); }
 .qs-name-text { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+/* a favourite's star is filled, and stays gold under the mouse */
+.icon-btn.qs-fav.on, .qs-fav-head { color: var(--warn); }
+.qs-fav.on .icon, .qs-fav-head { fill: currentColor; }
+.qs-fav-head { vertical-align: -1px; margin-right: 4px; }
 .qs-name-edit { flex: 1; min-width: 0; height: 26px; margin: 3px 0; padding: 0 6px; border: 1px solid var(--accent); border-radius: 6px; background: var(--editor); color: var(--fg); font: 12.5px var(--font-ui); outline: none; }
 
 /* the Graphics tab's Save menu */

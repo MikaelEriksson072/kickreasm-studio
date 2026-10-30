@@ -52,9 +52,11 @@ interface QuicksaveProps {
   /** each new quicksave opens by itself */
   follow: boolean;
   onOpen: () => void; onFollow: (v: boolean) => void;
-  /** the newest quicksaves the app keeps, the newest first: open one, name it, save it in a folder */
+  /** the quicksaves the app keeps (the newest, and the favourites), the newest first: open one, name it, save it in a
+   *  folder, make it a favourite (or one no more) */
   kept: QuicksaveEntry[];
   onOpenKept: (q: QuicksaveEntry) => void; onRenameKept: (q: QuicksaveEntry, name: string) => void; onSaveKept: (q: QuicksaveEntry) => void;
+  onFavouriteKept: (q: QuicksaveEntry, on: boolean) => void;
 }
 
 export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpen, onAdd, onDemo, onRemoveFile, onSetStart, disk, onMount, onEject, onShowSpindle, onOpenFromDisk, packing, bmSel, onBmSelect, onBmGo, onBmAdd, onBmEdit, onBmDelete, bmEditing, pack, quicksave, patches }: SidebarProps) {
@@ -153,30 +155,54 @@ const savedText = (ms: number) => {
   return d.toDateString() === new Date().toDateString() ? `today ${d.toLocaleTimeString()}` : d.toLocaleString();
 };
 
-/** The newest quicksaves the app keeps: a click on a name opens it, the pencil names it (Enter keeps the name, Esc does
- *  not), the arrow saves it to a folder. */
-function KeptQuicksaves({ kept, onOpenKept, onRenameKept, onSaveKept }: Pick<QuicksaveProps, 'kept' | 'onOpenKept' | 'onRenameKept' | 'onSaveKept'>) {
+type KeptProps = Pick<QuicksaveProps, 'onOpenKept' | 'onRenameKept' | 'onSaveKept' | 'onFavouriteKept'>;
+
+/** The quicksaves the app keeps: the favourites, then the newest others. A click on a name opens one, the star makes it
+ *  a favourite (or one no more), the pencil names it (Enter keeps the name, Esc does not), the arrow saves it to a
+ *  folder. */
+function KeptQuicksaves({ kept, ...on }: KeptProps & { kept: QuicksaveEntry[] }) {
+  const favourites = kept.filter(q => q.favourite), newest = kept.filter(q => !q.favourite);
+  return (
+    <>
+      {favourites.length > 0 && (
+        <div className="qs-kept">
+          <div className="qs-kept-head small muted"><Icon name="star" size={12} className="qs-fav-head" />Favourites, always kept</div>
+          <QuicksaveRows label="Favourite VICE quicksaves" list={favourites} {...on} />
+        </div>
+      )}
+      {newest.length > 0 && (
+        <div className="qs-kept">
+          <div className="qs-kept-head small muted">The newest {newest.length === 1 ? 'quicksave' : `${newest.length} quicksaves`}, kept here</div>
+          <QuicksaveRows label="Kept VICE quicksaves" list={newest} {...on} />
+          <p className="side-hint">The newest 5 stay here; an older one goes when VICE saves a new one, unless it is a favourite (the star) or you have saved it.</p>
+        </div>
+      )}
+    </>
+  );
+}
+
+function QuicksaveRows({ label, list, onOpenKept, onRenameKept, onSaveKept, onFavouriteKept }: KeptProps & { label: string; list: QuicksaveEntry[] }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [name, setName] = useState('');
   const done = (q: QuicksaveEntry, keep: boolean) => { if (keep) onRenameKept(q, name); setEditing(null); };
   return (
-    <div className="qs-kept">
-      <div className="qs-kept-head small muted">The newest {kept.length === 1 ? 'quicksave' : `${kept.length} quicksaves`}, kept here</div>
-      <div role="list" aria-label="Kept VICE quicksaves">
-        {kept.map(q => (
-          <div key={q.id} role="listitem" className="qs-row">
-            {editing === q.id
-              ? <input className="qs-name-edit" aria-label={`Name of the quicksave ${q.name}`} value={name} autoFocus maxLength={80} spellCheck={false}
-                  onFocus={e => e.currentTarget.select()} onChange={e => setName(e.target.value)} onBlur={() => done(q, true)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); done(q, true); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(q, false); } }} />
-              : <button className="qs-name" title={`Open "${q.name}" as a new project (Ctrl+Z goes back to this one)\nSaved by VICE ${savedText(q.saved)}`} onClick={() => onOpenKept(q)}>
-                  <span className="qs-name-text">{q.name}</span><span className="muted small">{savedText(q.saved)}</span></button>}
-            <button className="icon-btn" title="Name it" aria-label={`Rename the quicksave ${q.name}`} onClick={() => { setName(q.name); setEditing(q.id); }}><Icon name="pencil" size={13} /></button>
-            <button className="icon-btn" title="Save it in a folder of your own (a .vsf named as it is)" aria-label={`Save the quicksave ${q.name}`} onClick={() => onSaveKept(q)}><Icon name="download" size={13} /></button>
-          </div>
-        ))}
-      </div>
-      <p className="side-hint">The newest 5 stay here; an older one goes when VICE saves a new one, unless you have saved it.</p>
+    <div role="list" aria-label={label}>
+      {list.map(q => (
+        <div key={q.id} role="listitem" className="qs-row">
+          {editing === q.id
+            ? <input className="qs-name-edit" aria-label={`Name of the quicksave ${q.name}`} value={name} autoFocus maxLength={80} spellCheck={false}
+                onFocus={e => e.currentTarget.select()} onChange={e => setName(e.target.value)} onBlur={() => done(q, true)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); done(q, true); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(q, false); } }} />
+            : <button className="qs-name" title={`Open "${q.name}" as a new project (Ctrl+Z goes back to this one)\nSaved by VICE ${savedText(q.saved)}`} onClick={() => onOpenKept(q)}>
+                <span className="qs-name-text">{q.name}</span><span className="muted small">{savedText(q.saved)}</span></button>}
+          <button className={cx('icon-btn qs-fav', q.favourite && 'on')} aria-pressed={!!q.favourite}
+            title={q.favourite ? 'A favourite: it stays when VICE saves new ones. Click to take the star off' : 'Make it a favourite: it stays when VICE saves new ones'}
+            aria-label={q.favourite ? `Remove the quicksave ${q.name} from the favourites` : `Add the quicksave ${q.name} to the favourites`}
+            onClick={() => onFavouriteKept(q, !q.favourite)}><Icon name="star" size={13} /></button>
+          <button className="icon-btn" title="Name it" aria-label={`Rename the quicksave ${q.name}`} onClick={() => { setName(q.name); setEditing(q.id); }}><Icon name="pencil" size={13} /></button>
+          <button className="icon-btn" title="Save it in a folder of your own (a .vsf named as it is)" aria-label={`Save the quicksave ${q.name}`} onClick={() => onSaveKept(q)}><Icon name="download" size={13} /></button>
+        </div>
+      ))}
     </div>
   );
 }

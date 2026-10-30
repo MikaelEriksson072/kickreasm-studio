@@ -31,6 +31,7 @@ const api: KrApi = {
   openQuicksaveEntry: req => invoke(CHANNELS.viceQuicksaveOpen, req),
   renameQuicksave: req => invoke(CHANNELS.viceQuicksaveRename, req),
   saveQuicksave: req => invoke(CHANNELS.viceQuicksaveSave, req),
+  favouriteQuicksave: req => invoke(CHANNELS.viceQuicksaveFavourite, req),
   charRom: () => invoke(CHANNELS.viceCharRom),
   onQuicksave: cb => {
     if (typeof cb !== 'function') throw new TypeError('onQuicksave expects a function');

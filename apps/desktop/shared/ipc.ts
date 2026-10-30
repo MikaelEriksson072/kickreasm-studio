@@ -26,6 +26,7 @@ export const CHANNELS = {
   viceQuicksaveOpen: 'vice:quicksave-open',
   viceQuicksaveRename: 'vice:quicksave-rename',
   viceQuicksaveSave: 'vice:quicksave-save',
+  viceQuicksaveFavourite: 'vice:quicksave-favourite',
   viceCharRom: 'vice:chargen',
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
@@ -160,11 +161,14 @@ export interface QuicksaveInfo { found: boolean; path: string; saved?: number }
 export type CharRomResult = { found: false; path: string } | { found: true; path: string; bytes: Uint8Array };
 /** main -> renderer: VICE wrote a new quicksave (it is in the list of the newest already) */
 export interface QuicksaveEvent { path: string; saved: number }
-/** one of the newest quicksaves the app keeps (13.7b): a name the user can change, when VICE saved it, its size */
-export interface QuicksaveEntry { id: string; name: string; saved: number; size: number }
+/** one of the quicksaves the app keeps (13.7b): a name the user can change, when VICE saved it, its size; `favourite`:
+ *  it stays when VICE saves newer ones */
+export interface QuicksaveEntry { id: string; name: string; saved: number; size: number; favourite?: boolean }
 /** the kept quicksave `id`, opened like a snapshot from Open PRG */
 export interface QuicksaveEntryRequest { id: string; zeroPage?: boolean }
 export interface QuicksaveRenameRequest { id: string; name: string }
+/** the kept quicksave `id` made a favourite (`on`), or one no more */
+export interface QuicksaveFavouriteRequest { id: string; on: boolean }
 
 export interface KrApi {
   openProject(req?: ProjectOpenRequest): Promise<ProjectOpenResult | null>;
@@ -186,12 +190,13 @@ export interface KrApi {
   setSettings(patch: Partial<ToolchainSettings>): Promise<ToolchainSettings>;
   openQuicksave(req?: QuicksaveRequest): Promise<QuicksaveResult>;
   quicksaveInfo(): Promise<QuicksaveInfo>;
-  /** the newest quicksaves the app keeps, the newest first */
+  /** the quicksaves the app keeps (the newest, and the favourites), the newest first */
   quicksaves(): Promise<QuicksaveEntry[]>;
   openQuicksaveEntry(req: QuicksaveEntryRequest): Promise<QuicksaveResult>;
   renameQuicksave(req: QuicksaveRenameRequest): Promise<QuicksaveEntry[]>;
   /** a save dialog: a copy of the kept quicksave in a folder of the user's; null: cancelled */
   saveQuicksave(req: { id: string }): Promise<FileSaveResult | null>;
+  favouriteQuicksave(req: QuicksaveFavouriteRequest): Promise<QuicksaveEntry[]>;
   /** VICE's character ROM, for drawing screens in the Graphics tab */
   charRom(): Promise<CharRomResult>;
   /** Subscribe to new VICE quicksaves; returns an unsubscribe function. */

@@ -1297,10 +1297,11 @@ Med `-binarymonitor` (TCP 6502) kan appen: sätta brytpunkter från listningen, 
 | `toolchain:pack` | renderer → main | `{ files: { name, prg }[], prefs: PackPrefs }` → `{ ok, output, argv, dir, name?, path?, prg?, packed, report, check, error? }` (13.8) |
 | `vice:quicksave` | renderer → main | `{ zeroPage? }` → `{ found, path, saved?, files? }`: VICE:s nyaste quicksave öppnad som snapshot (13.7b) |
 | `vice:quicksave-info` | renderer → main | → `{ found, path, saved? }`: finns det en quicksave och när sparades den |
-| `vice:quicksaves` | renderer → main | → `{ id, name, saved, size }[]`: de nyaste quicksavesen appen sparat, den nyaste först (13.7b) |
+| `vice:quicksaves` | renderer → main | → `{ id, name, saved, size, favourite? }[]`: quicksavesen appen sparat (de nyaste och favoriterna), den nyaste först (13.7b) |
 | `vice:quicksave-open` | renderer → main | `{ id, zeroPage? }` → som `vice:quicksave`: en sparad quicksave öppnad som snapshot |
 | `vice:quicksave-rename` | renderer → main | `{ id, name }` → listan: ett nytt namn på en sparad quicksave |
 | `vice:quicksave-save` | renderer → main | `{ id }` → `{ path }` eller `null`: en sparad quicksave kopierad dit användaren väljer i en spara-dialog |
+| `vice:quicksave-favourite` | renderer → main | `{ id, on }` → listan: en sparad quicksave gjord till favorit, eller inte längre |
 | `vice:chargen` | renderer → main | → `{ found, path, bytes? }`: C64-tecken-ROM:en (4 KB) ur den VICE som står i inställningarna, för skärmar i Graphics (14.5); sökvägen kommer aldrig från renderaren |
 | `vice:quicksaved` | main → renderer | `{ path, saved }`: VICE skrev en ny quicksave |
 | `file:save` | renderer → main | `{ name, bytes, title? }` → `{ path }` med en spara-dialog (`null` om den avbryts) |
@@ -1470,10 +1471,15 @@ filerna i VICE:s mapp, och den nyaste av dem gäller (`electron/main/quicksave.t
     kommer också med, liksom den i en fil som just valts i inställningarna.
   - **Vad som tas med:** samma sparning (samma ändringstid) tas bara med en gång. En fil som ännu inte är en hel
     snapshot läses igen strax efter och hoppas annars över.
-  - **Den sjätte:** när en sjätte kommer tas den äldsta bort, med sin fil.
+  - **Den sjätte:** när en sjätte kommer tas den äldsta bort, med sin fil. Favoriterna räknas inte.
+  - **Favoriter:** stjärnan på en rad gör den till favorit (`favourite` i `index.json`). En favorit tas aldrig bort när
+    VICE sparar nya, och de 5 nyaste räknas bland de andra. Tar man bort stjärnan blir den en av de andra igen. Den finns
+    kvar tills VICE sparar nästa quicksave, och tas då bort om den inte är bland de 5 nyaste. Toasten säger det.
   - **Namn:** en quicksave heter först `quicksave 2026-10-29 12:43:30`, alltså när VICE sparade den.
-  - **I Explorer** listar *VICE quicksave* dem under knappen, den nyaste först, med namn och tid:
+  - **I Explorer** listar *VICE quicksave* dem under knappen, den nyaste först, med namn och tid. Favoriterna står i en
+    egen lista, *Favourites, always kept*, över de nyaste:
     - ett klick på namnet öppnar den som ett nytt projekt, som F9 (Ctrl+Z går tillbaka). Filen heter som namnet;
+    - stjärnan gör den till favorit, eller tar bort den ur favoriterna (fylld och guld för en favorit);
     - pennan byter namnet (Enter behåller det nya, Esc inte);
     - pilen sparar en kopia i en mapp man väljer i en spara-dialog, som `<namn>.vsf`. Tecken som Windows inte tillåter
       i filnamn blir `-`, och dialogen öppnas i den mapp en quicksave sparades i senast.
@@ -1482,11 +1488,13 @@ filerna i VICE:s mapp, och den nyaste av dem gäller (`electron/main/quicksave.t
 **Test:** `apps/desktop/test/main.test.ts` täcker mapparna per system, den nyaste filen, en fil som saknas och en som inte
 är en snapshot, bevakaren (en rapport per ny fil) och de sparade: fem kvar med den äldstas fil borttagen, samma sparning
 en gång, namn som finns kvar efter omstart, en halvskriven fil som inte tas med, och id som inte går att använda som
-sökväg. E2e-testet pekar inställningen på en fil i testets egen mapp (testmiljöns `settings.json` gör det redan, så
+sökväg. Favoriterna testas för sig: en favorit finns kvar efter sju nyare och efter omstart. Utan stjärna finns den kvar
+tills nästa sparning och tas då bort, och en nyare utan stjärna stannar bland de 5. E2e-testet pekar inställningen på en fil i testets egen mapp (testmiljöns `settings.json` gör det redan, så
 användarens VICE-mapp läses aldrig) och kopierar dit `fixtures/vsf/raster-demo.vsf` från x64sc 3.10. Den öppnas av sig
 själv, Ctrl+Z och Ctrl+Y växlar projekt, och med *Open each new one* urkryssad meddelas en ny quicksave och F9 öppnar den.
 Båda finns sedan i listan. Den nyaste döps till *intro* och sparas som `intro.vsf` med samma bytes, och den äldre öppnas
-med ett klick.
+med ett klick. Stjärnan flyttar *intro* till favoritlistan, över de nyaste, där den öppnas. Tas stjärnan bort kommer den
+tillbaka bland de nyaste.
 
 ### 13.8 Packa med Exomizer
 

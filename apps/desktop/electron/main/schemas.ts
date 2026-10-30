@@ -159,5 +159,6 @@ const quicksaveId = z.string().regex(/^[a-z0-9]{1,32}$/);
 export const quicksaveEntrySchema = z.object({ id: quicksaveId, zeroPage: z.boolean().optional() }).strict();
 export const quicksaveRenameSchema = z.object({ id: quicksaveId, name: z.string().trim().min(1).max(80) }).strict();
 export const quicksaveSaveSchema = z.object({ id: quicksaveId }).strict();
+export const quicksaveFavouriteSchema = z.object({ id: quicksaveId, on: z.boolean() }).strict();
 export const viceAttachSchema = z.object({ host: z.string().max(255).optional(), port: z.number().int().min(1).max(65535).optional() }).default({});
 export const viceCommandSchema = z.object({ command: z.string().max(4096) });

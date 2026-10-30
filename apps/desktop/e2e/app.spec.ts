@@ -1801,7 +1801,7 @@ test('the Demo button opens the showcase: every block type and a guided tour in 
   });
 });
 
-test('a VICE quicksave (Alt+F11 in VICE) opens by itself, F9 opens it again, Ctrl+Z goes back; the newest are kept, named and saved', async ({ workDir: work, app, page }) => {
+test('a VICE quicksave (Alt+F11 in VICE) opens by itself, F9 opens it again, Ctrl+Z goes back; the newest are kept, named, saved and made favourites', async ({ workDir: work, app, page }) => {
   await waitForListing(page);
   // a file of its own instead of VICE's settings folder: the user's quicksaves are never touched
   const qs = join(work, 'C64SC.vsf'), snapshot = join(repoDir, 'fixtures/vsf/raster-demo.vsf');
@@ -1876,6 +1876,32 @@ test('a VICE quicksave (Alt+F11 in VICE) opens by itself, F9 opens it again, Ctr
     await kept.nth(1).getByRole('button', { name: new RegExp(`^${older.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).click();
     await expect(toast(page, `Opened the quicksave "${older}": VICE 3.10 snapshot of a C64SC`)).toBeVisible();
     await expect(files).toHaveText([`${older.replace(/:/g, '-')}.prg`]);
+  });
+
+  await test.step('the star makes one a favourite, in a list of its own above the newest, and takes it back', async () => {
+    const lists = section.getByRole('list');
+    const favourites = section.getByRole('list', { name: 'Favourite VICE quicksaves' }).getByRole('listitem');
+    const kept = section.getByRole('list', { name: 'Kept VICE quicksaves' }).getByRole('listitem');
+    const older = await kept.nth(1).locator('.qs-name-text').textContent() ?? '';
+    await expect(favourites).toHaveCount(0);
+    const star = section.getByRole('button', { name: 'Add the quicksave intro to the favourites' });
+    await expect(star).toHaveAttribute('aria-pressed', 'false');
+    await star.click();
+    await expect(toast(page, '"intro" is a favourite: it stays when VICE saves new quicksaves')).toBeVisible();
+    await expect(favourites.locator('.qs-name-text')).toHaveText(['intro']);
+    await expect(kept.locator('.qs-name-text')).toHaveText([older]);
+    expect(await lists.evaluateAll(l => l.map(e => e.getAttribute('aria-label')))).toEqual(['Favourite VICE quicksaves', 'Kept VICE quicksaves']);
+    await expect(section).toContainText('Favourites, always kept');
+    // it opens, is named and saved there as well
+    await favourites.getByRole('button', { name: /^intro/ }).click();
+    await expect(toast(page, 'Opened the quicksave "intro": VICE 3.10 snapshot of a C64SC')).toBeVisible();
+    await expect(files).toHaveText(['intro.prg']);
+    const off = section.getByRole('button', { name: 'Remove the quicksave intro from the favourites' });
+    await expect(off).toHaveAttribute('aria-pressed', 'true');
+    await off.click();
+    await expect(toast(page, '"intro" is no favourite now: it goes when VICE saves a new quicksave, unless it is among the newest 5')).toBeVisible();
+    await expect(favourites).toHaveCount(0);
+    await expect(kept.locator('.qs-name-text')).toHaveText(['intro', older]);
   });
 });
 

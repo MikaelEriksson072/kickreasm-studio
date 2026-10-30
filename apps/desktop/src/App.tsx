@@ -207,6 +207,14 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     if (!kr) return needDesktop();
     try { const r = await kr.saveQuicksave({ id: q.id }); if (r) toast(`The quicksave "${q.name}" saved to ${r.path}`, 'ok'); } catch (e) { toast(`Save failed: ${errorText(e)}`, 'err'); }
   };
+  /** a favourite stays when VICE saves new quicksaves; one no more goes like the others */
+  const favouriteKeptQuicksave = async (q: QuicksaveEntry, on: boolean) => {
+    if (!kr) return;
+    try {
+      setQsList(await kr.favouriteQuicksave({ id: q.id, on }));
+      toast(on ? `"${q.name}" is a favourite: it stays when VICE saves new quicksaves` : `"${q.name}" is no favourite now: it goes when VICE saves a new quicksave, unless it is among the newest 5`, 'ok');
+    } catch (e) { toast(errorText(e), 'err'); refreshQuicksave(); }
+  };
   useEffect(refreshQuicksave, [refreshQuicksave, toolchain.viceQuicksave]);
   // the main process watches the quicksave file: a new one opens (or is announced) without a click
   const quicksaveRef = useRef(openQuicksave);
@@ -1130,7 +1138,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         <Sidebar view={activity} A={A} R={R} project={project} colors={colors} cursor={cursor} onNavigate={a => { nav(a); setDrawer(null); }}
           onOpen={() => void openPrgs(false)} onAdd={() => void openPrgs(true)} onDemo={loadDemo}
           quicksave={{ info: qsInfo, follow: followQuicksave, onOpen: () => void openQuicksave(), onFollow: v => setUi({ followQuicksave: v }),
-            kept: qsList, onOpenKept: q => void openKeptQuicksave(q), onRenameKept: (q, name) => void renameKeptQuicksave(q, name), onSaveKept: q => void saveKeptQuicksave(q) }}
+            kept: qsList, onOpenKept: q => void openKeptQuicksave(q), onRenameKept: (q, name) => void renameKeptQuicksave(q, name), onSaveKept: q => void saveKeptQuicksave(q),
+            onFavouriteKept: (q, on) => void favouriteKeptQuicksave(q, on) }}
           onRemoveFile={i => update('Remove file', d => {
             d.files.splice(i, 1);
             // a patch goes with the file it was written over
