@@ -7,6 +7,12 @@ const MARGIN = 8;
 
 export function ContextMenu({ menu, onClose }: { menu: ContextMenuState; onClose: () => void }) {
   useEffect(() => { const c = () => onClose(); window.addEventListener('mousedown', c); window.addEventListener('blur', c); return () => { window.removeEventListener('mousedown', c); window.removeEventListener('blur', c); }; }, [onClose]);
+  // Escape closes the menu, and only that (in the listing it would go back too): caught before the app's keys
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', esc, true);
+    return () => window.removeEventListener('keydown', esc, true);
+  }, [onClose]);
   const [sub, setSub] = useState<number | null>(null);
   // placed at the pointer, then moved so all of it is inside the window (measured: the menu's length varies);
   // a menu taller than the window scrolls

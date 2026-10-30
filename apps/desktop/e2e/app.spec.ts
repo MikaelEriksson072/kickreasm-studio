@@ -286,6 +286,29 @@ test('insert a comment line and a comment block, edit and remove them', async ({
   });
 });
 
+test('Escape closes the right-click menu, and only that: the listing does not go back', async ({ page }) => {
+  await waitForListing(page);
+  const cur = listing(page).locator('.row.cur');
+  const menu = page.getByRole('menu');
+  await goTo(page, '$3000');
+  const at = await cur.locator('.adr').textContent();
+  await cur.click({ button: 'right' });
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(cur.locator('.adr')).toHaveText(at!);
+  // so did its submenu
+  await cur.click({ button: 'right' });
+  await page.locator('.ctx-item.has-sub', { hasText: 'Memory configuration ($01)' }).hover();
+  await expect(page.getByRole('menuitem', { name: '$34 · RAM · RAM · RAM' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(cur.locator('.adr')).toHaveText(at!);
+  // without a menu Escape goes back, from before the G
+  await page.keyboard.press('Escape');
+  await expect(cur.locator('.adr')).not.toHaveText(at!);
+});
+
 test('set the memory configuration ($01) code runs with', async ({ page }) => {
   await waitForListing(page);
   // the first border color write in the demo, which never writes $01 (so it runs with $37)
