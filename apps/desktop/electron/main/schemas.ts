@@ -30,6 +30,8 @@ export const packPrefsSchema = z.object({
   fast: z.boolean(),
   extra: z.string().max(1024).refine(e => extraProblem(e) == null, e => ({ message: extraProblem(e) ?? '' })),
   out: z.string().max(128),
+  // project files from before it have none: only the app's pack folder
+  dir: z.string().max(1024).default(''),
 }).strict();
 const blockKinds = ['code', 'data', 'words', 'text', 'table', 'lohi', 'sprite', 'charset', 'bitmap', 'screen', 'music', 'fill', 'basic'] as const satisfies readonly BlockKind[];
 
@@ -154,6 +156,8 @@ export const runSchema = z.object({ prgPath: z.string().min(1).max(4096), labels
 const prg = z.instanceof(Uint8Array).refine(b => b.length >= 3 && b.length <= 0x10002, 'not a PRG');
 /** the built PRGs (one per project file, in order) and how to pack them */
 export const packSchema = z.object({ files: z.array(z.object({ name: fileName, prg })).min(1).max(64), prefs: packPrefsSchema });
+/** the folder for the packed file: `dir` is kept if this session may write there, else a dialog asks (always with `ask`) */
+export const packFolderSchema = z.object({ dir: z.string().min(1).max(1024).optional(), ask: z.boolean().optional() }).strict();
 /** a file to save with a dialog (the packed PRG, graphics, .byte source): its suggested name and bytes */
 export const fileSaveSchema = z.object({ name: fileName, bytes: z.instanceof(Uint8Array).refine(b => b.length > 0 && b.length <= 4 * 1024 * 1024, 'empty or larger than 4 MB'), title: z.string().max(200).optional() });
 /** VICE's quicksave snapshot: `zeroPage` opens it from $0002 */

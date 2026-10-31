@@ -7,7 +7,7 @@ import { h2, h4 } from './util/hex';
 
 export const DEFAULT_PACK: PackPrefs = {
   packer: 'brokkr', effort: 'normal', format: 'exomizer', mode: 'sfx', ranges: null, start: 'sys', jmp: null, effect: 'default', ramExit: null, irqExit: null,
-  memLoad: 'auto', forward: false, compat: false, fast: false, extra: '', out: '',
+  memLoad: 'auto', forward: false, compat: false, fast: false, extra: '', out: '', dir: '',
 };
 
 /** Which settings take effect with this packer, format, kind of file and start: the Pack view shows only these. */

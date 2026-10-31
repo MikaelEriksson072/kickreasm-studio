@@ -156,6 +156,9 @@ export interface PackPrefs {
   extra: string;
   /** the packed file's name; empty: <first file>-brokkr.prg (Exomizer: -exo.prg) */
   out: string;
+  /** a folder the packed file is written to as well, picked in a dialog (a folder kept in the project is asked for
+   * again in a new session); empty: only the app's own pack folder */
+  dir: string;
 }
 
 /**

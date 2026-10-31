@@ -11,8 +11,8 @@ import { assertEntryName, PathPolicy } from '../electron/main/paths';
 import { bringOldSettings } from '../electron/main/migrate';
 import { RecentFolders } from '../electron/main/recent';
 import { bundledExomizer, defaultToolchainSettings, SettingsStore } from '../electron/main/settings';
-import { diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectSchema, quicksaveEntrySchema, quicksaveFavouriteSchema, quicksaveRenameSchema, runSchema, serializedProjectSchema } from '../electron/main/schemas';
-import { buildWithKickAssembler, packWithBrokkr, packWithExomizer } from '../electron/main/toolchain';
+import { diskOpenSchema, exportWriteSchema, fileSaveSchema, packFolderSchema, packSchema, prgOpenSchema, projectSchema, quicksaveEntrySchema, quicksaveFavouriteSchema, quicksaveRenameSchema, runSchema, serializedProjectSchema } from '../electron/main/schemas';
+import { buildWithKickAssembler, keepPacked, packWithBrokkr, packWithExomizer } from '../electron/main/toolchain';
 import { QUICKSAVE_FILE, QuicksaveHistory, QuicksaveWatcher, quicksaveFileName, quicksaveFiles, quicksaveInfo, quicksaveName, readQuicksave, viceConfigDir } from '../electron/main/quicksave';
 import { readDiskImage, readPrgFiles, readProjectFile, writeProjectFile } from '../electron/main/project-fs';
 import { charRomFiles, readCharRom } from '../electron/main/chargen';
@@ -22,7 +22,7 @@ const toolchain = (patch: Partial<ToolchainSettings> = {}): ToolchainSettings =>
 
 describe('IPC contract', () => {
   it('has exactly the channels of spec 13.4', () => {
-    expect(Object.values(CHANNELS).sort()).toEqual(['disk:open', 'export:write', 'fs:changed', 'prg:open', 'project:open', 'project:save', 'settings:get', 'settings:set', 'terminal:open', 'toolchain:build', 'toolchain:identify', 'toolchain:pack', 'toolchain:roms', 'toolchain:run', 'toolchain:unpack', 'vice:attach', 'vice:command', 'file:save', 'vice:quicksave', 'vice:quicksave-info', 'vice:quicksaves', 'vice:quicksave-open', 'vice:quicksave-rename', 'vice:quicksave-save', 'vice:quicksave-favourite', 'vice:quicksaved', 'vice:chargen'].sort());
+    expect(Object.values(CHANNELS).sort()).toEqual(['disk:open', 'export:write', 'fs:changed', 'prg:open', 'project:open', 'project:save', 'settings:get', 'settings:set', 'terminal:open', 'toolchain:build', 'toolchain:identify', 'toolchain:pack', 'pack:folder', 'toolchain:roms', 'toolchain:run', 'toolchain:unpack', 'vice:attach', 'vice:command', 'file:save', 'vice:quicksave', 'vice:quicksave-info', 'vice:quicksaves', 'vice:quicksave-open', 'vice:quicksave-rename', 'vice:quicksave-save', 'vice:quicksave-favourite', 'vice:quicksaved', 'vice:chargen'].sort());
   });
 });
 
@@ -346,8 +346,11 @@ describe('schemas', () => {
     const files = [{ name: 'game.prg', prg: Uint8Array.of(1, 8, 0) }];
     expect(packSchema.safeParse({ files, prefs: DEFAULT_PACK }).success).toBe(true);
     // project files from before Brokkr name no packer: they pack with Brokkr, at normal effort, in Exomizer's format
-    const { packer: _p, effort: _e, format: _f, ...old } = DEFAULT_PACK;
-    expect(packSchema.parse({ files, prefs: old }).prefs).toMatchObject({ packer: 'brokkr', effort: 'normal', format: 'exomizer' });
+    // ... and from before the folder for the packed file: only the app's pack folder
+    const { packer: _p, effort: _e, format: _f, dir: _d, ...old } = DEFAULT_PACK;
+    expect(packSchema.parse({ files, prefs: old }).prefs).toMatchObject({ packer: 'brokkr', effort: 'normal', format: 'exomizer', dir: '' });
+    expect(packFolderSchema.safeParse({ dir: 'C:/c64/out', ask: true }).success).toBe(true);
+    expect(packFolderSchema.safeParse({ dir: '' }).success).toBe(false);
     expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, format: 'brokkr' } }).success).toBe(true);
     expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, format: 'fast' } }).success).toBe(true);
     expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, format: 'zx0' } }).success).toBe(false);
@@ -559,6 +562,21 @@ describe('toolchain runner', () => {
     expect(readFileSync(join(r.dir, 'raster-demo.prg'))).toEqual(Buffer.from(prg));
     expect(policy.isAllowed(r.path!)).toBe(true);
     expect(r.prg!.length).toBeLessThan(prg.length);
+  });
+
+  it('writes the packed file to the folder the Pack view names too, and points the result at it', async () => {
+    const p = demoProject(), policy = new PathPolicy(), out = tmp();
+    const prg = Uint8Array.from([p.files[0].load & 0xff, p.files[0].load >> 8, ...p.files[0].bytes]);
+    const req = { files: [{ name: 'raster-demo.prg', prg }], prefs: { ...DEFAULT_PACK, dir: out } };
+    const r = await keepPacked(await packWithBrokkr(req, policy, q => packWithBrokkrCore(q.files, q.prefs)), out);
+    expect(r.path).toBe(join(out, 'raster-demo-brokkr.prg'));
+    expect(readFileSync(r.path!)).toEqual(Buffer.from(r.prg!));
+    // the pack folder keeps its copy and the inputs, for the command shown
+    expect(readFileSync(join(r.dir, 'raster-demo-brokkr.prg'))).toEqual(Buffer.from(r.prg!));
+    // a failed pack writes nothing there
+    const failed = await keepPacked({ ...r, ok: false, name: 'other.prg' }, out);
+    expect(existsSync(join(out, 'other.prg'))).toBe(false);
+    expect(failed.path).toBe(r.path);
   });
 
   it.skipIf(!javaOk)('turns Kick Assembler errors into problems with file and line', async () => {

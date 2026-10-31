@@ -1,23 +1,24 @@
 /* Registers the IPC allowlist (spec 13.4). Every request is checked for a trusted sender and
  * validated with zod before it touches the file system or starts a process. */
 import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, type OpenDialogOptions, type WebContents } from 'electron';
+import { existsSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z, type ZodTypeAny } from 'zod';
-import { CHANNELS, type InvokeChannel, type ExportWriteResult, type FileSaveResult, type ProjectOpenResult, type ProjectSaveResult } from '../../shared/ipc';
+import { CHANNELS, type InvokeChannel, type ExportWriteResult, type FileSaveResult, type PackFolderResult, type ProjectOpenResult, type ProjectSaveResult } from '../../shared/ipc';
 import type { PathPolicy } from './paths';
 import type { RecentFolders, RecentKind } from './recent';
 import type { SettingsStore } from './settings';
 import { createBuildFolder, readDiskImage, readPrgFiles, readProjectFile, writeExportFolder, writeProjectFile, type ExportWatcher } from './project-fs';
-import { buildWithKickAssembler, c64Roms, identifyWithTool, openTerminal, packWithBrokkr, packWithExomizer, runInVice, unpackWithTool } from './toolchain';
+import { buildWithKickAssembler, c64Roms, identifyWithTool, keepPacked, openTerminal, packWithBrokkr, packWithExomizer, runInVice, unpackWithTool } from './toolchain';
 import { viceAttach, viceCommand } from './vice-monitor';
 import { quicksaveFileName, quicksaveFiles, quicksaveInfo, readQuicksave, type QuicksaveHistory, type QuicksaveWatcher } from './quicksave';
 import { charRomFiles, readCharRom } from './chargen';
 import { openC64File } from '@mimir/core';
 import { openedPrg } from './project-fs';
 import {
-  buildSchema, diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectOpenSchema, projectSaveSchema, quicksaveEntrySchema, quicksaveFavouriteSchema, quicksaveRenameSchema, quicksaveSaveSchema,
+  buildSchema, diskOpenSchema, exportWriteSchema, fileSaveSchema, packFolderSchema, packSchema, prgOpenSchema, projectOpenSchema, projectSaveSchema, quicksaveEntrySchema, quicksaveFavouriteSchema, quicksaveRenameSchema, quicksaveSaveSchema,
   quicksaveSchema, runSchema, terminalOpenSchema, unpackSchema, toolchainSettingsSchema, viceAttachSchema, viceCommandSchema,
 } from './schemas';
 
@@ -141,7 +142,21 @@ export function registerIpc(deps: IpcDeps): void {
   handle(CHANNELS.toolchainUnpack, unpackSchema, req => unpackWithTool(req, settings.get()));
   handle(CHANNELS.toolchainIdentify, unpackSchema, req => identifyWithTool(req, settings.get()));
   handle(CHANNELS.toolchainRoms, z.undefined().or(z.object({}).strict()), () => c64Roms(settings.get().vicePath));
-  handle(CHANNELS.toolchainPack, packSchema, req => (req.prefs.packer === 'exomizer' ? packWithExomizer(req, settings.get(), policy) : packWithBrokkr(req, policy)));
+  handle(CHANNELS.toolchainPack, packSchema, async req => {
+    // the folder for the packed file must be one picked in this session (pack:folder asks for it first)
+    const to = req.prefs.dir ? policy.assert(req.prefs.dir, 'The folder for the packed file (choose it again in the Pack view)') : null;
+    const r = await (req.prefs.packer === 'exomizer' ? packWithExomizer(req, settings.get(), policy) : packWithBrokkr(req, policy));
+    if (to && r.name) watcher.wrote(join(to, r.name));
+    return keepPacked(r, to);
+  });
+  handle(CHANNELS.packFolder, packFolderSchema, async (req, e): Promise<PackFolderResult | null> => {
+    const isDir = (d: string) => existsSync(d) && statSync(d).isDirectory();
+    // a folder this session may write to needs no dialog; one kept in a project file is asked for, the dialog there
+    if (req.dir && !req.ask && policy.isAllowed(req.dir) && isDir(req.dir)) return { dir: req.dir };
+    const start = req.dir && isDir(req.dir) ? req.dir : recent.folder('pack');
+    const [picked] = await pickPaths(e, { title: 'Folder for the packed file', properties: ['openDirectory', 'createDirectory', 'promptToCreate'], ...(start ? { defaultPath: start } : {}) });
+    return picked ? { dir: chose(picked, 'pack') } : null;
+  });
   handle(CHANNELS.fileSave, fileSaveSchema, async (req, e): Promise<FileSaveResult | null> => {
     const win = windowOf(e.sender);
     const start = recent.folder('pack') ?? recent.folder('export');

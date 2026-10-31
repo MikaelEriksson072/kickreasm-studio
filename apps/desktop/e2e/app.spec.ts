@@ -1613,7 +1613,7 @@ test('edit build.bat in the source view: the export writes it, Restore generated
   });
 });
 
-test('pack with Brokkr: checked in an emulated C64, effort max on threads, and crunched data', async ({ page }) => {
+test('pack with Brokkr: checked in an emulated C64, effort max on threads, and crunched data', async ({ workDir: work, app, page }) => {
   await waitForListing(page);
   const view = page.locator('.pack-view');
   const cmd = view.getByLabel('Brokkr command');
@@ -1708,6 +1708,24 @@ test('pack with Brokkr: checked in an emulated C64, effort max on threads, and c
     await expect(card).not.toContainText('Out of date', { timeout: 120_000 });
     await expect(card).toContainText("Decrunched in Brokkr's emulated C64: $0801–$37ff has the same 12287 bytes, and it starts at $0810");
     await expect(card).toContainText('$0100–$01d6');
+  });
+
+  await test.step('a folder for the packed file: chosen in a dialog, the file goes there each time, and can be cleared', async () => {
+    const out = join(work, 'release');
+    mkdirSync(out);
+    const folder = view.getByLabel('Folder', { exact: true });
+    await expect(folder).toHaveText(/^Not set: the file stays in the app's pack folder/);
+    await stubDialogs(app, { open: [out] });
+    await view.getByRole('button', { name: 'Choose…' }).click();
+    await expect(folder).toHaveText(out);
+    expect((await dialogOptions(app)).pop()).toMatchObject({ title: 'Folder for the packed file' });
+    await view.getByRole('button', { name: 'Pack', exact: true }).click();
+    await expect(card).toContainText(`Written to ${out}`, { timeout: 90_000 });
+    await expect(toast(page, `Packed 12287 bytes into ${join(out, 'raster-demo-brokkr.prg')}`)).toBeVisible();
+    const b = readFileSync(join(out, 'raster-demo-brokkr.prg'));
+    expect([b[0], b[1]]).toEqual([0x01, 0x08]);
+    await view.getByRole('button', { name: 'Clear the folder' }).click();
+    await expect(folder).toHaveText(/^Not set/);
   });
 });
 

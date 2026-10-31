@@ -2,7 +2,7 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, isAbsolute, join, relative } from 'node:path';
 import { deserializeProject, openC64File, parseD64, serializeProject, withId, type OpenedFile, type OpenOptions, type Project, type SerializedProject, type Settings } from '@mimir/core';
 import type { OpenedPrg } from '../../shared/ipc';
 import { writeVfs } from '@mimir/core/node';
@@ -63,6 +63,14 @@ export class ExportWatcher {
   constructor(private readonly onChange: (path: string) => void) {}
 
   touched(dir: string) { this.quietUntil.set(dir, Date.now() + 1500); }
+
+  /** a file the app writes into a folder that may be watched (the packed file): no change reported for it */
+  wrote(path: string) {
+    for (const dir of this.watchers.keys()) {
+      const rel = relative(dir, path);
+      if (rel && !rel.startsWith('..') && !isAbsolute(rel)) this.touched(dir);
+    }
+  }
 
   watch(dir: string) {
     if (this.watchers.has(dir)) return;

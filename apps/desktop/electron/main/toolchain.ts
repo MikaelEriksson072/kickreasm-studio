@@ -92,6 +92,15 @@ export async function packWithBrokkr(req: PackRequest, policy: PathPolicy, pack:
   };
 }
 
+/** The packed file also in the folder the Pack view names (`PackPrefs.dir`, `to`: checked against the path policy),
+ * which the result then points at, so Run in VICE runs that copy. */
+export async function keepPacked(r: PackResponse, to: string | null): Promise<PackResponse> {
+  if (!to || !r.ok || !r.name || !r.prg) return r;
+  const path = join(to, r.name);
+  await writeFile(path, r.prg);
+  return { ...r, path };
+}
+
 /** Brokkr in a worker thread: out/main/brokkr-worker.js, built from electron/main/brokkr-worker.ts. */
 async function packInWorker(req: PackRequest): Promise<BrokkrPack> {
   const worker = new Worker(join(__dirname, 'brokkr-worker.js'));

@@ -1331,7 +1331,8 @@ Med `-binarymonitor` (TCP 6502) kan appen: sätta brytpunkter från listningen, 
 | `export:write` | renderer → main | `{ dir, files: Record<string, string \| Uint8Array> }` → `{ written: string[] }` |
 | `toolchain:build` | renderer → main | `{ dir, entries: string[] }` → `{ ok, stdout, problems: Problem[], prg?: Uint8Array }` |
 | `toolchain:run` | renderer → main | `{ prgPath, labelsPath?, start?, disk? }` → `{ pid, via: 'run' \| 'sys' \| 'monitor' }` |
-| `toolchain:pack` | renderer → main | `{ files: { name, prg }[], prefs: PackPrefs }` → `{ ok, output, argv, dir, name?, path?, prg?, packed, report, check, error? }`: Brokkr i en arbetstråd eller Exomizer, efter `prefs.packer` (13.8) |
+| `toolchain:pack` | renderer → main | `{ files: { name, prg }[], prefs: PackPrefs }` → `{ ok, output, argv, dir, name?, path?, prg?, packed, report, check, error? }`: Brokkr i en arbetstråd eller Exomizer, efter `prefs.packer`; filen skrivs också i `prefs.dir` när den är satt (en mapp vald i sessionen), och `path` pekar dit (13.8) |
+| `pack:folder` | renderer → main | `{ dir?, ask? }` → `{ dir }`: mappen för den packade filen; en mapp sessionen redan får skriva i ges tillbaka direkt, annars (och alltid med `ask`) frågar en mappdialog som öppnas där (`null` om den avbryts) |
 | `vice:quicksave` | renderer → main | `{ zeroPage? }` → `{ found, path, saved?, files? }`: VICE:s nyaste quicksave öppnad som snapshot (13.7b) |
 | `vice:quicksave-info` | renderer → main | → `{ found, path, saved? }`: finns det en quicksave och när sparades den |
 | `vice:quicksaves` | renderer → main | → `{ id, name, saved, size, favourite? }[]`: quicksavesen appen sparat (de nyaste och favoriterna), den nyaste först (13.7b) |
@@ -1635,7 +1636,7 @@ packare; den packar med Brokkr (`packer`, `effort` och `format` får sina standa
 **Vyn** visar bara de inställningar som gäller för vald packare, format, sorts fil och start (`packOptions` i
 `packages/core/src/pack.ts`). Efter packaren kommer korten *What to pack*; *Packed file* (sorten *Self-extracting* eller
 *Crunched data*, för Brokkr *Format* med en rad om vad formatet ger och kostar och *Effort*, för Exomizer *Crunch faster
-(-C)* och *More options*, sist *File name*); *Self-extracting* (*Start*, *Jump to*, *$01 after* och *Interrupts after* på en
+(-C)* och *More options*, sist *File name* och *Folder*); *Self-extracting* (*Start*, *Jump to*, *$01 after* och *Interrupts after* på en
 rad, effekten) eller *Crunched data* (*Load address*, *Crunch forward*, *No literal sequences* och en rad om vilken
 uppackare som läser datan); och *Command*. En dold inställning finns kvar i projektet men ändrar ingenting:
 `packEffective` sätter den till sitt standardvärde innan kommandot skrivs och filen packas, och resultatkortet blir inte
@@ -1760,6 +1761,18 @@ Resultatkortet visar:
 Knapparna är *Run in VICE* (med byggets etiketter och den monterade disken), *Save as…* (`file:save`, en
 spara-dialog) och *Output*. Byggutdata visar båda kommandona och deras utskrift.
 
+**Mapp för den packade filen** (*Folder* under *File name*, `PackPrefs.dir`, sparas i projektet). Utan mapp ligger filen
+bara i appens pack-mapp, och *Save as…* kopierar den. *Choose…* öppnar en mappdialog (`pack:folder` med `ask`), och
+*Clear* tar bort mappen. Sökvägen visas hel och radbryts, så att slutet syns. Med en mapp skriver huvudprocessen den
+packade filen också dit varje gång den packar (`keepPacked` i `electron/main/toolchain.ts`) och skriver över den som
+fanns. Resultatets `path` pekar dit, så *Run in VICE* kör den filen, och kortet säger *Written to <mapp>*.
+Pack-mappen behåller sin kopia och indatafilerna, så kommandot som visas fungerar där som förut.
+
+Huvudprocessen skriver bara i mappar som valts i en dialog under sessionen (4.2). En mapp som kommer från en projektfil
+öppnad i en ny session får därför väljas igen. När Pack trycks frågar appen först `pack:folder` utan `ask`, och dialogen
+öppnas i den sparade mappen; avbryts den packas ingenting. Ligger mappen inne i en exporterad mapp som bevakas, rapporteras
+den packade filen inte som ändrad utanför appen (`ExportWatcher.wrote`).
+
 **Kontroll.** En sfx-fil packas upp med Exomizers `desfx`, som kör uppackaren i Exomizers egen 6502-emulator och
 skriver det största området den skrev. `checkDecrunched` jämför det med minnet som packades och startadressen med den
 Exomizer rapporterade. Resultatet är *same*, *differs* (första avvikande byte) eller *unchecked*. Det sista gäller när
@@ -1800,13 +1813,15 @@ tom inställning behålls.
   som kommandot), att kommandot som visas gör samma fil med den fristående Brokkr (också mem med `-T 5`), och att dolda
   inställningar inte når kommandot eller filen (`-T` i en sfx, `$01` med RUN, effekten i det snabba formatet, framlänges i
   Brokkrs eget format).
-- `apps/desktop/test/main.test.ts`: pack-mappen med indata och den packade filen, och schemat (en gammal projektfil
-  packar med Brokkr, i Exomizers format).
+- `apps/desktop/test/main.test.ts`: pack-mappen med indata och den packade filen, filen också i den valda mappen
+  (`keepPacked`, inte när packningen misslyckas), och schemat (en gammal projektfil packar med Brokkr, i Exomizers
+  format, utan mapp).
 - E2e-testet packar demon med Brokkr (hel, *Max*, mem med `-T 5`, eget format, snabbt format) i den byggda appen, alltså
   med arbetstråden; medan den packar på nivån *Max* syns kortet *Packing* med stegen, knappen *Packing…* och snurran på
   aktivitetsknappen, och alla tre försvinner när den är klar. Testet kontrollerar också att vyn bara visar det som gäller: inget `$01` med RUN, kantblinket av och på, ingen
   start eller effekt för packad data, inga *Crunch forward* och *No literal sequences* i Brokkrs eget format och ingen
-  effekt i det snabba.
+  effekt i det snabba. Sist väljs en mapp med en stubbad dialog, filen hamnar där (kortet säger *Written to*, toasten ger
+  sökvägen) och *Clear* tar bort mappen igen.
 
 ## 14. UI/UX-specifikation
 

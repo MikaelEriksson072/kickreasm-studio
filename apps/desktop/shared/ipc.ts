@@ -18,6 +18,7 @@ export const CHANNELS = {
   toolchainIdentify: 'toolchain:identify',
   toolchainRoms: 'toolchain:roms',
   toolchainPack: 'toolchain:pack',
+  packFolder: 'pack:folder',
   fileSave: 'file:save',
   viceAttach: 'vice:attach',
   viceCommand: 'vice:command',
@@ -131,11 +132,15 @@ export type RomsResponse = Roms | null;
  * file, and `check` its own (an emulated C64 for sfx).
  */
 export interface PackRequest { files: { name: string; prg: Uint8Array }[]; prefs: PackPrefs }
+/** the folder for the packed file (`PackPrefs.dir`): kept when this session may write there, else asked for in a dialog
+ * that opens there; `ask` always shows the dialog */
+export interface PackFolderRequest { dir?: string; ask?: boolean }
+export interface PackFolderResult { dir: string }
 export interface PackResponse {
   ok: boolean; output: string; argv: string[]; ms: number;
   /** the pack folder (open in this session: the packed file can be run in VICE) */
   dir: string;
-  /** the packed file: its name, path and bytes */
+  /** the packed file: its name, path (in `PackPrefs.dir` when that is set, else in the pack folder) and bytes */
   name?: string; path?: string; prg?: Uint8Array;
   /** the memory that was packed */
   packed: { start: number; length: number } | null;
@@ -190,6 +195,8 @@ export interface KrApi {
   identifyPacker(req: UnpackRequest): Promise<IdentifyResponse>;
   c64Roms(): Promise<RomsResponse>;
   pack(req: PackRequest): Promise<PackResponse>;
+  /** the folder for the packed file, allowed for this session; null: the dialog was cancelled */
+  packFolder(req: PackFolderRequest): Promise<PackFolderResult | null>;
   saveFile(req: FileSaveRequest): Promise<FileSaveResult | null>;
   viceAttach(req?: ViceAttachRequest): Promise<ViceResult>;
   viceCommand(req: ViceCommandRequest): Promise<ViceResult>;

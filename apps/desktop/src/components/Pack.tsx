@@ -33,6 +33,8 @@ export interface PackViewProps {
   current: string;
   onChange: (p: PackPrefs, label: string) => void;
   onPack: () => void; onRun: () => void; onSave: () => void; onLog: () => void; onSettings: () => void;
+  /** a dialog for the folder the packed file is written to (`PackPrefs.dir`) */
+  onPickDir: () => void;
   onNavigate: (a: Addr) => void;
 }
 
@@ -195,6 +197,13 @@ export function PackView(p: PackViewProps) {
         {o.fast && <label className="check"><input id="pack-fast" type="checkbox" checked={prefs.fast} onChange={e => set({ fast: e.target.checked }, 'Pack: faster crunching')} /><span>Crunch faster (-C)<small className="muted"> — a little larger</small></span></label>}
         {o.extra && <TextField id="pack-extra" label="More options" value={prefs.extra} placeholder="-p 4 -Di_line_number=1987" error={extraProblem(prefs.extra)} onCommit={v => set({ extra: v }, 'Pack: options')} />}
         <TextField id="pack-out" label="File name" value={prefs.out} placeholder={cmd.out} onCommit={v => set({ out: v }, 'Pack: file name')} />
+        <div className="field"><label htmlFor="pack-dir">Folder</label>
+          <output id="pack-dir" className={cx('pack-dir', prefs.dir ? 'mono' : 'empty')}>{prefs.dir || "Not set: the file stays in the app's pack folder (Save as… copies it)."}</output>
+          <div className="bm-actions pack-dir-actions">
+            <button className="btn small" disabled={!desktop} onClick={p.onPickDir} title="Choose the folder the packed file is written to each time">Choose…</button>
+            {prefs.dir && <button className="btn small ghost" aria-label="Clear the folder" title="Write to no folder: the file stays in the app's pack folder" onClick={() => set({ dir: '' }, 'Pack: no folder')}>Clear</button>}
+          </div>
+        </div>
       </SideSection>
 
       {sfx ? (
@@ -304,6 +313,7 @@ function PackResultCard({ result: r, fresh, onRun, onSave, onLog }: { result: Pa
     <div className={cx('pack-result', r.check?.status === 'differs' ? 'bad' : 'ok', !fresh && 'stale')} role="status" aria-label="Packed file">
       <div className="pack-result-head"><Icon name={r.check?.status === 'differs' ? 'err' : 'ok'} size={14} /><b className="mono" title={r.path}>{r.name}</b></div>
       <div className="small">{from ? <>{from} bytes packed to {size} ({Math.round((size / from) * 100)} %)</> : null}{r.packed ? <span className="muted mono"> · ${h4(r.packed.start)}–${h4(r.packed.start + r.packed.length - 1)}</span> : null}</div>
+      {r.path && !r.path.startsWith(r.dir) && <div className="small">Written to <span className="mono" title={r.path}>{r.path.replace(/[\\/][^\\/]*$/, '')}</span></div>}
       {r.check && <div className={cx('small', r.check.status === 'same' ? 'ok-text' : r.check.status === 'differs' ? 'err-text' : 'muted')}>{r.check.text}</div>}
       {!sfx && !r.check && <div className="muted small">Crunched data: not run or checked here.</div>}
       {r.report.layout.length > 0 && <table className="pack-layout mono small" aria-label="Memory layout"><tbody>

@@ -826,19 +826,36 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     const asked = before.project.pack ?? packDefaults(before.A, before.project);
     if (asked.packer === 'exomizer' && !toolchain.exomizerPath) { toast('Set Exomizer in Settings → Toolchain first', 'warn'); setModal('settings'); return; }
     if (packRun) return;
+    // the folder for the packed file: one kept in the project may be written to once it is picked in this session
+    let dir = '';
+    if (asked.dir) {
+      const r = await kr.packFolder({ dir: asked.dir }).catch((e: unknown) => { toast(errorText(e), 'err'); return null; });
+      if (!r) { toast('Nothing packed: the folder for the packed file was not chosen', 'warn'); return; }
+      if (r.dir !== asked.dir) setPack({ ...asked, dir: r.dir }, 'Pack: folder');
+      dir = r.dir;
+    }
     // the Pack view shows the pack under way from here to the end, through building, verifying and packing
     setPackRun({ step: 'verify', since: Date.now(), prefs: asked });
-    try { await packVerified(); } finally { setPackRun(null); }
+    try { await packVerified(dir); } finally { setPackRun(null); }
   };
-  /** runPack after its checks: build and verify, then pack what was verified */
-  const packVerified = async () => {
+  /** the folder for the packed file, picked in a dialog (which lets this session write there) */
+  const pickPackDir = async () => {
+    if (!kr) return needDesktop();
+    const prefs = project.pack ?? packDefaults(A, project);
+    try {
+      const r = await kr.packFolder({ ...(prefs.dir ? { dir: prefs.dir } : {}), ask: true });
+      if (r && r.dir !== prefs.dir) setPack({ ...prefs, dir: r.dir }, 'Pack: folder');
+    } catch (e) { toast(errorText(e), 'err'); }
+  };
+  /** runPack after its checks: build and verify, then pack what was verified (into `dir` too, when it is set) */
+  const packVerified = async (dir: string) => {
     if (!kr) return;
     const res = await runVerify({ quiet: true });
     if (!res) return;
     if (!res.ok) { setUi({ bottom: 'build', panelOpen: true }); toast('The build failed verification; nothing was packed', 'err'); return; }
     // the analysis, render and pack settings that were verified (runVerify waited for the latest edit)
     const { A, R, project } = latest.current;
-    const prefs = project.pack ?? packDefaults(A, project);
+    const prefs = { ...(project.pack ?? packDefaults(A, project)), dir };
     const files = R.fileNames.map((n, i) => ({ name: `${n}.prg`, prg: res.kick?.compared[i]?.prg ?? res.V.results[i]?.prg ?? null }));
     if (files.some(f => !f.prg)) { toast('The build gave no PRG to pack', 'err'); return; }
     const packer = prefs.packer === 'exomizer' ? 'Exomizer' : 'Brokkr';
@@ -852,7 +869,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       setBuild(b => b && { ...b, log: `${b.log}\n\n> ${r.argv.map(shellWord).join(' ')}\n(in ${r.dir}, from ${from})\n${r.output.trim()}${check}${r.ok ? '' : `\n${r.error}`}` });
       if (!r.ok) { setUi({ bottom: 'build', panelOpen: true }); toast(`${packer}: ${r.error}`, 'err'); return; }
       const bad = r.check?.status === 'differs';
-      toast(`Packed ${r.packed?.length ?? 0} bytes into ${r.name} (${r.prg?.length ?? 0} bytes)${r.check?.status === 'same' ? ', decrunch verified' : bad ? ', but it does not decrunch to the same bytes' : ''}`, bad ? 'err' : 'ok');
+      toast(`Packed ${r.packed?.length ?? 0} bytes into ${dir ? r.path : r.name} (${r.prg?.length ?? 0} bytes)${r.check?.status === 'same' ? ', decrunch verified' : bad ? ', but it does not decrunch to the same bytes' : ''}`, bad ? 'err' : 'ok');
     } catch (e) { toast(errorText(e), 'err'); } finally { setBuildBusy(null); }
   };
   /** the packed file in VICE (with the build's labels, which name the decrunched program) */
@@ -1220,7 +1237,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
           bmSel={bmSel} onBmSelect={setBmSel} onBmGo={goBookmark} onBmAdd={() => startBookmark()} onBmEdit={openBookmarkEditor} onBmDelete={deleteBookmark}
           bmEditing={bmEdit != null ? { addr: bmEdit, cursorAt: lineAddr() ?? null, onSave: saveBookmark, onCancel: () => { setBmEdit(null); listRef.current?.focus(); }, onPreview: a => navigate(a, { center: true, listing: true, noHistory: true }) } : null}
           pack={{ A, R, project, cursor, sel, prefs: packPrefs, exomizer: toolchain.exomizerPath, desktop: !!kr, busy: buildBusy, packing: packRun, result: packRes, current: packKey,
-            onChange: setPack, onPack: () => void runPack(), onRun: () => void runPacked(), onSave: () => void savePacked(), onSettings: () => setModal('settings'),
+            onChange: setPack, onPack: () => void runPack(), onPickDir: () => void pickPackDir(), onRun: () => void runPacked(), onSave: () => void savePacked(), onSettings: () => setModal('settings'),
             onLog: () => setUi({ bottom: 'build', panelOpen: true }), onNavigate: a => { nav(a); setDrawer(null); } }} />
       </ErrorBoundary></aside>
       <Splitter dir="v" onDrag={d => setUi({ sizes: { ...useUi.getState().sizes, side: Math.max(200, Math.min(480, useUi.getState().sizes.side + d)) } })} />

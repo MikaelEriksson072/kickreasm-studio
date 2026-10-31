@@ -740,6 +740,10 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .activity button.busy { color: var(--accent-hi); }
 .activity .act-busy { position: absolute; right: 3px; top: 4px; width: 12px; height: 12px; color: var(--accent-hi); }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } .pack-progress-bar::before { animation-duration: 4s; } }
+/* the folder for the packed file: the whole path (it wraps, so its end shows), then Choose… and Clear */
+.pack-dir { display: block; min-height: 28px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--editor); color: var(--fg); font-size: 11.5px; line-height: 1.45; word-break: break-all; user-select: text; }
+.pack-dir.empty { color: var(--fg-3); word-break: normal; }
+.pack-dir-actions { margin-top: 2px; }
 /* two short fields side by side ($01 and interrupts after decrunching); one alone takes the row */
 .pack-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0 8px; }
 .pack-row .field { min-width: 0; }
