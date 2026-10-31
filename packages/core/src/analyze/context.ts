@@ -5,6 +5,9 @@ import type {
   LohiTable, Override, ProjectInput, Settings, SpindleDriver, TextEncoding, XRef, XRefKind,
 } from '../types';
 import { DEFAULT_SETTINGS, T } from '../model';
+import type { CartMode } from '../c64/memconfig';
+import { projectCartMode } from '../c64/crt';
+import type { CartStart } from './cartridge';
 
 /** Entry-point priority: a stronger kind replaces a weaker one at the same address. */
 export const PRI: Record<EntryKind, number> = { entry: 9, irq: 8, nmi: 8, brk: 7, user: 7, sub: 6, ptr: 5, guess: 4, jmp: 3, branch: 2 };
@@ -46,6 +49,10 @@ export interface Ctx {
   ovList: Override[];
   ovProps: Map<Addr, Override>;
   forcedData: (a: Addr) => boolean;
+  /** the memory map of the cartridge the files are chips of ('none': no cartridge) */
+  cart: CartMode;
+  /** its start vectors in the loaded chips (5.3b) */
+  cartStart: CartStart | null;
   // entry points and tracing
   basics: BasicInfo[];
   insLen: Uint8Array;
@@ -117,6 +124,7 @@ export function createContext(project: ProjectInput, deep: Deep | null = null): 
   const ctx = {
     project, S, files: project.files, mem, owner, log: [], logged: new Set(), loaded,
     ov, ovList: [], ovProps: new Map(), forcedData: (a: Addr) => ov[a] !== 0 && ov[a] !== T.CODE,
+    cart: projectCartMode(project.cart, project.files), cartStart: null,
     basics: [], insLen: new Uint8Array(0x10000), codeOwner: new Int32Array(0x10000).fill(-1), skip: new Set(), xrefs: new Map(),
     entryKind: new Map(), queue: [],
     ijumps: [], inlineCalls: new Set(), entry: null,

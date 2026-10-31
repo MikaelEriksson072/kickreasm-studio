@@ -3,6 +3,8 @@
  * renderer, the Electron main process and the CLI.
  * ===================================================================== */
 
+import type { CartMode } from './c64/memconfig';
+
 export type Addr = number; // 0x0000–0xffff
 
 export type BlockKind =
@@ -23,6 +25,8 @@ export interface LoadedFile {
   bytes: Uint8Array;
   /** the VICE snapshot (.vsf) the file was opened from: Build & Run restarts it as it was, the built program in its RAM */
   vsf?: Uint8Array;
+  /** a chip of the project's cartridge (`Project.cart`): its CHIP packet, from 0; the file is that chip's bytes */
+  chip?: number;
 }
 
 /** A file as accepted by `analyze()`; ids are only needed by the UI. */
@@ -32,6 +36,17 @@ export interface FileInput {
   load: Addr;
   bytes: Uint8Array;
   vsf?: Uint8Array;
+  chip?: number;
+}
+
+/**
+ * The cartridge image (.crt) a project was opened from (spec 13.9): kept whole, so that the export rebuilds it from
+ * the chips re-assembled as files (`LoadedFile.chip`) and the others as they are, and Build & Run starts it in VICE.
+ */
+export interface Cartridge {
+  /** the .crt file's name */
+  name: string;
+  crt: Uint8Array;
 }
 
 export interface OverrideProps {
@@ -218,6 +233,8 @@ export interface Project {
   pack?: PackPrefs | null;
   /** code the user wrote over the loaded bytes, in the order written; `files` holds those that are on */
   patches: Patch[];
+  /** the cartridge the project was opened from (missing or null: none) */
+  cart?: Cartridge | null;
   settings: Settings;
 }
 
@@ -243,6 +260,8 @@ export interface ProjectInput {
   scripts?: Partial<Record<BuildScript, string>>;
   /** the patches (those that are on are in `files`): the source marks where each one that is on is */
   patches?: Pick<Patch, 'name' | 'start' | 'bytes' | 'off'>[];
+  /** the cartridge the files' chips are of: its memory map, start vectors and the image the export rebuilds */
+  cart?: Cartridge | null;
   settings?: Partial<Settings>;
 }
 
@@ -255,8 +274,9 @@ export interface SerializedProject {
   format: 'mimir-project' | typeof LEGACY_PROJECT_FORMAT;
   version: 1;
   name: string;
-  /** `vsf`: the snapshot the file was opened from (base64), missing in project files from before snapshots were kept */
-  files: { name: string; load: Addr; data: string; vsf?: string }[];
+  /** `vsf`: the snapshot the file was opened from (base64), missing in project files from before snapshots were kept;
+   *  `chip`: the cartridge's CHIP packet the file is */
+  files: { name: string; load: Addr; data: string; vsf?: string; chip?: number }[];
   overrides: Override[];
   entries: Addr[];
   /** missing in project files from before the program start could be set */
@@ -279,6 +299,8 @@ export interface SerializedProject {
   pack?: PackPrefs | null;
   /** `bytes` and `old` as base64; missing in project files from before patches */
   patches?: (Omit<Patch, 'id' | 'bytes' | 'old'> & { bytes: string; old: string })[];
+  /** the cartridge image as base64; missing in project files from before cartridges, and without one */
+  cart?: { name: string; data: string };
   settings: Partial<Settings>;
 }
 
@@ -540,6 +562,8 @@ export interface MemConfigInfo {
   /** where the user set the state (BankZone), per address: 0 = detected */
   forcedPort: Uint8Array;
   forcedVic: Uint8Array;
+  /** the memory map of the cartridge the files are chips of ('none': no cartridge) */
+  cart: CartMode;
 }
 
 /* ---------- symbols ---------- */

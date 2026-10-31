@@ -14,7 +14,10 @@ export function seedEntries(ctx: Ctx): void {
   if (userStart) { enqueue(project.entryPoint!, 'entry'); ctx.entry = project.entryPoint!; L('info', `Program start set by you: ${$4(project.entryPoint!)}`, project.entryPoint!, 'entry'); }
   else if (project.entryPoint != null) L('warn', `The program start you set (${$4(project.entryPoint)}) is not in a loaded file; using the detected one`, null, 'entry');
   for (const b of basics) if (b.sys != null) { enqueue(b.sys, 'entry'); ctx.entry = ctx.entry ?? b.sys; }
-  if (files.length && !userStart && !basics.some(b => b.file === 0) && !ov[files[0].load]) {
+  // a cartridge starts where its vectors point (5.3b), not at its first byte
+  const cart = ctx.cartStart?.entries.filter(e => loaded(e.a)) ?? [];
+  for (const e of cart) { enqueue(e.a, e.kind); if (e.kind === 'entry') ctx.entry = ctx.entry ?? e.a; }
+  if (files.length && !userStart && !cart.length && !basics.some(b => b.file === 0) && !ov[files[0].load]) {
     // a deep analysis traces the load address on trial, like any guess (`settle`)
     if (ctx.deep) ctx.pending.push({ a: files[0].load, kind: 'entry' });
     else loadEntry(ctx);
@@ -53,7 +56,7 @@ export function trace(ctx: Ctx): void {
   const { deep, cuts } = ctx;
   // a deep analysis does not follow a JSR or JMP into ROM or through an operand that code writes
   const follow = (from: number, to: number) => {
-    const why = deep && !insLen[to] && cutFor(deep, loaded, mem, from, to, ctx.onTrial);
+    const why = deep && !insLen[to] && cutFor(deep, loaded, mem, from, to, ctx.onTrial, ctx.cart);
     if (why) cuts.set(cutKey(from, to), why);
     return !why;
   };

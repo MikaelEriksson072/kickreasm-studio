@@ -4,8 +4,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
-  analyze, comparePrg, createProject, DEFAULT_SETTINGS, deserializeProject, detectPacking, exportFiles, h4, kindInfo, makeDemo,
-  parseD64, parsePrg, projectNameFor, readD64File, render, unpackLog, unpackPrg, verify, type Project, type SerializedProject, type Settings,
+  analyze, bankFiles, builtCartridge, cartridgeFiles, comparePrg, compareCrt, createProject, DEFAULT_SETTINGS, deserializeProject, detectPacking, expectedCartridge, exportFiles, h4, isCrt,
+  kindInfo, makeDemo, openCartridge, parseCrt, parseD64, parsePrg, projectNameFor, readD64File, render, unpackLog, unpackPrg, verify, type Cartridge, type FileInput, type Project,
+  type SerializedProject, type Settings,
 } from '@mimir/core';
 import { findC64Roms, findKickAssJar, findVice, runKickAssembler, splitArgs, writeVfs } from '@mimir/core/node';
 
@@ -14,9 +15,9 @@ export interface Io { out: (s: string) => void; err: (s: string) => void; cwd: s
 const USAGE = `Mimir Studio command line
 
 Usage:
-  mimir analyse <file.prg | project.mimir.json>... [--json]
-  mimir verify  <file.prg | project.mimir.json>... [--kickass [KickAss.jar]] [--java <java>]
-  mimir export  <file.prg | project.mimir.json>... -o <folder> [--name <name>] [--force]
+  mimir analyse <file.prg | cartridge.crt | project.mimir.json>... [--json] [--bank <n>]
+  mimir verify  <file.prg | cartridge.crt | project.mimir.json>... [--kickass [KickAss.jar]] [--java <java>]
+  mimir export  <file.prg | cartridge.crt | project.mimir.json>... -o <folder> [--name <name>] [--force]
   mimir unpack  <file.prg | disk.d64> [--file <name>] [--disk <disk.d64>] [-o <unpacked.prg>] [--no-roms]
   mimir demo    [-o raster-demo.prg]
 
@@ -28,6 +29,7 @@ Options:
   --java <path>     Java executable used for --kickass (default: java)
   --no-roms         unpack with Sindri's stand-ins instead of VICE's C64 ROMs (default: the ROMs of a
                     VICE installation, or the folder in C64_ROMS)
+  --bank <n>        a cartridge: open this bank instead of the one the C64 starts in
   --file <name>     unpack: the file on the D64 (default: its first PRG; * and ? as the DOS takes them)
   --disk <d64>      unpack: put this disk in the drive (a D64 given as the file is in it already), so the
                     program can load from it with the KERNAL or its own fast loader
@@ -44,7 +46,7 @@ function parse(argv: string[]): Parsed {
     if (a === '-o' || a === '--out') { flags.set('out', rest[++i] ?? ''); continue; }
     if (a.startsWith('--')) {
       const name = a.slice(2), nextArg = rest[i + 1];
-      const takesValue = name === 'name' || name === 'java' || name === 'file' || name === 'disk' || (name === 'kickass' && nextArg && !nextArg.startsWith('-') && /\.jar$/i.test(nextArg));
+      const takesValue = name === 'name' || name === 'java' || name === 'file' || name === 'disk' || name === 'bank' || (name === 'kickass' && nextArg && !nextArg.startsWith('-') && /\.jar$/i.test(nextArg));
       flags.set(name, takesValue ? rest[++i] : true);
       continue;
     }
@@ -61,7 +63,8 @@ function coerce(key: string, value: string): unknown {
   return value;
 }
 
-function loadProject(inputs: string[], io: Io, sets: [string, string][]): Project {
+/** `bank`: the bank of a cartridge (.crt) to open; the one the C64 starts in when not given */
+function loadProject(inputs: string[], io: Io, sets: [string, string][], bank?: number): Project {
   if (!inputs.length) throw new Error('no input files');
   const settings: Partial<Settings> = {};
   for (const [k, v] of sets) (settings as Record<string, unknown>)[k] = coerce(k, v);
@@ -70,8 +73,20 @@ function loadProject(inputs: string[], io: Io, sets: [string, string][]): Projec
     const p = deserializeProject(JSON.parse(readFileSync(first, 'utf8')) as SerializedProject);
     return { ...p, settings: { ...p.settings, ...settings } };
   }
-  const files = inputs.map(f => { const path = resolve(io.cwd, f); return parsePrg(basename(path), new Uint8Array(readFileSync(path))); });
-  return createProject({ name: projectNameFor(files[0].name), files, settings });
+  // a cartridge (spec 13.9): the chips of a bank, with the image the export rebuilds; a project holds one
+  let cart: Cartridge | null = null;
+  const files = inputs.flatMap((f): FileInput[] => {
+    const path = resolve(io.cwd, f), bytes = new Uint8Array(readFileSync(path));
+    if (!isCrt(bytes)) return [parsePrg(basename(path), bytes)];
+    if (cart) throw new Error(`${basename(path)}: a project holds one cartridge`);
+    const o = openCartridge(basename(path), bytes);
+    cart = o.cart;
+    if (bank == null) return o.files;
+    const chips = bankFiles(o.crt, bank);
+    if (!chips.length) throw new Error(`${o.cart.name} has no bank ${bank}`);
+    return chips;
+  });
+  return createProject({ files, settings, cart });
 }
 
 function analyseCmd(p: Project, io: Io, json: boolean) {
@@ -102,9 +117,10 @@ async function kickCheck(p: Project, io: Io, jar: string, java: string): Promise
   const A = analyze(p);
   const R = render(A, p);
   const dir = await mkdtemp(join(tmpdir(), 'mimir-cli-'));
+  const cart = cartridgeFiles(p, R, p.settings);
   let ok = true;
   try {
-    await writeVfs(dir, R.files);
+    await writeVfs(dir, { ...R.files, ...cart?.files });
     for (const [fi, f] of A.files.entries()) {
       const entry = `${R.fileNames[fi]}.asm`;
       const run = await runKickAssembler({ java, jar, cwd: dir, entry, outDir: 'out', args: splitArgs(p.settings.kickArgs) });
@@ -114,6 +130,15 @@ async function kickCheck(p: Project, io: Io, jar: string, java: string): Promise
       io.out(`${good ? 'OK  ' : 'FAIL'} ${entry} with ${basename(jar)}: ${cmp.same}/${cmp.total} bytes identical (${run.ms} ms)`);
       for (const pr of run.problems) io.out(`  ${pr.file}:${pr.line}:${pr.column} ${pr.severity}: ${pr.message}`);
       for (const d of cmp.diffs.slice(0, 10)) io.out(`  ${d.msg ?? `$${h4(d.addr)}: expected $${(d.exp ?? 0).toString(16)}, got ${d.got == null ? 'nothing' : '$' + d.got.toString(16)}`}`);
+    }
+    // the cartridge's own source, after the chips: the image it writes against the one opened
+    if (cart && p.cart) {
+      const run = await runKickAssembler({ java, jar, cwd: dir, entry: cart.entry, outDir: 'out', args: splitArgs(p.settings.kickArgs) });
+      const cmp = compareCrt(parseCrt(p.cart.crt, p.cart.name), run.ok ? run.prg : null, expectedCartridge(p) ?? undefined);
+      ok = ok && run.ok && cmp.ok;
+      io.out(`${run.ok && cmp.ok ? 'OK  ' : 'FAIL'} ${cart.entry} with ${basename(jar)}: ${cart.output} ${cmp.same}/${cmp.total} bytes identical to ${p.cart.name} (${run.ms} ms)`);
+      for (const pr of run.problems) io.out(`  ${pr.file}:${pr.line}:${pr.column} ${pr.severity}: ${pr.message}`);
+      for (const d of cmp.diffs) io.out(`  ${d}`);
     }
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -130,7 +155,24 @@ function builtinVerify(p: Project, io: Io) {
     for (const e of r.errors.slice(0, 20)) io.out(`  ${e.file}:${e.line} ${e.msg}`);
     for (const d of r.diffs.slice(0, 10)) io.out(`  ${d.msg ?? `$${h4(d.addr)}: expected $${(d.exp ?? 0).toString(16)}, got ${d.got == null ? 'nothing' : '$' + d.got.toString(16)}`}`);
   }
+  // a cartridge: the image rebuilt from the chips just built, against the one opened
+  const b = p.cart ? builtCartridge(p, V.results.map(r => r.prg)) : null;
+  if (b && p.cart) {
+    const cmp = compareCrt(parseCrt(p.cart.crt, p.cart.name), b.crt, expectedCartridge(p) ?? undefined);
+    const good = cmp.ok && !b.problems.length;
+    io.out(`${good ? 'OK  ' : 'FAIL'} ${b.name}: ${cmp.same}/${cmp.total} bytes identical to ${p.cart.name} (the cartridge rebuilt from the chips)`);
+    for (const d of [...b.problems, ...cmp.diffs]) io.out(`  ${d}`);
+    if (!good) return { A, R, V: { ...V, ok: false } };
+  }
   return { A, R, V };
+}
+
+/** --bank <n>: a whole number, else an error */
+function bankFlag(flags: Map<string, string | true>): number | undefined {
+  const v = flags.get('bank');
+  if (v === undefined) return undefined;
+  if (typeof v !== 'string' || !/^\d+$/.test(v)) throw new Error('--bank needs the number of a bank');
+  return +v;
 }
 
 export async function main(argv: string[], io: Io): Promise<number> {
@@ -139,9 +181,9 @@ export async function main(argv: string[], io: Io): Promise<number> {
   try {
     switch (cmd) {
       case 'analyse': case 'analyze':
-        return analyseCmd(loadProject(inputs, io, sets), io, flags.has('json'));
+        return analyseCmd(loadProject(inputs, io, sets, bankFlag(flags)), io, flags.has('json'));
       case 'verify': {
-        const p = loadProject(inputs, io, sets);
+        const p = loadProject(inputs, io, sets, bankFlag(flags));
         const { V } = builtinVerify(p, io);
         let ok = V.ok;
         if (flags.has('kickass')) {
@@ -156,7 +198,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
         if (typeof out !== 'string' || !out) { io.err('export needs -o <folder>'); return 2; }
         const dir = resolve(io.cwd, out);
         if (existsSync(dir) && readdirSync(dir).length && !flags.has('force')) { io.err(`${dir} is not empty (use --force to write into it)`); return 2; }
-        let p = loadProject(inputs, io, sets);
+        let p = loadProject(inputs, io, sets, bankFlag(flags));
         if (typeof flags.get('name') === 'string') p = { ...p, name: flags.get('name') as string };
         const { R, V } = builtinVerify(p, io);
         mkdirSync(dir, { recursive: true });

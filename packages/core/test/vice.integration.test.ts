@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { makeD64, makePrg, overwritesSystemArea, parseVsf, patchSnapshot } from '../src';
+import { analyze, builtCartridge, makeD64, makePrg, openCartridge, overwritesSystemArea, parseVsf, patchSnapshot, render, verify } from '../src';
 import { findVice, prepareVice, viceArgv, viceMonitorScript } from '../src/node';
 import { fromSource } from './helpers/programs';
 import { readPng } from './helpers/png';
@@ -43,6 +43,12 @@ describe('VICE command line', () => {
     expect(viceArgv({ prgPath: 'p.prg', start: 0x1000, via: 'monitor', scriptPath: 'p.start.mon', disk: 'd.d64' })).toEqual(['-8', 'd.d64', '-moncommands', 'p.start.mon', '-initbreak', 'ready']);
     // a snapshot brings its drive as it was taken
     expect(viceArgv({ prgPath: 'p.vsf', disk: 'd.d64' })).toEqual(['-autostartprgmode', '1', '-8', 'd.d64', '-autostart', 'p.vsf']);
+  });
+
+  it('attaches a cartridge (-cartcrt) instead of starting a program, with the labels and a disk', async () => {
+    expect(viceArgv({ args: ['-autostartprgmode', '1'], prgPath: 'c.crt', labelsPath: 'p.vs', cart: true })).toEqual(['-autostartprgmode', '1', '-moncommands', 'p.vs', '-cartcrt', 'c.crt']);
+    expect(viceArgv({ prgPath: 'c.crt', disk: 'd.d64', start: 0x1000, cart: true })).toEqual(['-8', 'd.d64', '-cartcrt', 'c.crt']);
+    expect(await prepareVice({ prgPath: 'c.crt', cart: true })).toEqual({ argv: ['-cartcrt', 'c.crt'], via: 'cart' });
   });
 
   it('knows which programs overwrite BASIC\'s work area', () => {
@@ -141,6 +147,26 @@ describe.skipIf(!vice)(`real VICE (${vice ?? 'not found'})`, () => {
       const { argv, via } = await prepareVice({ args: headless(dir), prgPath, start: 0x0c00 });
       expect(via).toBe('monitor');
       expect(spawnSync(vice!, argv, { timeout: 90_000, windowsHide: true }).status).toBe(0x42);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('starts the cartridge rebuilt from its re-assembled boot bank: it switches bank 1 in and reads it', async () => {
+    // fixtures/crt/mimir-demo.crt (crt.test.ts): a Magic Desk whose bank 0 copies bank 1's text to the screen and
+    // exits with its first screen code, "M" ($0d)
+    const crt = new Uint8Array(await readFile(join(__dirname, '../../../fixtures/crt/mimir-demo.crt')));
+    const o = openCartridge('mimir-demo.crt', crt), p = { name: 'mimir-demo', files: o.files, cart: o.cart };
+    const A = analyze(p), V = verify(A, render(A, p));
+    const built = builtCartridge(p, V.results.map(r => r.prg))!;
+    expect(built.crt).toEqual(crt);
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-vice-'));
+    try {
+      const path = join(dir, built.name);
+      await writeFile(path, built.crt);
+      const { argv, via } = await prepareVice({ args: headless(dir), prgPath: path, cart: true });
+      expect(via).toBe('cart');
+      expect(spawnSync(vice!, argv, { timeout: 90_000, windowsHide: true }).status).toBe(0x0d);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

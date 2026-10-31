@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { analyze, DEFAULT_PACK, demoProject, packWithBrokkr as packWithBrokkrCore, deserializeProject, LEGACY_PROJECT_FORMAT, makeD64, render, serializeProject, type SerializedProject, type ToolchainSettings } from '@mimir/core';
+import { analyze, createProject, DEFAULT_PACK, demoProject, packWithBrokkr as packWithBrokkrCore, deserializeProject, LEGACY_PROJECT_FORMAT, makeD64, render, serializeProject, type SerializedProject, type ToolchainSettings } from '@mimir/core';
 import { findKickAssJar, writeVfs } from '@mimir/core/node';
 import { CHANNELS } from '../shared/ipc';
 import { assertEntryName, PathPolicy } from '../electron/main/paths';
@@ -486,6 +486,22 @@ describe('project files', () => {
     expect(zp).toMatchObject({ load: 0x0002, start: 0x0810 });
     expect(zp.bytes.length).toBe(0xfffe);
     expect(prgOpenSchema.parse({ zeroPage: true })).toEqual({ zeroPage: true });
+  });
+
+  it('opens a cartridge as the chips of its boot bank, each with the image, which the project schemas keep', async () => {
+    const path = join(__dirname, '../../../fixtures/crt/mimir-demo.crt'), crt = new Uint8Array(readFileSync(path));
+    const opened = await readPrgFiles([path]);
+    expect(opened.map(f => [f.name, f.load, f.bytes.length, f.chip])).toEqual([['bank00_8000.prg', 0x8000, 0x2000, 0]]);
+    expect(opened[0].cart).toEqual({ name: 'mimir-demo.crt', crt });
+    const p = createProject({ files: opened, cart: opened[0].cart });
+    const saved = projectSchema.parse(p);
+    expect(saved.cart?.crt).toEqual(crt);
+    expect(saved.files[0].chip).toBe(0);
+    const read = deserializeProject(serializedProjectSchema.parse(JSON.parse(JSON.stringify(serializeProject(p)))) as SerializedProject);
+    expect(read.cart?.crt).toEqual(crt);
+    expect(read.files[0].chip).toBe(0);
+    expect(() => projectSchema.parse({ ...p, cart: { name: 'x.crt', crt: new Uint8Array(10) } })).toThrow(/not a cartridge image/);
+    expect(runSchema.parse({ prgPath: 'c.crt', cart: true })).toEqual({ prgPath: 'c.crt', cart: true });
   });
 
   it('reads .d64 disk images and refuses anything else', async () => {

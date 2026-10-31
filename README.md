@@ -6,8 +6,8 @@
 
 *Named after Mímir, who keeps the well of wisdom in Norse myth; the logo is his rune ᛗ glowing over the rings of his well.*
 
-Mimir Studio is a desktop IDE for re-assembling C64 software. Open a `.prg`, a `.d64` disk image or a VICE
-snapshot. The app traces the code, recognises graphics, music, tables and text, and names every hardware register
+Mimir Studio is a desktop IDE for re-assembling C64 software. Open a `.prg`, a `.d64` disk image, a VICE
+snapshot or a cartridge (`.crt`). The app traces the code, recognises graphics, music, tables and text, and names every hardware register
 and KERNAL routine. You can then rename, comment and re-type anything. It exports a
 [Kick Assembler](http://theweb.dk/KickAssembler/) project that assembles back to **exactly the same bytes**, and starts
 it in [VICE](https://vice-emu.sourceforge.io/) with one key.
@@ -26,6 +26,12 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   interrupt vectors and `$01` as the starting point. *Build & Run* puts your rebuilt program into the snapshot and
   restarts it exactly where it was. The newest 5 quicksaves are kept in a list, where you can name them, open them and
   save them to a folder of your own. A star makes one a favourite, which stays when VICE saves newer ones.
+- **Cartridges re-assemble too.** A `.crt` opens with its boot bank as source, at the addresses the C64 sees it at, and
+  the Explorer lists its banks to open one by one. The analysis knows the cartridge's memory map (8K, 16K or Ultimax), so
+  its ROM at `$a000` or `$e000` is code to trace, not BASIC or the KERNAL, and it starts from the CBM80 or reset vectors.
+  The export writes a Kick Assembler source that rebuilds the whole `.crt` byte for byte, the banks not opened included,
+  and *Build & Run* starts it in VICE with `-cartcrt`. It reads every hardware type VICE knows; normal, Ultimax, Ocean,
+  Magic Desk, System 3, Dinamic, Fun Play, Zaxxon and EasyFlash cartridges are checked against real ones.
 - **It recognises what demos and games are made of:**
   - SID players, by their jump table and note frequency table, exported as a `.sid` that Kick Assembler loads with `LoadSid`;
   - charsets, sprites, bitmaps and screens, from `$d018`, `$dd00` and the sprite pointers;
@@ -125,8 +131,8 @@ This writes `Mimir-Studio-<version>-setup.exe` and a portable `.exe` to `apps/de
 
 ## How to use it
 
-1. **Open a program.** Use *Open PRG…* (`Ctrl+O`) for a `.prg` or a VICE `.vsf`, or *Mount D64…* for a disk. You can
-   also drop the file on the window. *Demo* in the Explorer loads a showcase with a guided tour (`F2`).
+1. **Open a program.** Use *Open PRG…* (`Ctrl+O`) for a `.prg`, a VICE `.vsf` or a cartridge `.crt`, or *Mount D64…*
+   for a disk. You can also drop the file on the window. *Demo* in the Explorer loads a showcase with a guided tour (`F2`).
 2. **Read the listing.** Blocks are coloured by type. The inspector on the right shows why each block was classified
    the way it was, the memory map and a preview. `G` goes to an address or label, and `X` lists who references the
    line. Pointing at an undocumented opcode says what it does and which flags it changes.
@@ -147,7 +153,8 @@ The analysis also runs without the app, for batch jobs and CI:
 pnpm mimir analyse game.prg
 ```
 
-`analyse`, `verify [--kickass]`, `export -o <folder>` and `demo` take `.prg` files or saved projects (`.mimir.json`).
+`analyse`, `verify [--kickass]`, `export -o <folder>` and `demo` take `.prg` files, a cartridge (`.crt`, with
+`--bank <n>` for another bank than the one it starts in) or saved projects (`.mimir.json`).
 `--deep` runs the deep analysis. `unpack game.prg [-o unpacked.prg]` unpacks a packed program and prints its layers; `unpack demo.d64` takes the disk's
 first PRG (or `--file NAME`) with the disk in the drive.
 

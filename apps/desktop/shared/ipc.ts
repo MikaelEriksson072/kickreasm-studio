@@ -3,7 +3,7 @@
  * process registers exactly these channels and the preload exposes
  * exactly these functions as `window.kr`.
  * ===================================================================== */
-import type { ExomizerReport, KickProblem, LoadedFile, PackCheck, PackPrefs, Project, Roms, ToolchainSettings } from '@mimir/core';
+import type { Cartridge, ExomizerReport, KickProblem, LoadedFile, PackCheck, PackPrefs, Project, Roms, ToolchainSettings } from '@mimir/core';
 
 export const CHANNELS = {
   projectOpen: 'project:open',
@@ -50,8 +50,9 @@ export interface ProjectSaveResult { path: string }
 /** `paths` given: read them (they must lie in folders the user picked); otherwise a file dialog. */
 /** `zeroPage`: VICE snapshots open from $0002 (zero page and stack included) instead of $0200 */
 export interface PrgOpenRequest { paths?: string[]; zeroPage?: boolean }
-/** an opened PRG; a VICE snapshot also gives the entry points it holds, its program start and what it is */
-export type OpenedPrg = LoadedFile & { entries?: number[]; snapshot?: string; start?: number };
+/** an opened PRG; a VICE snapshot also gives the entry points it holds, its program start and what it is; a chip of a
+ *  cartridge (`chip`) the image it is from (the same object for every chip of it) */
+export type OpenedPrg = LoadedFile & { entries?: number[]; snapshot?: string; start?: number; cart?: Cartridge };
 
 /** A .d64 disk image to mount. `path` given: read it (in a folder the user picked); otherwise a file dialog. */
 export interface DiskOpenRequest { path?: string }
@@ -99,9 +100,11 @@ export interface BuildResult {
  * `start`: run with `sys <start>` after loading instead of autostarting (the program start set by the user).
  * `disk`: a .d64 image (a copy of the mounted disk in a build folder) to put in drive 8.
  */
-export interface RunRequest { prgPath: string; labelsPath?: string; start?: number; disk?: string }
-/** `via`: RUN, `sys <start>`, or (a program over BASIC's work area $0002-$03ff) loaded and started from the monitor */
-export interface RunResult { pid: number; via: 'run' | 'sys' | 'monitor' }
+/** `cart`: `prgPath` is a cartridge image (.crt), which VICE attaches (-cartcrt) and starts at reset */
+export interface RunRequest { prgPath: string; labelsPath?: string; start?: number; disk?: string; cart?: boolean }
+/** `via`: RUN, `sys <start>`, (a program over BASIC's work area $0002-$03ff) loaded and started from the monitor, or a
+ *  cartridge attached */
+export interface RunResult { pid: number; via: 'run' | 'sys' | 'monitor' | 'cart' }
 
 /**
  * A terminal window (VICE on PATH, `kickass` defined) in `dir`: a folder opened in this session (the export or

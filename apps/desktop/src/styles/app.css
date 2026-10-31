@@ -160,6 +160,9 @@ kbd { font: 10.5px/1 var(--font-code); padding: 2px 5px; border-radius: 4px; bor
 .disk-row.off { cursor: default; opacity: 0.55; }
 .disk-row.off:hover { background: none; }
 .disk-blocks { text-align: right; }
+/* a cartridge's banks: the open ones marked like the selected block */
+.cart-row.on { background: var(--sel); color: var(--fg); }
+.cart-row.part .disk-blocks { color: var(--fg); }
 .disk-name { color: var(--fg); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 .mmap { display: flex; gap: 8px; }
 .strip-wrap { display: flex; gap: 4px; flex: none; }

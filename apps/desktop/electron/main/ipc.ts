@@ -106,7 +106,7 @@ export function registerIpc(deps: IpcDeps): void {
   handle(CHANNELS.prgOpen, prgOpenSchema, async (req, e) => {
     let paths = req.paths?.map(p => policy.assert(p, 'PRG file')) ?? [];
     if (!req.paths?.length) {
-      paths = await pick(e, 'prg', { title: 'Open PRG files', properties: ['openFile', 'multiSelections'], filters: [{ name: 'C64 programs and VICE snapshots', extensions: ['prg', 'PRG', 'vsf', 'VSF'] }, { name: 'All files', extensions: ['*'] }] });
+      paths = await pick(e, 'prg', { title: 'Open PRG files', properties: ['openFile', 'multiSelections'], filters: [{ name: 'C64 programs, VICE snapshots and cartridges', extensions: ['prg', 'PRG', 'vsf', 'VSF', 'crt', 'CRT'] }, { name: 'All files', extensions: ['*'] }] });
       for (const p of paths) chose(dirname(p), 'prg');
     }
     return readPrgFiles(paths, { zeroPage: req.zeroPage });

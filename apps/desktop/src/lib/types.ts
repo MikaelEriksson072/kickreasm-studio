@@ -36,7 +36,12 @@ export interface KickBuild {
   problems: KickProblem[];
   /** per source file: bytes compared with the original */
   compared: { entry: string; ok: boolean; same: number; total: number; excluded: number; prgPath: string; vsPath: string | null; prg: Uint8Array | null }[];
+  /** the cartridge's source: the image it wrote, compared with the original .crt (spec 13.9) */
+  cart: CartCheck | null;
 }
+
+/** A cartridge image rebuilt (spec 13.9) and compared with the one the project was opened from */
+export interface CartCheck { ok: boolean; name: string; crt: Uint8Array | null; path?: string; same: number; total: number; diffs: string[] }
 
 export interface BuildState {
   ok: boolean;
@@ -46,4 +51,6 @@ export interface BuildState {
   at: number;
   V: VerifyResult;
   kick: KickBuild | null;
+  /** the cartridge rebuilt from the chips the built-in assembler built; null without one */
+  cart: CartCheck | null;
 }

@@ -54,6 +54,7 @@ export interface KickRunResult {
   output: string;
   problems: KickProblem[];
   argv: string[];
+  /** the output: the PRG, or for a cartridge's source (`<name>.crt.asm`) the image `<name>.crt` */
   prgPath: string;
   prg: Uint8Array | null;
   /** VICE label file written by -vicesymbols, when present */
@@ -65,7 +66,8 @@ export interface KickRunResult {
 export async function runKickAssembler(o: KickRunOptions): Promise<KickRunResult> {
   const t0 = Date.now();
   const base = o.entry.replace(/\.asm$/i, '');
-  const prgPath = join(o.cwd, o.outDir, base + '.prg');
+  // a cartridge's source (<name>.crt.asm) writes the image <name>.crt, every other source <name>.prg
+  const prgPath = join(o.cwd, o.outDir, /\.crt$/i.test(base) ? base : base + '.prg');
   const vsPath = join(o.cwd, o.outDir, base + '.vs');
   await rm(prgPath, { force: true });
   await rm(vsPath, { force: true });
@@ -92,8 +94,9 @@ export async function runKickAssembler(o: KickRunOptions): Promise<KickRunResult
   return { ok, code, output, problems, argv: [o.java, ...argv], prgPath, prg, vsPath: existsSync(vsPath) ? vsPath : null, ms: Date.now() - t0 };
 }
 
-/** How VICE starts the program: RUN, `sys <start>` typed after loading, or a jump from the monitor. */
-export type ViceStart = 'run' | 'sys' | 'monitor';
+/** How VICE starts the program: RUN, `sys <start>` typed after loading, a jump from the monitor, or a cartridge
+ *  attached (the C64 starts it at reset). */
+export type ViceStart = 'run' | 'sys' | 'monitor' | 'cart';
 
 export interface ViceLaunch {
   vice: string; args?: string[]; prgPath: string; labelsPath?: string | null;
@@ -105,6 +108,8 @@ export interface ViceLaunch {
   scriptPath?: string;
   /** a .d64 image to put in drive 8, for programs that load more from disk */
   disk?: string | null;
+  /** `prgPath` is a cartridge image (.crt): VICE attaches it and resets, and the C64 starts it (no start, no autostart) */
+  cart?: boolean;
 }
 
 /**
@@ -123,6 +128,7 @@ export interface ViceLaunch {
 export function viceArgv(o: Omit<ViceLaunch, 'vice'>): string[] {
   const args = [...(o.args || [])];
   const drive = o.disk ? ['-8', o.disk] : [];
+  if (o.cart) return [...args, ...drive, ...(o.labelsPath ? ['-moncommands', o.labelsPath] : []), '-cartcrt', o.prgPath];
   if (o.start != null && o.via === 'monitor') {
     if (!o.scriptPath) throw new Error('starting from the monitor needs a monitor command file');
     return [...args, ...drive, '-moncommands', o.scriptPath, '-initbreak', 'ready'];
@@ -146,6 +152,7 @@ export function viceMonitorScript(o: { prgPath: string; start: number; labels?: 
  * started from the monitor: its command file is written next to the PRG (`name.start.mon`).
  */
 export async function prepareVice(o: Omit<ViceLaunch, 'vice'>): Promise<{ argv: string[]; via: ViceStart }> {
+  if (o.cart) return { argv: viceArgv(o), via: 'cart' };
   if (o.start == null) return { argv: viceArgv(o), via: 'run' };
   const prg = await readFile(o.prgPath);
   if (!(prg.length > 2 && overwritesSystemArea(prg[0] | (prg[1] << 8), prg.length - 2))) return { argv: viceArgv({ ...o, via: 'sys' }), via: 'sys' };

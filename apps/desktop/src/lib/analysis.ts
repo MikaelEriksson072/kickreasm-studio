@@ -20,7 +20,7 @@ let keyCounter = 0;
 export interface Analysis {
   A: AnalysisResult;
   R: RenderResult;
-  /** identifies the analysis inputs (files, overrides, entries, program start, bank zones, settings) */
+  /** identifies the analysis inputs (files, overrides, entries, program start, bank zones, settings, the cartridge) */
   aKey: number;
   renderMs: number;
   /** the project this result was computed for (work that awaits compares it with the latest edit) */
@@ -32,14 +32,14 @@ export function useAnalysis(project: Project, opts: RenderOptions = {}): { analy
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Immer keeps unchanged branches referentially equal, so identity tells what changed
-  const last = useRef<{ files: unknown; overrides: unknown; entries: unknown; entryPoint: unknown; bankZones: unknown; settings: unknown; key: number } | null>(null);
+  const last = useRef<{ files: unknown; overrides: unknown; entries: unknown; entryPoint: unknown; bankZones: unknown; settings: unknown; cart: unknown; key: number } | null>(null);
   const aKey = useMemo(() => {
     const l = last.current;
-    if (!l || l.files !== project.files || l.overrides !== project.overrides || l.entries !== project.entries || l.entryPoint !== project.entryPoint || l.bankZones !== project.bankZones || l.settings !== project.settings) {
-      last.current = { files: project.files, overrides: project.overrides, entries: project.entries, entryPoint: project.entryPoint, bankZones: project.bankZones, settings: project.settings, key: ++keyCounter };
+    if (!l || l.files !== project.files || l.overrides !== project.overrides || l.entries !== project.entries || l.entryPoint !== project.entryPoint || l.bankZones !== project.bankZones || l.settings !== project.settings || l.cart !== project.cart) {
+      last.current = { files: project.files, overrides: project.overrides, entries: project.entries, entryPoint: project.entryPoint, bankZones: project.bankZones, settings: project.settings, cart: project.cart, key: ++keyCounter };
     }
     return last.current!.key;
-  }, [project.files, project.overrides, project.entries, project.entryPoint, project.bankZones, project.settings]);
+  }, [project.files, project.overrides, project.entries, project.entryPoint, project.bankZones, project.settings, project.cart]);
 
   const seq = useRef(0);
   const hasResult = analysis != null;

@@ -142,7 +142,7 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
     // bank tracking: an instruction that always reaches I/O or ROM here gets the hardware/ROM name (or the bare
     // address), never the label of the RAM bytes below; one that always reaches RAM never gets a hardware name.
     // Where the configuration cannot be told, $d000-$dfff is I/O
-    const seen = A.mcfg && ctx.pc != null ? reachesForName(a, A.mcfg.port[ctx.pc], !!ctx.write) : null;
+    const seen = A.mcfg && ctx.pc != null ? reachesForName(a, A.mcfg.port[ctx.pc], !!ctx.write, A.mcfg.cart) : null;
     if (seen === 'hw') {
       const hs = hwSymbol(a);
       if (hs && (!ctx.isCall || hs.sym.call || hs.off)) {
@@ -255,12 +255,13 @@ export function render(A: AnalysisResult, project: ProjectInput, opts: RenderOpt
     if (S.hwComments && A.mcfg) {
       // what this instruction sets, and accesses whose target depends on a configuration that varies here
       const ch = A.mcfg.changes.get(pc);
-      if (ch && ch.port != null) cm.push(ch.port === ALL_PORTS ? 'sets $01 to a value the analysis cannot follow' : `memory ${describePorts(ch.port)}`);
+      if (ch && ch.port != null) cm.push(ch.port === ALL_PORTS ? 'sets $01 to a value the analysis cannot follow' : `memory ${describePorts(ch.port, A.mcfg.cart)}`);
       else if (ch && ch.vic != null && ch.vic !== ALL_BANKS) cm.push(`VIC bank ${banksOf(ch.vic).map(b => `${b} (${bankRange(b)})`).join(' or ')}`);
       const m = A.mcfg.port[pc], at = d.v;
-      if (at != null && o.mode !== 'imm' && o.mode !== 'rel' && banked(at) && m && m !== ALL_PORTS && reaches(at, m, o.access === 'write') === null) {
-        const names: Record<string, string> = { ram: 'RAM', io: 'I/O', basic: 'BASIC ROM', kernal: 'KERNAL ROM', char: 'character ROM' };
-        const seen = [...new Set(portsOf(m).map(cf => names[areaAt(at, cf, o.access === 'write')]))];
+      const cart = A.mcfg.cart;
+      if (at != null && o.mode !== 'imm' && o.mode !== 'rel' && banked(at, cart) && m && m !== ALL_PORTS && reaches(at, m, o.access === 'write', cart) === null) {
+        const names: Record<string, string> = { ram: 'RAM', io: 'I/O', basic: 'BASIC ROM', kernal: 'KERNAL ROM', char: 'character ROM', cart: 'cartridge ROM' };
+        const seen = [...new Set(portsOf(m).map(cf => names[areaAt(at, cf, o.access === 'write', cart)]))];
         if (seen.length > 1) cm.push(`${seen.join(' or ')}: $01 is ${describePorts(m)} here`);
       }
     }

@@ -8,6 +8,7 @@ import {
   bankRange, buildScripts, comparePrg, createProject, cyclePath, d64FileName, detectPacking, makePrg, mergeOverride, portName, portText, deserializeProject, exportFiles, findBlock, h2, h4, kindInfo, lineMove, lineText, MARK_AS, MARK_TYPE, moveBlockKeys,
   formatOverride, openC64File, overwritesSystemArea, parseVsf, patchSnapshot, editRanges, showcaseProject, parseD64, parsePrg, projectNameFor, rangeCover, bitfireFileName, readBitfireDisk, readD64File, readSpindleDisk, spinChunkName, projectTextFiles, shellWord, SYSTEM_AREA, TOOLCHAIN_KEYS, validLabel, withId,
   patchAt, patchEnd, patchesOn, patchFileName, patchPrg, switchPatch, withoutPatch, withPatch, packerNames, unpackLog,
+  bankFiles, builtCartridge, cartBuild, cartridgeFiles, compareCrt, describeCrt, expectedCartridge, isCrt, openCartridge, parseCrt, type Crt,
   type Addr, type AnalysisResult, type Block, type Bookmark, type BuildScript, type ByteMove, type D64File, type NumberFormat, type Override, type PackingInfo, type PackPrefs, type KickProblem, type ListingLine, type LoadedFile, type Patch, type PatchPlan, type Project, type RenderResult,
   type BitfireDisk, type BitfireFile, type SerializedProject, type Settings, type SpindleChunk, type SpindleDisk, type SpindleJob, type Token, type ToolchainSettings, type UnpackRun, type VerifyResult,
 } from '@mimir/core';
@@ -20,7 +21,7 @@ import { withIdentified, withUnpackRun } from './lib/packing';
 import { unpackBuiltIn } from './lib/unpack';
 import { packDefaults, packKeyOf } from './lib/pack';
 import { Icon, LVL_ICON } from './lib/icons';
-import type { BuildState, Command, ContextMenuState, Editing, KickBuild, MountedDisk, NavOptions, ScrollReq, Sel, Toast, ToastKind, UiProblem } from './lib/types';
+import type { BuildState, CartCheck, Command, ContextMenuState, Editing, KickBuild, MountedDisk, NavOptions, ScrollReq, Sel, Toast, ToastKind, UiProblem } from './lib/types';
 import { TitleBar } from './components/TitleBar';
 import { ActivityBar } from './components/ActivityBar';
 import { StatusBar } from './components/StatusBar';
@@ -158,8 +159,18 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   /** `undoLabel`: the new project is an undoable step (Ctrl+Z brings the one before back); `note`: the toast instead */
   const addFiles = (opened: OpenedPrg[], add: boolean, opts: { undoLabel?: string; note?: string } = {}) => {
     if (!opened.length) return;
+    // a cartridge's chips open as a project of their own, with the image (13.9): a project holds one cartridge
+    const cart = opened.find(f => f.cart)?.cart;
+    if (cart && !(add && project.cart && project.cart.name === cart.name && project.cart.crt.length === cart.crt.length)) {
+      const files: LoadedFile[] = opened.map(({ id, name, load, bytes, chip, cart: c }) => ({ id, name, load, bytes, ...(c === cart && chip != null ? { chip } : {}) }));
+      replace(createProject({ files, settings: project.settings, cart }), null, opts.undoLabel); resetView();
+      let what = '';
+      try { what = `: ${describeCrt(parseCrt(cart.crt, cart.name))}`; } catch { /* the files say enough */ }
+      toast(`Opened the cartridge ${cart.name}${what}; ${files.filter(f => f.chip != null).map(f => `${f.name} at $${h4(f.load)}`).join(', ')}${add ? ' (a project holds one cartridge, so it is a project of its own)' : ''}`, 'ok');
+      return;
+    }
     // a snapshot is kept with its file: Build & Run restarts it as it was
-    const files: LoadedFile[] = opened.map(({ id, name, load, bytes, vsf }) => ({ id, name, load, bytes, ...(vsf ? { vsf } : {}) }));
+    const files: LoadedFile[] = opened.map(({ id, name, load, bytes, vsf, chip }) => ({ id, name, load, bytes, ...(vsf ? { vsf } : {}), ...(cart && chip != null ? { chip } : {}) }));
     const entries = [...new Set(opened.flatMap(f => f.entries ?? []))];
     // a snapshot's BASIC SYS is the program start: its RAM from $0200 cannot be started with RUN
     const start = add ? undefined : opened.find(f => f.start != null)?.start;
@@ -264,6 +275,22 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     const u = f.unpacked;
     try { addFiles([withId(parsePrg(bitfireFileName(f).replace(/\.lz$/, '.prg'), makePrg(u?.start ?? f.load, u?.bytes ?? f.bytes)))], add); } catch (e) { toast(errorText(e), 'err'); }
   };
+  /* ---- the project's cartridge (13.9) ---- */
+  const crt = useMemo((): Crt | null => { try { return project.cart ? parseCrt(project.cart.crt, project.cart.name) : null; } catch { return null; } }, [project.cart]);
+  /** a bank of the cartridge as the project's files (Ctrl+Z goes back), or (`add`) its chips that fit beside them */
+  const openBank = (bank: number, add: boolean) => {
+    if (!crt || !project.cart) return;
+    const chips = bankFiles(crt, bank).map(withId);
+    if (!add) {
+      replace(createProject({ files: chips, settings: project.settings, cart: project.cart }), null, `Open bank ${bank} of ${project.cart.name}`); resetView();
+      toast(`Opened bank ${bank} of ${project.cart.name}: ${chips.map(f => `${f.name} at $${h4(f.load)}`).join(', ')}. Ctrl+Z goes back`, 'ok');
+      return;
+    }
+    const fits = chips.filter(c => !project.files.some(f => f.chip === c.chip || (c.load < f.load + f.bytes.length && f.load < c.load + c.bytes.length)));
+    if (!fits.length) { toast(`Bank ${bank} has no chip that fits beside the open files: it is at the same addresses`, 'warn'); return; }
+    update(`Add bank ${bank}`, d => { d.files.push(...fits); });
+    toast(`Added ${fits.map(f => `${f.name} at $${h4(f.load)}`).join(', ')}`, 'ok');
+  };
   /* ---- packed programs ---- */
   // a decruncher in front of compressed data (detectPacking), and what the unpacker finds: Sindri runs
   // every file opened (in a worker of its own, with the disk a file came from in its 1541) and keeps the result for Unpack; an external unpacker set in Settings
@@ -283,7 +310,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     return p;
   };
   useEffect(() => {
-    if (!external) for (const f of project.files) runFor(f).catch(() => { /* the heuristics still report it */ });
+    // a cartridge's chip is not a program Sindri can load and run
+    if (!external) for (const f of project.files) if (f.chip == null) runFor(f).catch(() => { /* the heuristics still report it */ });
   }, [project.files, external]); // eslint-disable-line react-hooks/exhaustive-deps
   const [identified, setIdentified] = useState<Record<string, IdentifyResponse>>({});
   const asked = useRef(new Set<string>());
@@ -363,6 +391,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       try {
         if (/\.json$/i.test(f.name)) { replace(deserializeProject(JSON.parse(new TextDecoder().decode(buf)) as SerializedProject)); resetView(); toast(`Opened project ${f.name}`, 'ok'); continue; }
         if (/\.d64$/i.test(f.name)) { mountBytes(f.name, null, buf); continue; }
+        // a cartridge image (known by its header): the chips of its boot bank, with the image
+        if (isCrt(buf)) { const o = openCartridge(f.name, buf); prgs.push(...o.files.map(x => ({ ...withId(x), cart: o.cart }))); continue; }
         // a .prg, or a VICE snapshot (known by its header)
         const o = openC64File(f.name, buf, { zeroPage: !!project.settings.snapshotZeroPage });
         prgs.push({ ...withId(o), ...(o.entries ? { entries: o.entries } : {}), ...(o.snapshot ? { snapshot: o.snapshot } : {}), ...(o.start != null ? { start: o.start } : {}) });
@@ -415,7 +445,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   };
   /** the code in `r` runs with this $01 value / VIC bank; null returns it to detection */
   const setBankZone = (r: Range, part: 'port' | 'vicBank', v: number | null) => {
-    const what = part === 'port' ? (v == null ? 'the detected $01' : `$01 = ${portName(v)} (${portText(v)})`) : (v == null ? 'the detected VIC bank' : `VIC bank ${v} (${bankRange(v)})`);
+    const what = part === 'port' ? (v == null ? 'the detected $01' : `$01 = ${portName(v)} (${portText(v, A.mcfg?.cart)})`) : (v == null ? 'the detected VIC bank' : `VIC bank ${v} (${bankRange(v)})`);
     update(`$${h4(r.start)}-$${h4(r.end - 1)} runs with ${what}`, d => { d.bankZones.push({ start: r.start, end: r.end, [part]: v }); });
     toast(`$${h4(r.start)}–$${h4(r.end - 1)} runs with ${what}`, 'ok');
   };
@@ -669,7 +699,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   const extraFiles = useMemo(() => projectTextFiles(project, R, S), [project, R, S]);
   /** build.bat / build.sh edited in the source view; the generated text again (or null) drops the edit */
   const setScript = (path: BuildScript, text: string | null) => {
-    const value = text == null || text === buildScripts(S, R.fileNames)[path] ? null : text;
+    const value = text == null || text === buildScripts(S, R.fileNames, cartBuild(project))[path] ? null : text;
     if ((project.scripts?.[path] ?? null) === value) return;
     update(value == null ? `Restore generated ${path}` : `Edit ${path}`, d => { d.scripts ??= {}; if (value == null) delete d.scripts[path]; else d.scripts[path] = value; });
     if (text == null) toast(`${path} is generated again from the toolchain settings`, 'ok');
@@ -696,27 +726,52 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         log.push('');
       }
       log.push(`Built-in verification took ${V.ms.toFixed(0)} ms.`, '');
+      // a cartridge (13.9): the image rebuilt from the chips just built, byte for byte against the one opened (with the
+      // patches written over its chips)
+      const image = snapshot.cart ? (() => { try { return parseCrt(snapshot.cart.crt, snapshot.cart.name); } catch { return null; } })() : null;
+      const expected = image ? expectedCartridge(snapshot) : null;
+      const patched = snapshot.patches.some(p => !p.off) && !!expected && !expected.every((v, i) => v === image?.bytes[i]);
+      const checkCart = (name: string, built: Uint8Array | null, problems: string[] = [], path?: string): CartCheck => {
+        const c = image && expected ? compareCrt(image, built, expected) : { ok: false, same: 0, total: 0, diffs: ['the cartridge image cannot be read'] };
+        return { ...c, ok: c.ok && !problems.length, diffs: [...problems, ...c.diffs], name, crt: built, ...(path ? { path } : {}) };
+      };
+      const cartLog = (c: CartCheck, by: string) => {
+        log.push(`${by} cartridge ${c.ok ? 'OK' : 'FAILED'}: ${c.name} ${c.same} / ${c.total} bytes identical to ${snapshot.cart?.name}${patched ? ' with the patches' : ''}`);
+        for (const d of c.diffs.slice(0, 8)) log.push(`  ${d}`);
+      };
+      let cart: CartCheck | null = null;
+      if (snapshot.cart) {
+        const b = builtCartridge(snapshot, V.results.map(r => r.prg));
+        cart = checkCart(b?.name ?? `${snapshot.name}.crt`, b?.crt ?? null, b?.problems);
+        cartLog(cart, 'Built-in');
+        log.push('');
+      }
       let kick: KickBuild | null = null;
       if (kickAvailable && kr) {
         setBuildBusy('Assembling with KickAss.jar');
-        const w = await kr.writeExport({ target: 'temp', name: snapshot.name.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40), files: R.files });
+        // the cartridge's own source comes last: it takes the chips' PRGs the others built
+        const cs = cartridgeFiles(snapshot, R, latest.current.S);
+        const w = await kr.writeExport({ target: 'temp', name: snapshot.name.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40), files: { ...R.files, ...cs?.files } });
         if (w) {
-          const res = await kr.build({ dir: w.dir, entries: R.fileNames.map(n => `${n}.asm`) });
+          const res = await kr.build({ dir: w.dir, entries: [...R.fileNames.map(n => `${n}.asm`), ...(cs ? [cs.entry] : [])] });
           log.push(res.stdout.trim());
           if (!res.outputs.length) log.push('', `KickAss.jar was not run: ${res.problems.map(p => p.message).join('; ')}`, 'Verified with the built-in assembler only.');
           else {
-            const compared = res.outputs.map((o, i) => { const c = comparePrg(snapshot.files[i], o.prg, R.excluded.filter(x => x.file === i)); return { entry: o.entry, ok: o.ok && c.ok, same: c.same, total: c.total, excluded: c.excluded, prgPath: o.prgPath, vsPath: o.vsPath, prg: o.prg, diffs: c.diffs }; });
-            kick = { ok: res.ok && compared.every(c => c.ok), dir: w.dir, problems: res.problems, compared };
+            const compared = res.outputs.slice(0, R.fileNames.length).map((o, i) => { const c = comparePrg(snapshot.files[i], o.prg, R.excluded.filter(x => x.file === i)); return { entry: o.entry, ok: o.ok && c.ok, same: c.same, total: c.total, excluded: c.excluded, prgPath: o.prgPath, vsPath: o.vsPath, prg: o.prg, diffs: c.diffs }; });
+            const co = cs ? res.outputs[R.fileNames.length] : undefined;
+            const kickCart = cs ? checkCart(cs.output, co?.ok ? co.prg : null, co && !co.ok ? [`${cs.entry} did not assemble`] : [], co?.prgPath) : null;
+            kick = { ok: res.ok && compared.every(c => c.ok) && (!kickCart || kickCart.ok), dir: w.dir, problems: res.problems, compared, cart: kickCart };
             log.push('');
             for (const c of compared) {
               log.push(`KickAss.jar round-trip ${c.ok ? 'OK' : 'FAILED'}: ${c.entry} ${c.same} / ${c.total} bytes identical${c.excluded ? `, ${c.excluded} left out of the build` : ''} (${res.ms} ms total)`);
               for (const d of c.diffs.slice(0, 8)) log.push(d.msg ? `  ${d.msg}` : `  $${h4(d.addr)}: expected $${h2(d.exp ?? 0)}, got ${d.got == null ? 'nothing' : '$' + h2(d.got)}`);
             }
+            if (kickCart) cartLog(kickCart, 'KickAss.jar');
             log.push(`Build folder: ${w.dir}`);
           }
         }
       }
-      const res: BuildState = { ok: V.ok && (kick ? kick.ok : true), log: log.join('\n'), key, at: Date.now(), V, kick };
+      const res: BuildState = { ok: V.ok && (cart ? cart.ok : true) && (kick ? kick.ok : true), log: log.join('\n'), key, at: Date.now(), V, kick, cart };
       setBuild(res);
       if (!opts.quiet) {
         setUi({ bottom: 'build', panelOpen: true });
@@ -751,6 +806,22 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
       setBuildBusy('Starting VICE');
       const diskPath = await diskCopy();
       const drive = diskPath && disk ? `, ${disk.name} in drive 8 (a copy: ${diskPath})` : '';
+      // a cartridge (13.9): VICE attaches the image just rebuilt (KickAss.jar's, else the built-in one's) and resets,
+      // and the C64 starts it from its vectors; the program start is not used
+      if (project.cart) {
+        let crtPath = res.kick?.cart?.ok ? res.kick.cart.path : undefined;
+        if (!crtPath) {
+          if (!res.cart?.crt) throw new Error('the cartridge was not rebuilt');
+          const w = await kr.writeExport({ target: 'temp', name: 'run', files: { [res.cart.name]: res.cart.crt } });
+          if (!w) return;
+          crtPath = `${w.dir}/${res.cart.name}`;
+        }
+        const labels = res.kick?.compared[0]?.vsPath ?? undefined;
+        const { pid } = await kr.run({ prgPath: crtPath, labelsPath: labels, disk: diskPath, cart: true });
+        setBuild(b => b && { ...b, log: `${b.log}\n\n> VICE started (pid ${pid}): the cartridge ${crtPath} attached (-cartcrt)${labels ? ` with labels from ${labels}` : ''}${drive}` });
+        toast(`VICE started the cartridge ${res.cart?.name ?? project.cart.name}${labels ? ' with labels in the monitor' : ''}${diskPath && disk ? `, ${disk.name} in drive 8` : ''}`, 'ok');
+        return;
+      }
       // a project opened from a VICE snapshot: VICE restarts the snapshot as it was taken (CPU, $01, VIC, SID, CIAs,
       // colour RAM, drives) and goes on from its PC, with the programs just built in its RAM; the program start is not used
       const snapAt = project.files.findIndex(f => f.vsf);
@@ -1158,7 +1229,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         { label: 'Set as program start', run: () => setStart(l.a) },
         ...(project.entryPoint != null ? [{ label: `Clear program start ($${h4(project.entryPoint)})`, run: () => setStart(null) }] : []),
         ...(A.mcfg ? [
-          { label: 'Memory configuration ($01)', children: [...[7, 6, 5, 4, 3, 2, 1, 0].map(c => ({ label: `${portName(c)} · ${portText(c)}`, run: () => { if (range) setBankZone(range, 'port', 0x30 + c); } })), { label: 'Detected (automatic)', run: () => { if (range) setBankZone(range, 'port', null); } }] },
+          { label: 'Memory configuration ($01)', children: [...[7, 6, 5, 4, 3, 2, 1, 0].map(c => ({ label: `${portName(c)} · ${portText(c, A.mcfg?.cart)}`, run: () => { if (range) setBankZone(range, 'port', 0x30 + c); } })), { label: 'Detected (automatic)', run: () => { if (range) setBankZone(range, 'port', null); } }] },
           { label: 'VIC bank', children: [...[0, 1, 2, 3].map(b => ({ label: `Bank ${b} · ${bankRange(b)}`, run: () => { if (range) setBankZone(range, 'vicBank', b); } })), { label: 'Detected (automatic)', run: () => { if (range) setBankZone(range, 'vicBank', null); } }] },
         ] : []),
         { sep: true },
@@ -1212,7 +1283,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
 
   return (
     <div className={cx('app', drawer && `drawer-${drawer}`)} style={{ '--side-w': sizes.side + 'px', '--insp-w': sizes.insp + 'px', '--bottom-h': sizes.bottom + 'px' } as React.CSSProperties}>
-      <TitleBar projectName={project.name} undoLabel={undoLabel} canRedo={!!future.length} theme={theme} busy={!!buildBusy} snapshot={project.files.some(f => f.vsf)}
+      <TitleBar projectName={project.name} undoLabel={undoLabel} canRedo={!!future.length} theme={theme} busy={!!buildBusy} snapshot={project.files.some(f => f.vsf)} cartridge={!!project.cart}
         verifyState={build && !stale ? (build.ok ? 'ok' : 'bad') : null}
         onOpen={() => void openPrgs(false)} onSave={() => void saveProject()} onUndo={undo} onRedo={redo} onPalette={() => setModal('palette')}
         onVerify={() => void runVerify()} onExport={() => void exportProject()} onBuild={() => void runBuild()} onTerminal={() => void openTerminal()}
@@ -1233,6 +1304,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
             d.patches = d.patches.filter(p => d.files.some(f => p.start >= f.load && patchEnd(p) <= f.load + f.bytes.length));
           })} onSetStart={setStart}
           patches={{ list: project.patches, onGo: goPatch, onEdit: editPatch, onSwitch: switchOnePatch, onSave: p => void savePatchPrg(p), onRemove: removePatch }}
+          cart={crt} onOpenBank={(bank, add) => { openBank(bank, add); setDrawer(null); }}
           disk={disk} packing={packing} onMount={() => void mountDisk()} onEject={ejectDisk} onShowSpindle={() => setUi({ bottom: 'spindle', panelOpen: true })} onShowBitfire={() => setUi({ bottom: 'bitfire', panelOpen: true })} onOpenFromDisk={(f, add) => { openFromDisk(f, add); setDrawer(null); }}
           bmSel={bmSel} onBmSelect={setBmSel} onBmGo={goBookmark} onBmAdd={() => startBookmark()} onBmEdit={openBookmarkEditor} onBmDelete={deleteBookmark}
           bmEditing={bmEdit != null ? { addr: bmEdit, cursorAt: lineAddr() ?? null, onSave: saveBookmark, onCancel: () => { setBmEdit(null); listRef.current?.focus(); }, onPreview: a => navigate(a, { center: true, listing: true, noHistory: true }) } : null}
@@ -1336,7 +1408,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
             {shownBottom === 'spindle' && <SpindlePanel A={A} R={R} disk={disk} onNavigate={nav} onCopy={(t, what) => void copyText(t, what)} onOpenChunk={openChunk} />}
             {shownBottom === 'bitfire' && disk?.bitfire && <BitfirePanel disk={disk} onCopy={(t, what) => void copyText(t, what)} onOpenFile={openBitfireFile} />}
             {shownBottom === 'stats' && <StatsPanel A={A} />}
-            {shownBottom === 'build' && <BuildPanel build={build} S={S} names={R.fileNames} stale={stale} busy={buildBusy} onVerify={() => void runVerify()} onRun={() => void runBuild()} onCopy={t => void copyText(t)} />}
+            {shownBottom === 'build' && <BuildPanel build={build} S={S} names={R.fileNames} cart={cartBuild(project)} stale={stale} busy={buildBusy} onVerify={() => void runVerify()} onRun={() => void runBuild()} onCopy={t => void copyText(t)} />}
           </ErrorBoundary></div>
         </section>}
       </main>
@@ -1354,7 +1426,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         verify={build && !stale ? { ok: build.ok, kick: build.kick ? build.kick.ok : null } : null} />
 
       {drawer && <div className="drawer-back" onClick={() => setDrawer(null)} />}
-      {dropping && <div className="drop"><div><Icon name="upload" size={28} /><p>Drop .prg files or VICE snapshots (.vsf) to open them, or a .d64 to mount it</p><small>Hold Shift to add them to the current project</small></div></div>}
+      {dropping && <div className="drop"><div><Icon name="upload" size={28} /><p>Drop .prg files, VICE snapshots (.vsf) or a cartridge (.crt) to open them, or a .d64 to mount it</p><small>Hold Shift to add them to the current project</small></div></div>}
       {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
       {modal === 'settings' && <SettingsModal settings={S} desktop={!!kr} onSave={s => void saveSettings(s)} onClose={() => setModal(null)} />}
       {modal === 'goto' && <GotoModal R={R} onGo={a => { setModal(null); nav(a); }} onSelect={(s, e) => { setModal(null); selectRange(s, e); }} onClose={() => setModal(null)} />}

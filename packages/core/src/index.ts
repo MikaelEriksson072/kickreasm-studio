@@ -23,6 +23,10 @@ export {
   type FindAs, type MemoryMatch, type MonitorChar, type MonitorCommand, type MonitorMode, type MonitorRange, type MonitorRow,
 } from './c64/monitor';
 export { isVsf, openC64File, parseVsf, patchSnapshot, snapshotConfig, snapshotVicBank, SNAPSHOT_LOAD, SNAPSHOT_ZP_LOAD, type OpenedFile, type OpenOptions, type Snapshot, type VsfModule } from './c64/vsf';
+export {
+  bankFiles, bootBank, cartMode, cartModeName, cartridgeSource, chipAddress, chipFromPrg, chipName, chipTypeName, compareCrt, crtBanks, crtBase, crtMode, crtOffsetText, crtOutputName, crtSourceName, crtTypeName, CRT_TYPES, projectCartMode,
+  describeCrt, isCrt, makeCrt, openCartridge, parseCrt, rebuildCrt, type CartSourceOptions, type ChipFile, type Crt, type CrtChip,
+} from './c64/crt';
 export { d64FileName, makeD64, parseD64, petsciiName, readD64File, sectorsOnTrack, type D64File, type D64FileType, type D64Image } from './c64/d64';
 export { readSpindleDisk, spinChunkName, spinScript, type SpindleChunk, type SpindleDisk, type SpindleJob } from './c64/spindle-disk';
 export { BITFIRE_VERSION, bitfireFileName, d64writeScript, readBitfireDisk, unpackBitnax, unpackDali, type BitfireDisk, type BitfireFile, type BitfireFormat, type BitfireUnpacked } from './c64/bitfire-disk';
@@ -46,7 +50,7 @@ export type { DemoProgram } from './demo';
 export { makeShowcase, showcaseProject, type ShowcaseProgram } from './showcase';
 export { FORMATTABLE, formatOverride, lineMove, markIdOf, mergeOverride, mergeRange, moveBlockKeys, moveBytes, type BlockMerge, type ByteMove, type RangeMerge } from './edit';
 export { createProject, demoProject, serializeProject, deserializeProject, projectNameFor, withId, newId, b64enc, b64dec } from './project';
-export { buildScripts, BUILD_SCRIPTS, readme, projectScripts, projectTextFiles, exportFiles } from './export';
+export { buildScripts, BUILD_SCRIPTS, builtCartridge, cartBuild, cartridgeFiles, expectedCartridge, readme, projectScripts, projectTextFiles, exportFiles, type CartBuild } from './export';
 export { applyPatch, assemblePatch, patchAt, patchEnd, patchesOn, patchFileName, patchPrg, patchSource, planPatch, revertPatch, straightCycles, switchPatch, unpatchedFiles, withPatch, withoutPatch, type PatchCode, type PatchError, type PatchLine, type PatchPlan, type PatchRequest, type PatchTime } from './patch';
 export { NOTES_FILE, NOTES_TEXT_FILE, notesDocument, notesExport, notesFile, notesFor, notesText, lineHtml } from './notes-doc';
 export { detectPacking, packerSignature, type PackingInfo } from './packing';

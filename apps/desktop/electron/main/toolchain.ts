@@ -131,5 +131,5 @@ export async function runInVice(req: RunRequest, settings: ToolchainSettings, po
   const labelsPath = req.labelsPath ? policy.assert(req.labelsPath, 'Label file') : null;
   if (!settings.vicePath || !existsSync(settings.vicePath)) throw new Error(`VICE (x64sc) not found at "${settings.vicePath}". Set the path in Settings → Toolchain.`);
   const disk = req.disk ? policy.assert(req.disk, 'Disk image') : null;
-  return launchVice({ vice: settings.vicePath, args: splitArgs(settings.viceArgs), prgPath, labelsPath: labelsPath && existsSync(labelsPath) ? labelsPath : null, start: req.start, disk });
+  return launchVice({ vice: settings.vicePath, args: splitArgs(settings.viceArgs), prgPath, labelsPath: labelsPath && existsSync(labelsPath) ? labelsPath : null, start: req.start, disk, cart: req.cart });
 }

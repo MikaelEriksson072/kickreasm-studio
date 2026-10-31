@@ -31,6 +31,9 @@ export function makeLabels(ctx: Ctx, cls: Classification, vic: VicEvidence): { l
     const next = ctx.spindle.find(x => x.front === d.next);
     if (next && code(d.prepareNext)) name(d.prepareNext, `part${next.part}_prepare`);
   }
+  // a cartridge's vectors and signature, and the warm start they point at (5.3b)
+  for (const b of ctx.cartStart?.blocks ?? []) if (findBlock(blocks, b.start)?.start === b.start) setLabel(b.start, b.label, 'data');
+  for (const e of ctx.cartStart?.entries ?? []) if (e.name && insLen[e.a]) setLabel(e.a, e.name, e.kind);
   const kindPrefix: Partial<Record<EntryKind, string>> = { entry: 'entry', irq: 'irq', nmi: 'nmi', brk: 'brk', user: 'code', sub: 'sub', ptr: 'fx', guess: 'code' };
   for (const [addr, kind] of [...entryKind].sort((x, y) => PRI[y[1]] - PRI[x[1]])) {
     if (!insLen[addr] || tm[addr] === T.MUSIC) continue;

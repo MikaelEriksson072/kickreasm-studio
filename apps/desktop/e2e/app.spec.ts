@@ -746,6 +746,74 @@ test('mount a .d64 and open its PRG files', async ({ app, page }) => {
   });
 });
 
+test('open a cartridge: its boot bank is re-assembled, its banks open from the Explorer, and the .crt is rebuilt', async ({ workDir: work, app, page }) => {
+  // fixtures/crt/mimir-demo.crt (packages/core/test/crt.test.ts): a Magic Desk of 2 banks; bank 0 starts it (CBM80)
+  const crtPath = join(repoDir, 'fixtures/crt/mimir-demo.crt'), crt = readFileSync(crtPath);
+  await waitForListing(page);
+  const banks = page.getByRole('list', { name: 'Banks of mimir-demo.crt' });
+
+  await test.step('Open PRG… takes a .crt: the chips of the boot bank open, and the Explorer lists the banks', async () => {
+    await stubDialogs(app, { open: [crtPath] });
+    await page.getByRole('button', { name: 'Open PRG…' }).click();
+    await expect(toast(page, 'Opened the cartridge mimir-demo.crt: Magic Desk (Domark, HES Australia), 2 banks of 8 KB (16 KB), 8K mode; bank00_8000.prg at $8000')).toBeVisible();
+    await expect(page.locator('.file-name')).toHaveText(['bank00_8000.prg']);
+    await expect(banks.getByRole('listitem')).toHaveText([/0\s*\$8000 · start\s*8 KB/, /1\s*\$8000\s*8 KB/]);
+    await expect(banks.getByRole('listitem').first()).toHaveClass(/on/);
+    await expect(page.locator('.disk-head').first()).toContainText('"MIMIR DEMO"');
+    await expect.poll(() => page.locator('.side-sec').evaluateAll(s => s.map(e => e.getAttribute('aria-label'))))
+      .toEqual(['Files', 'Cartridge', 'VICE quicksave', 'Loaders', 'Program start', 'Memory map']);
+    // the vectors and the signature, and the code they start
+    const rows = await listingRows(page);
+    expect(rows.some(r => /^cart_vectors:/.test(r.text.trim()))).toBe(true);
+    expect(rows.some(r => r.text.includes('.text "CBM80"'))).toBe(true);
+    expect(rows.some(r => /^warm_start:/.test(r.text.trim()))).toBe(true);
+    await expect(statusBar(page)).toContainText('$8009 · start');
+  });
+
+  await test.step('F7 verifies the chip and the cartridge rebuilt from it', async () => {
+    await page.keyboard.press('F7');
+    await expect(statusBar(page)).toContainText('✓ round-trip verified', { timeout: 90_000 });
+    await page.getByRole('tab', { name: 'Build output' }).click();
+    await expect(page.locator('.build-log')).toContainText('Built-in cartridge OK: mimir-demo.crt 16480 / 16480 bytes identical to mimir-demo.crt');
+  });
+
+  await test.step('a click opens bank 1 in place of bank 0, and Ctrl+Z goes back', async () => {
+    await banks.getByRole('listitem').nth(1).click();
+    await expect(toast(page, 'Opened bank 1 of mimir-demo.crt: bank01_8000.prg at $8000. Ctrl+Z goes back')).toBeVisible();
+    await expect(page.locator('.file-name')).toHaveText(['bank01_8000.prg']);
+    await expect(banks.getByRole('listitem').nth(1)).toHaveClass(/on/);
+    // the banks are at the same addresses: + adds nothing
+    await expect(banks.getByRole('button', { name: /Add bank/ })).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    await expect(page.locator('.file-name')).toHaveText(['bank00_8000.prg']);
+  });
+
+  await test.step('Ctrl+E exports the cartridge\'s source and the image it builds', async () => {
+    const out = join(work, 'export');
+    await stubDialogs(app, { open: [out] });
+    await page.keyboard.press('Control+e');
+    await expect(toast(page, `Exported verified Kick Assembler project to ${out}`)).toBeVisible({ timeout: 90_000 });
+    expect(readdirSync(out)).toEqual(expect.arrayContaining(['bank00_8000.asm', 'mimir-demo.crt.asm', 'banks', 'build.bat', 'out', 'original']));
+    expect(readFileSync(join(out, 'out', 'mimir-demo.crt'))).toEqual(crt);
+    expect(readFileSync(join(out, 'original', 'mimir-demo.crt'))).toEqual(crt);
+    expect(readFileSync(join(out, 'build.bat'), 'utf8')).toMatch(/mimir-demo\.crt\.asm -odir out[^\n]*\r\nstart "" "%VICE%" .*-cartcrt out\\mimir-demo\.crt/);
+  });
+
+  await test.step('Build & Run attaches the rebuilt cartridge in VICE', async () => {
+    // VICE itself is not started: a Windows program that ends at once stands in for it (the real VICE starting the
+    // cartridge is tested in packages/core/test/vice.integration.test.ts)
+    const standIn = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'where.exe');
+    test.skip(!existsSync(standIn), 'needs where.exe');
+    await page.evaluate(v => (window as unknown as { kr: { setSettings(p: object): Promise<unknown> } }).kr.setSettings({ vicePath: v }), standIn);
+    await page.keyboard.press('F5');
+    await expect(toast(page, /^VICE started the cartridge mimir-demo\.crt/)).toBeVisible({ timeout: 120_000 });
+    const log = await page.locator('.build-log').innerText();
+    const started = /> VICE started \(pid -?\d+\): the cartridge (.+?\.crt) attached \(-cartcrt\)/.exec(log);
+    expect(started, log.slice(-600)).toBeTruthy();
+    expect(readFileSync(started![1])).toEqual(crt);
+  });
+});
+
 test('the Terminal button opens a terminal in the project folder', async ({ workDir: work, app, page }) => {
   await waitForListing(page);
   // record what the main process starts instead of opening a real terminal window

@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS } from '../model';
 import { $4, now } from '../util/hex';
 import { createContext, type Ctx, type Deep } from './context';
 import { applyOverrides, findBasicStubs, loadMemory } from './memory';
+import { findCartStart } from './cartridge';
 import { releaseFlags, seedEntries, settle, sweepForcedCode, trace } from './trace';
 import { evidence } from './evidence';
 import { resolveTables, warnUnresolvedJumps } from './pointers';
@@ -52,6 +53,7 @@ function analyzeOnce(project: ProjectInput, deepIn: Deep | null): [AnalysisResul
   loadMemory(ctx); // 5.1
   applyOverrides(ctx); // 5.2
   findBasicStubs(ctx); // 5.3
+  ctx.cartStart = findCartStart(ctx); // 5.3b
   seedEntries(ctx); // 5.4
   ctx.spindle = findSpindle(ctx); // 5.4c: Spindle's effect drivers, entry points too
 

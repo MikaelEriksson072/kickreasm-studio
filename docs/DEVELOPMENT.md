@@ -113,6 +113,7 @@ Playwright inspector).
 | a packed PRG is reported and unpacked with Sindri, or an external unpacker | `fixtures/prg/packed-demo.prg` (the demo packed by `fakePack`, a real 6502 decruncher) shows *packed-demo.prg is packed.* with Sindri's layers (*an unknown mover at $080d …, then an unknown decoder at $0340 …; the program starts at $0810*), the *packed* badge and a Problems entry; *Unpack* opens `packed-demo-unpacked.prg` with the start `$0810`, the *Layer report* lists layers 0-2, and `F7` verifies; with Node and `packages/core/test/helpers/fake-unp64.cjs {in}` (a stand-in that writes and prints like unp64) as the external unpacker in Settings, *Unpack with node* does the same, names the packer (FakePack) and shows its output |
 | a file opened from a mounted disk is unpacked with the disk in a 1541 | needs VICE's ROMs: `fixtures/d64/kernal-load.d64` mounted, its `BOOT` (it loads `PART2` with `LOAD "PART2",8,1` and jumps to `$c000`) shows *BOOT.prg is packed.* with *Sindri peels off 1 layer … the program starts at $c000*; *Unpack* opens `BOOT-unpacked.prg` (609 bytes at `$c000-$c260`, start `$c000`), and the *Layer report* has the `Drive: 1541 with "LOADER DISK" LD` line |
 | file dialogs open in the folder they were last used in | the stubbed dialogs record their options: the first Open PRG has no start folder, Mount D64 then starts in the PRG's folder, Open PRG again in `fixtures/prg` and Mount D64 in `fixtures/d64`; `recent-folders.json` in the profile holds both for the next start |
+| open a cartridge, open its banks, verify, export and run the rebuilt .crt | *Open PRG…* (stubbed dialog) on `fixtures/crt/mimir-demo.crt` gives *Opened the cartridge mimir-demo.crt: Magic Desk (Domark, HES Australia), 2 banks of 8 KB (16 KB), 8K mode; bank00_8000.prg at $8000*, a *Cartridge* section right under Files (`"MIMIR DEMO"`, `0 $8000 · start 8 KB` marked open, `1 $8000 8 KB`), `cart_vectors:`, `.text "CBM80"` and `warm_start:` in the listing and `$8009 · start` in the status bar; `F7` verifies, with *Built-in cartridge OK: mimir-demo.crt 16480 / 16480 bytes identical* in the build log; a click opens `bank01_8000.prg` (no + where the banks share addresses) and `Ctrl+Z` brings bank 0 back; `Ctrl+E` exports `mimir-demo.crt.asm`, `banks/`, `out/mimir-demo.crt` and `original/mimir-demo.crt` (both the fixture's bytes) and a `build.bat` that assembles the `.crt.asm` last and starts VICE with `-cartcrt out\mimir-demo.crt`; `F5` with a stand-in for VICE (`where.exe`) attaches a `.crt` with the fixture's bytes |
 | mount a .d64 and open its PRG files | *Mount D64…* (stubbed dialog) lists `fixtures/d64/mimir-demo.d64`: `"MIMIR DEMO"`, `49 "RASTER DEMO" PRG`, `1 "SPRITE" PRG`, `1 "NOTES" SEQ` (not openable), 613 blocks free, in a *Disk* section right under Files (above *VICE quicksave*); a click opens RASTER DEMO, + adds SPRITE at `$c000`, `F7` verifies; *Eject* removes the disk and keeps the project |
 
 The e2e tests are not part of `pnpm test`. Build & Run (`F5`) is not covered because it starts VICE. Failures
@@ -186,6 +187,7 @@ apps/desktop     Electron app
 docs/spec.md     technical specification
 fixtures/prg     test programs (raster-demo.prg, and the loader, packed and Spindle demos)
 fixtures/d64     disk images (mimir-demo.d64, spindle-demo.d64, a Spindle 3 disk, and bitfire-demo.d64, a Bitfire one)
+fixtures/crt     mimir-demo.crt, a Magic Desk cartridge of 2 banks made from source (packages/core/test/crt.test.ts)
 ```
 
 ## Architecture notes
@@ -225,6 +227,17 @@ fixtures/d64     disk images (mimir-demo.d64, spindle-demo.d64, a Spindle 3 disk
   it was taken: `patchSnapshot()` puts the built program in its RAM and VICE loads it with `-autostart <name>.vsf`, so the
   CPU, `$01`, VIC, SID, CIAs, colour RAM and drives are as they were and the program goes on from the PC. Checked
   against an x64sc 3.10 snapshot in `fixtures/vsf`; see spec 13.7.
+- **Cartridges.** *Open PRG…*, drag and drop and the CLI also take `.crt` files (known by their header). `parseCrt()`
+  (`packages/core/src/c64/crt.ts`) reads VICE's format; the chips of the boot bank open as `bank00_8000.prg` and so on,
+  at the addresses the CPU sees them at (an EasyFlash's boot ROMH at `$e000`), each with its CHIP packet
+  (`LoadedFile.chip`), and the image is kept in `Project.cart`. EXROM/GAME give the memory map (`CartMode` in
+  `c64/memconfig.ts`: 8K, 16K, Ultimax), so the cartridge's ROM counts as the program's bytes, not BASIC or the KERNAL;
+  `analyze/cartridge.ts` makes the CBM80 vectors (or Ultimax's CPU vectors) a word block and traces from them. The
+  Explorer's *Cartridge* section lists the banks: a click opens one (Ctrl+Z goes back), + adds the chips that fit. The
+  export writes `<name>.crt.asm`, which rebuilds the whole image with `.file`/`.import binary` from the chips' PRGs and
+  `banks/*.bin`; F7 checks the rebuilt image byte for byte (`builtCartridge`, `compareCrt`), KickAss.jar assembles the
+  `.crt.asm` too, and Build & Run starts it with `-cartcrt`. Checked against 309 cartridges of the reference archive;
+  see spec 13.9.
 - **Music.** `detectMusic()` (`packages/core/src/analyze/music.ts`) finds a player by its jump table (`JMP init`, then
   `JMP play`, up to four JMPs, or the play code right after them) and decodes the code its entries reach where the trace
   did not get to it. A snapshot taken after init ran, a play called from an interrupt the trace missed and a player

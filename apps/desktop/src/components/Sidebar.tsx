@@ -1,8 +1,8 @@
-/* Sidebar: Explorer (files, the mounted disk, program start, memory map), Blocks (filterable), Symbols (labels, hardware registers), Bookmarks, Pack.
+/* Sidebar: Explorer (files, the cartridge's banks, the mounted disk, program start, memory map), Blocks (filterable), Symbols (labels, hardware registers), Bookmarks, Pack.
  * The Explorer's sections are cards that fold up (the user's choice is kept), each with what it holds in a few words
  * beside its title. */
 import { useMemo, useState } from 'react';
-import { h2, h4, hwSymbol, kindInfo, overwritesSystemArea, parseVsf, patchEnd, patchFileName, SYSTEM_AREA, type Addr, type AnalysisResult, type D64File, type LoaderPart, type PackingInfo, type Patch, type Project, type RenderResult, type SymbolRef } from '@mimir/core';
+import { bootBank, cartModeName, chipAddress, chipTypeName, crtBanks, crtTypeName, h2, h4, hwSymbol, kindInfo, overwritesSystemArea, parseVsf, patchEnd, patchFileName, SYSTEM_AREA, type Addr, type AnalysisResult, type Crt, type D64File, type LoaderPart, type PackingInfo, type Patch, type Project, type RenderResult, type SymbolRef } from '@mimir/core';
 import { Icon } from '../lib/icons';
 import { parseGoto } from '../lib/goto';
 import { cx, fmtBytes, groupOfKind } from '../lib/util';
@@ -20,6 +20,8 @@ interface SidebarProps {
   /** set the program start (null: back to the detected one) */
   onSetStart: (a: Addr | null) => void;
   disk: MountedDisk | null; onMount: () => void; onEject: () => void;
+  /** the project's cartridge, read (spec 13.9): its banks open with a click (`add`: the chips that fit join the files) */
+  cart: Crt | null; onOpenBank: (bank: number, add: boolean) => void;
   /** open the Spindle script tab (a Spindle disk's load script) */
   onShowSpindle: () => void;
   /** open the Bitfire script tab (a Bitfire disk's files) */
@@ -61,7 +63,7 @@ interface QuicksaveProps {
   onFavouriteKept: (q: QuicksaveEntry, on: boolean) => void;
 }
 
-export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpen, onAdd, onDemo, onRemoveFile, onSetStart, disk, onMount, onEject, onShowSpindle, onShowBitfire, onOpenFromDisk, packing, bmSel, onBmSelect, onBmGo, onBmAdd, onBmEdit, onBmDelete, bmEditing, pack, quicksave, patches }: SidebarProps) {
+export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpen, onAdd, onDemo, onRemoveFile, onSetStart, disk, onMount, onEject, cart, onOpenBank, onShowSpindle, onShowBitfire, onOpenFromDisk, packing, bmSel, onBmSelect, onBmGo, onBmAdd, onBmEdit, onBmDelete, bmEditing, pack, quicksave, patches }: SidebarProps) {
   const [q, setQ] = useState('');
   const [symTab, setSymTab] = useState<'labels' | 'hw'>('labels');
   if (view === 'explorer') {
@@ -83,11 +85,12 @@ export function Sidebar({ view, A, R, project, colors, cursor, onNavigate, onOpe
             </div>
           ))}
           <div className="side-actions two">
-            <button className="btn small" onClick={onOpen} title="Open a .prg, or a VICE snapshot (.vsf), as a new project"><Icon name="upload" size={13} />Open PRG…</button>
+            <button className="btn small" onClick={onOpen} title="Open a .prg, a VICE snapshot (.vsf) or a cartridge (.crt) as a new project"><Icon name="upload" size={13} />Open PRG…</button>
             <button className="btn small ghost" onClick={onMount} title="Mount a .d64 disk image and open its files"><Icon name="disk" size={13} />Mount D64…</button>
           </div>
-          <p className="side-hint">Or drop .prg, .vsf or .d64 files on the window; with Shift they are added.</p>
+          <p className="side-hint">Or drop .prg, .vsf, .crt or .d64 files on the window; with Shift they are added.</p>
         </SideSection>
+        {cart && project.cart && <CartridgeSection crt={cart} name={project.cart.name} project={project} onOpenBank={onOpenBank} />}
         {disk && <DiskSection disk={disk} onEject={onEject} onOpenFromDisk={onOpenFromDisk} onShowSpindle={onShowSpindle} onShowBitfire={onShowBitfire} />}
         <QuicksaveSection {...quicksave} />
         {patches.list.length > 0 && <PatchesSection {...patches} />}
@@ -253,6 +256,45 @@ function PatchesSection({ list, onGo, onEdit, onSave, onRemove, onSwitch }: Patc
         ))}
       </div>
       <p className="side-hint">On: written over the loaded bytes. Off: the original bytes are back. The export writes each one's source to patches/ (.asm).</p>
+    </SideSection>
+  );
+}
+
+/**
+ * The project's cartridge (spec 13.9): its banks with their chips, where the CPU sees them and how big they are. A
+ * bank opens with a click as the project's files (Ctrl+Z goes back); + adds its chips that fit beside the open ones.
+ * The export and Build & Run rebuild the whole image, the chips not opened from their bytes.
+ */
+function CartridgeSection({ crt, name, project, onOpenBank }: { crt: Crt; name: string; project: Project; onOpenBank: (bank: number, add: boolean) => void }) {
+  const banks = useMemo(() => crtBanks(crt), [crt]);
+  const open = new Set(project.files.map(f => f.chip).filter((c): c is number => c != null));
+  const overlaps = (load: Addr, size: number) => project.files.some(f => load < f.load + f.bytes.length && f.load < load + size);
+  const boot = bootBank(crt);
+  const kb = (n: number) => (n % 1024 ? `${n} B` : `${n / 1024} KB`);
+  return (
+    <SideSection id="cart" title="Cartridge" summary={name}>
+      <div className="disk-head mono small" title={`${name}: ${crtTypeName(crt.hw)} (type ${crt.hw}), EXROM ${crt.exrom} GAME ${crt.game}, ${crt.chips.length} CHIP packet${crt.chips.length === 1 ? '' : 's'}`}>
+        <Icon name="chip" size={13} /><span className="disk-title">{crt.name ? `"${crt.name}"` : name}</span><span className="muted">{crtTypeName(crt.hw)}</span>
+      </div>
+      <div className="disk-list" role="list" aria-label={`Banks of ${name}`}>
+        {banks.map(({ bank, chips }) => {
+          const on = chips.every(c => open.has(c.index)), some = chips.some(c => open.has(c.index));
+          const fits = chips.filter(c => !open.has(c.index) && !overlaps(chipAddress(crt, c), c.data.length));
+          const where = chips.map(c => `$${h4(chipAddress(crt, c))}`).join(' + ');
+          const what = chips.map(c => `${chipTypeName(c.type)} at $${h4(chipAddress(crt, c))}${chipAddress(crt, c) !== c.load ? ` (the file says $${h4(c.load)})` : ''}, ${c.data.length} bytes`).join('; ');
+          return (
+            <div key={bank} role="listitem" className={cx('disk-row cart-row', on && 'on', some && !on && 'part')} tabIndex={0}
+              title={`${on ? 'Bank' : 'Open bank'} ${bank}${on ? ' is open' : ''}${bank === boot ? ', the bank the C64 starts in' : ''}: ${what}`}
+              onClick={() => onOpenBank(bank, false)} onKeyDown={e => { if (e.key === 'Enter') onOpenBank(bank, false); }}>
+              <span className="mono small disk-blocks">{bank}</span>
+              <span className="mono disk-name">{where}{bank === boot ? <span className="muted"> · start</span> : null}</span>
+              <span className="mono small muted">{kb(chips.reduce((n, c) => n + c.data.length, 0))}</span>
+              {fits.length ? <button className="icon-btn" title={`Add bank ${bank} to this project (${fits.map(c => `$${h4(chipAddress(crt, c))}`).join(', ')})`} aria-label={`Add bank ${bank} to this project`} onClick={e => { e.stopPropagation(); onOpenBank(bank, true); }}><Icon name="plus" size={13} /></button> : <span />}
+            </div>
+          );
+        })}
+      </div>
+      <div className="side-hint">{cartModeName(crt.mode)} · a click opens a bank, + adds it where it fits · the export and Build &amp; Run rebuild the whole .crt</div>
     </SideSection>
   );
 }

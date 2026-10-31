@@ -174,8 +174,8 @@ function MemoryFields({ A, blk, onBankZone }: { A: AnalysisResult; blk: Block; o
   return <>
     <label className="field"><span>Memory ($01)</span>
       <select aria-label="Memory configuration ($01)" value={fp.length === 1 ? String(0x30 + fp[0]) : 'auto'} onChange={e => onBankZone(range, 'port', e.target.value === 'auto' ? null : +e.target.value)}>
-        <option value="auto">{fp.length ? 'Detected (automatic)' : `Detected: ${describePorts(port)}`}</option>
-        {[7, 6, 5, 4, 3, 2, 1, 0].map(c => <option key={c} value={0x30 + c}>{portName(c)} · {portText(c)}</option>)}
+        <option value="auto">{fp.length ? 'Detected (automatic)' : `Detected: ${describePorts(port, m.cart)}`}</option>
+        {[7, 6, 5, 4, 3, 2, 1, 0].map(c => <option key={c} value={0x30 + c}>{portName(c)} · {portText(c, m.cart)}</option>)}
       </select></label>
     <label className="field"><span>VIC bank</span>
       <select aria-label="VIC bank" value={fv.length === 1 ? String(fv[0]) : 'auto'} onChange={e => onBankZone(range, 'vicBank', e.target.value === 'auto' ? null : +e.target.value)}>

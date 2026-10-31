@@ -22,6 +22,8 @@ const N = 0x10000;
 const UNKNOWN = ALL_PORTS;
 /** configurations with HIRAM = 0 (the CPU reads $fffa-$ffff from RAM) and with HIRAM = 1 */
 const KERNAL_OUT = 0x33, KERNAL_IN = 0xcc;
+/** configurations with LORAM and HIRAM ($33, $37): a cartridge's ROML at $8000 */
+const ROML_IN = 0x88;
 /** configurations with I/O at $d000-$dfff ($35, $36, $37) */
 const IO_IN = 0xe0;
 const bit = (v: number) => 1 << (v & 7);
@@ -51,8 +53,15 @@ export function memConfig(ctx: Ctx): MemConfigInfo {
     }
   }
   const code = (a: number) => a >= 0 && a < N && insLen[a] > 0;
-  // code only runs where the CPU sees RAM: under the KERNAL it is out, under BASIC that is out, at $d000 all is RAM
-  const runnable = (n: number) => n >= 0xe000 ? KERNAL_OUT : n >= 0xd000 ? 0x11 : n >= 0xa000 && n < 0xc000 ? 0x77 : ALL_PORTS;
+  // code only runs where the CPU sees RAM: under the KERNAL it is out, under BASIC that is out, at $d000 all is RAM.
+  // A cartridge's chip runs where it is mapped in: ROML with LORAM and HIRAM, a 16K cartridge's ROMH with HIRAM, and
+  // in Ultimax mode whatever $01 says
+  const { cart, owner, files } = ctx;
+  const chip = (n: number) => owner[n] >= 0 && files[owner[n]].chip != null;
+  const runnable = (n: number) => cart === 'ultimax' && chip(n) ? ALL_PORTS
+    : cart !== 'none' && n >= 0x8000 && n < 0xa000 && chip(n) ? ROML_IN
+    : cart === '16k' && n >= 0xa000 && n < 0xc000 && chip(n) ? KERNAL_IN
+    : n >= 0xe000 ? KERNAL_OUT : n >= 0xd000 ? 0x11 : n >= 0xa000 && n < 0xc000 ? 0x77 : ALL_PORTS;
   // a BIT-skip byte is a 1-byte "instruction" here, but the CPU runs the whole BIT
   const nextOf = (n: number) => (n + (skip.has(n) ? OPC[mem[n]].len : insLen[n])) & 0xffff;
   const work: number[] = [];
@@ -172,7 +181,7 @@ export function memConfig(ctx: Ctx): MemConfigInfo {
           else if (variable(at)) store(at, r);
           else if ((at & 0xff0f) === 0xdd00 || (at & 0xff0f) === 0xdd02) {
             // a store to $dd00/$dd02 only reaches CIA 2 where I/O is visible
-            const io = ioVisible(p);
+            const io = ioVisible(p, cart);
             if (io !== 'none') {
               // $dd00 bits 0-1 select bank 3-n; the $dd02 trick turns those bits into inputs (read as 1) over a latch of 0
               const dd00 = (at & 0xf) === 0;
@@ -260,5 +269,5 @@ export function memConfig(ctx: Ctx): MemConfigInfo {
       L('info', `VIC bank ${bs.join(' or ')} (${bs.map(bankRange).join(', ')}) selected via ${c.via} at ${$4(pc)}${c.via === '$dd02' ? ', assuming $dd00 bits 0-1 are 0' : ''}`, pc, 'memory');
     }
   }
-  return { port: P, vic: B, changes, forcedPort, forcedVic };
+  return { port: P, vic: B, changes, forcedPort, forcedVic, cart };
 }

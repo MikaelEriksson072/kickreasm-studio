@@ -330,8 +330,11 @@ Alla filer läggs i en 64 KB-bild; `owner[addr]` anger vilken fil som äger byte
    alltid hur Build & Run startar det: med RUN, med `sys <start>` eller från monitorn, och varnar när RUN inte kan
    fungera (en PRG över `$0002-$03ff` utan start, eller en start i en annan fil än den som körs).
 1. **BASIC-stub** vid `$0801`: radlänkar valideras, tokens avkodas (`10 SYS2064`), `SYS`-adressen blir `start`. Matchar stubben exakt det `BasicUpstart2()` genererar exporteras den så; annars som `.byte` med den avkodade BASIC-raden som kommentar.
-2. Utan stub: första filens laddadress.
-3. Användarens startpunkter (`E`) och kod-overrides (`C`).
+2. **En cartridges vektorer** (13.9): i 8K och 16K kallstarten på `$8000` (`start`) och varmstarten på `$8002`
+   (`warm_start`, NMI) när `CBM80` står på `$8004`; i Ultimax CPU:ns vektorer för återställning, NMI och IRQ på
+   `$fffa–$ffff`. Laddadressen används då inte.
+3. Annars: första filens laddadress.
+4. Användarens startpunkter (`E`) och kod-overrides (`C`).
 4. Dynamiskt upptäckta: IRQ/NMI/BRK-vektorer, hopptabeller (8.5).
 
 ### 8.3 Rekursiv spårning (recursive descent)
@@ -1822,6 +1825,75 @@ tom inställning behålls.
   start eller effekt för packad data, inga *Crunch forward* och *No literal sequences* i Brokkrs eget format och ingen
   effekt i det snabba. Sist väljs en mapp med en stubbad dialog, filen hamnar där (kortet säger *Written to*, toasten ger
   sökvägen) och *Clear* tar bort mappen igen.
+
+### 13.9 Cartridges (.crt)
+
+En cartridge-avbild öppnas som en PRG: med *Open PRG…* (dialogen visar `.prg`, `.vsf` och `.crt`), genom att släppa den
+i fönstret eller med `mimir analyse|verify|export <fil.crt>`. Den känns igen på huvudet (`isCrt`), oavsett filnamn, och
+läses med `parseCrt` (`packages/core/src/c64/crt.ts`), VICE:s format:
+- **Huvud:** signaturen `C64 CARTRIDGE   ` (andra maskiners, C128, VIC-20, Plus/4 och CBM-II, avvisas med namn),
+  huvudets längd (under 64 läses som 64, som VICE gör), version, hårdvarutyp (namnen i `CRT_TYPES` är VICE 3.10:s,
+  `cartconv --types`), EXROM och GAME, revision och namnet.
+- **CHIP-paket:** typ (ROM, RAM, Flash, EEPROM), bank, laddadress och storlek. Ett paket vars data går förbi filens slut
+  avvisas med orsaken, som VICE:s `cartconv` gör (*cut short: … says it holds 16384 bytes, but the file ends after 8192*).
+  Byte mellan paketen och efter det sista behålls.
+
+**Minneskarta.** EXROM och GAME ger läget (`CartMode`, `c64/memconfig.ts`): 8K (ROML på `$8000–$9fff` där BASIC skulle
+synas, alltså med LORAM och HIRAM), 16K (dessutom ROMH på `$a000–$bfff` där HIRAM är satt) och Ultimax (ROML på `$8000`,
+ROMH på `$e000` i stället för KERNAL, I/O på `$d000` oavsett `$01`). `areaAt`, `reaches`, `banked`, `ioVisible`,
+`portText` och `describePorts` tar läget. Cartridgens ROM räknas som programmets egna byte: `jsr $a7ae` i en 16K-cartridge
+är ett anrop till dess ROMH (`sub_a7ae`), inte BASIC:s NEXT, och en djupanalys följer det. Spårningen av `$01` (8.7b)
+låter kod i ROML köra med `$33`/`$37`, i en 16K-cartridges ROMH med HIRAM och i Ultimax med vad som helst. Läget tas av
+de öppnade chippen (`cartMode`): ett chip på `$e000` ger Ultimax, ett över `$a000–$bfff` (eller en cartridge som startar
+i 16K) 16K, annars 8K. Inspector, högerklicksmenyn och statusraden visar `$01` med kartan (`ROML · ROMH · I/O · KERNAL`).
+
+**Banker.** Chippen i startbanken (den lägsta, bank 0) blir projektets filer, `bank00_8000.prg` och så vidare, på
+adresserna CPU:n ser dem på när C64:an startar. En EasyFlash (Ultimax vid start) har sin ROMH på `$a000` i filen, men
+startbankens ROMH öppnas på `$e000`, där återställningsvektorn är (`chipAddress`). Varje fil minns sitt CHIP-paket
+(`LoadedFile.chip`), och avbilden sparas med projektet (`Project.cart`, base64 under `cart` i projektfilen). Explorer får
+sektionen *Cartridge* under *Files*: namnet och typen, och en rad per bank med chippens adresser och storlek. Startbanken
+är märkt *start*, de öppna bankerna markerade. Ett klick öppnar en bank som projektets filer (ett nytt projekt med samma
+avbild, Ctrl+Z går tillbaka), och **+** lägger till dess chip som får plats bredvid de öppna. Sindri kör inte chippen.
+
+**Start (5.3b, `analyze/cartridge.ts`).** I 8K och 16K letar KERNAL:s återställning efter `CBM80` (`$c3 $c2 $cd $38 $30`)
+på `$8004` och hoppar genom kallstartvektorn på `$8000`; NMI-rutinen (RESTORE) går genom varmstartvektorn på `$8002`.
+Analysen gör vektorerna till ett ordblock (`cart_vectors: .word start, warm_start`) och signaturen till text
+(`cbm80: .text "CBM80"`, PETSCII med gemener), spårar kallstarten som programstart och varmstarten som NMI
+(`warm_start`). I Ultimax är CPU:ns vektorer på `$fffa–$ffff` cartridgens (`cpu_vectors`): NMI, återställning och IRQ.
+Utan `CBM80` säger loggen att KERNAL inte startar cartridgen själv (ett BASIC-tillägg, eller en som startas med SYS), och
+den första byten blir ingångspunkt som för en PRG.
+
+**Avbilden byggs om.** Exporten skriver `<namn>.crt.asm`, som skriver hela avbilden med `.file [name="<namn>.crt",
+type="bin", segments="Cartridge"]` (ett segment från 0, eftersom avbilden kan vara större än 64 KB): huvudet och varje
+paketets huvud som kommenterade `.byte`-rader (namnet som `.text` i ASCII), de öppnade chippen med
+`.import binary "out/<chip>.prg", 2` (det de egna källorna bygger, utan laddadress) och de andra från
+`banks/<chip>.bin`, som exporten också skriver. `.errorif` kontrollerar varje chips längd. `build.bat` och `build.sh`
+assemblerar chippens källor först och sedan `<namn>.crt.asm`, och startar VICE med `-cartcrt out\<namn>.crt`.
+`runKickAssembler` tar utdata från en `<namn>.crt.asm` som `out/<namn>.crt`. Exporten lägger också originalet i
+`original/` och den verifierade avbilden i `out/`.
+
+**Verifiering.** F7 verifierar chippens källor som vanligt och bygger sedan avbilden ur det de byggde (`builtCartridge`:
+originalet med chippen utbytta, `rebuildCrt`) och jämför den byte för byte med den som öppnades (`compareCrt`, som
+säger var en skillnad är: *CHIP 0 (bank 0) at $8010*). Med KickAss.jar assembleras också `<namn>.crt.asm` efter chippen,
+och dess avbild jämförs likadant. Byggloggen och märket i byggpanelen säger resultatet (*Built-in cartridge OK:
+mimir-demo.crt 16480 / 16480 bytes identical*). `mimir verify` gör samma sak, `--kickass` med den riktiga.
+
+**Build & Run** bygger och verifierar, skriver avbilden (KickAss.jar:s, annars den inbyggda assemblerns) i en byggmapp och
+startar VICE med `-cartcrt <namn>.crt` (och etiketterna med `-moncommands`, en monterad disk med `-8`): VICE kopplar in
+cartridgen och återställer, och C64:an startar den från dess vektorer. Programstarten används inte. Knappens tips säger
+det, byggpanelen visar kommandona och märket.
+
+**Test:** `packages/core/test/crt.test.ts` gör cartridges ur källkod (`makeCrt`): huvud och paket, avvisade filer, en
+EasyFlash vars ROMH öppnas på `$e000`, minneskartan, starten i 8K (`CBM80`, KERNAL-namnen), utan `CBM80`, en 16K
+vars ROMH spåras i stället för BASIC och en Ultimax utan KERNAL, källan som bygger avbilden, en annan bank och exporten,
+projektfilen. `fixtures/crt/mimir-demo.crt` är en av dem: en Magic Desk med två banker, där bank 0 kopierar en rutin
+till `$c000` som kopplar in bank 1 (`$de00`) och visar dess text. `kickass.integration.test.ts` bygger den exporterade
+cartridgen med riktiga KickAss.jar, från bank 0 och bank 1, till samma avbild. `vice.integration.test.ts` startar den
+ombyggda avbilden i riktiga x64sc, som byter till bank 1 och avslutar med dess första skärmkod. Ett e2e-test öppnar den
+via dialogen, verifierar, byter bank och ångrar, exporterar och kör Build & Run med ett program som ersätter VICE.
+Mot användarens arkiv (309 cartridges: normala 8K och 16K, Ultimax, Ocean, Magic Desk, System 3, Dinamic, Fun Play,
+Zaxxon och EasyFlash) verifierades 299 byte för byte; de 10 andra är avkortade filer som `cartconv` också kallar trasiga.
+Ett urval av alla typerna, upp till en EasyFlash på 1 MB, byggdes om med KickAss.jar till identiska avbilder.
 
 ## 14. UI/UX-specifikation
 

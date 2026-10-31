@@ -3,7 +3,7 @@ import { watch, type FSWatcher } from 'node:fs';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
-import { deserializeProject, openC64File, parseD64, serializeProject, withId, type OpenedFile, type OpenOptions, type Project, type SerializedProject, type Settings } from '@mimir/core';
+import { deserializeProject, isCrt, openC64File, openCartridge, parseD64, serializeProject, withId, type OpenedFile, type OpenOptions, type Project, type SerializedProject, type Settings } from '@mimir/core';
 import type { OpenedPrg } from '../../shared/ipc';
 import { writeVfs } from '@mimir/core/node';
 import { serializedProjectSchema } from './schemas';
@@ -27,10 +27,15 @@ export async function writeProjectFile(path: string, project: SaveableProject): 
   await writeFile(path, JSON.stringify(serializeProject(project as Project), null, 1));
 }
 
-/** PRG files, and VICE snapshots (.vsf) as their RAM from $0200 (`zeroPage`: from $0002) with the entry points they give */
+/** PRG files, VICE snapshots (.vsf) as their RAM from $0200 (`zeroPage`: from $0002) with the entry points they give,
+ *  and cartridge images (.crt, known by their header) as the chips of their boot bank, each with the image */
 export async function readPrgFiles(paths: string[], opts: OpenOptions = {}): Promise<OpenedPrg[]> {
   const out: OpenedPrg[] = [];
-  for (const p of paths) out.push(openedPrg(openC64File(basename(p), new Uint8Array(await readFile(p)), opts)));
+  for (const p of paths) {
+    const bytes = new Uint8Array(await readFile(p));
+    if (isCrt(bytes)) { const o = openCartridge(basename(p), bytes); out.push(...o.files.map(f => ({ ...withId(f), cart: o.cart }))); continue; }
+    out.push(openedPrg(openC64File(basename(p), bytes, opts)));
+  }
   return out;
 }
 

@@ -2,7 +2,7 @@
  * statistics, build output. */
 import {
   BITFIRE_VERSION, bitfireFileName, d64writeScript, decode, h2, h4, hwSymbol, kickMnemonic, lineText, OPC, spinChunkName, spindleCondition, spindleLabel, spindleName, spindleRoutines, spindleScript, spinScript,
-  type Addr, type AnalysisResult, type BitfireFile, type DeepReport, type RasterIrq, type RenderResult, type Settings, type SpindleChunk, type SpindleDriver, type SpindleJob,
+  type Addr, type AnalysisResult, type BitfireFile, type CartBuild, type DeepReport, type RasterIrq, type RenderResult, type Settings, type SpindleChunk, type SpindleDriver, type SpindleJob,
 } from '@mimir/core';
 import { Icon, LVL_ICON } from '../lib/icons';
 import { cx, fmtBytes, GROUP_LABEL, GROUP_ORDER, groupOfType } from '../lib/util';
@@ -263,13 +263,16 @@ export function StatsPanel({ A }: { A: AnalysisResult }) {
   );
 }
 
-interface BuildPanelProps { build: BuildState | null; S: Settings; names: string[]; stale: boolean; busy: string | null; onVerify: () => void; onRun: () => void; onCopy: (s: string) => void }
+/** `cart`: the project's cartridge, whose own source is built last and whose image VICE attaches (spec 13.9) */
+interface BuildPanelProps { build: BuildState | null; S: Settings; names: string[]; cart: CartBuild | null; stale: boolean; busy: string | null; onVerify: () => void; onRun: () => void; onCopy: (s: string) => void }
 
-export function BuildPanel({ build, S, names, stale, busy, onVerify, onRun, onCopy }: BuildPanelProps) {
+export function BuildPanel({ build, S, names, cart, stale, busy, onVerify, onRun, onCopy }: BuildPanelProps) {
   const name = names[0] || 'main';
   const q = (s: string) => (/\s/.test(s) ? `"${s}"` : s);
-  const kickCmd = `${q(S.javaPath)} -jar ${q(S.kickJar)} ${name}.asm -odir ${S.outDir} ${S.kickArgs}`;
-  const viceCmd = `${q(S.vicePath)} ${S.viceArgs} -moncommands ${S.outDir}/${name}.vs -autostart ${S.outDir}/${name}.prg`;
+  const kick = (entry: string) => `${q(S.javaPath)} -jar ${q(S.kickJar)} ${entry} -odir ${S.outDir} ${S.kickArgs}`;
+  const kickCmd = kick(`${name}.asm`);
+  const cartCmd = cart ? kick(cart.entry) : null;
+  const viceCmd = `${q(S.vicePath)} ${S.viceArgs} -moncommands ${S.outDir}/${name}.vs ${cart ? `-cartcrt ${S.outDir}/${cart.output}` : `-autostart ${S.outDir}/${name}.prg`}`;
   return (
     <div className="build">
       <div className="build-actions">
@@ -278,6 +281,7 @@ export function BuildPanel({ build, S, names, stale, busy, onVerify, onRun, onCo
         {busy ? <span className="small text-accent-hi">{busy}…</span> : <span className="muted small">The main process runs these with argument arrays (no shell), in a temporary build folder:</span>}
       </div>
       <div className="cmd"><code>{kickCmd}</code><button className="icon-btn" title="Copy command" onClick={() => onCopy(kickCmd)}><Icon name="copy" size={14} /></button></div>
+      {cartCmd && <div className="cmd"><code>{cartCmd}</code><button className="icon-btn" title="Copy command" onClick={() => onCopy(cartCmd)}><Icon name="copy" size={14} /></button></div>}
       <div className="cmd"><code>{viceCmd}</code><button className="icon-btn" title="Copy command" onClick={() => onCopy(viceCmd)}><Icon name="copy" size={14} /></button></div>
       {build ? (
         <>
@@ -286,6 +290,7 @@ export function BuildPanel({ build, S, names, stale, busy, onVerify, onRun, onCo
             {build.kick
               ? <span className={cx('rounded border px-2 py-0.5', build.kick.ok ? 'border-ok text-ok' : 'border-err text-err')}>KickAss.jar: {build.kick.ok ? 'byte-identical' : `${build.kick.problems.length} problem${build.kick.problems.length === 1 ? '' : 's'}`}</span>
               : <span className="rounded border border-line-2 px-2 py-0.5 text-fg-3">KickAss.jar: not run (set its path in Settings → Toolchain)</span>}
+            {build.cart && <span className={cx('rounded border px-2 py-0.5', build.cart.ok && (!build.kick?.cart || build.kick.cart.ok) ? 'border-ok text-ok' : 'border-err text-err')}>{build.cart.name}: {build.cart.ok && (!build.kick?.cart || build.kick.cart.ok) ? 'byte-identical' : 'differences'}</span>}
           </div>
           <pre className={cx('build-log', build.ok ? 'ok' : 'bad', stale && 'stale')}>{stale && '(project changed since this run — verify again)\n'}{build.log}</pre>
         </>

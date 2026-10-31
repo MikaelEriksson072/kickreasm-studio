@@ -7,7 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { analyze, comparePrg, createProject, exportFiles, formatOverride, h4, makeDemo, makePrg, OPC, openC64File, parsePrg, planPatch, render, showcaseProject, withPatch, type ProjectInput } from '../src';
+import { analyze, bankFiles, comparePrg, createProject, exportFiles, formatOverride, h4, makeDemo, makePrg, OPC, openC64File, openCartridge, parsePrg, planPatch, render, showcaseProject, withPatch, type ProjectInput } from '../src';
 import { findKickAssJar, runKickAssembler, writeVfs } from '../src/node';
 import { allOpcodesProgram, fromSource, randomPrg, seededProject, SETTING_VARIANTS, zeroPageProgram } from './helpers/programs';
 
@@ -132,6 +132,27 @@ describe.skipIf(!available)(`real Kick Assembler (${jar ?? 'not found'})`, () =>
       expect([...run.prg!]).toEqual([...makePrg(0x091e, plan.patch.bytes)]);
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('builds an exported cartridge: the chips, then <name>.crt.asm writes the image byte-identical to the one opened', async () => {
+    // fixtures/crt/mimir-demo.crt (crt.test.ts), opened at its boot bank and at its other bank (bank 0 from banks/)
+    const crt = new Uint8Array(readFileSync(join(__dirname, '../../../fixtures/crt/mimir-demo.crt')));
+    for (const bank of [0, 1]) {
+      const o = openCartridge('mimir-demo.crt', crt);
+      const p = createProject({ files: bankFiles(o.crt, bank), cart: o.cart });
+      const R = render(analyze(p), p), out = exportFiles(p, R, p.settings);
+      const dir = await mkdtemp(join(tmpdir(), 'mimir-it-'));
+      try {
+        await writeVfs(dir, out);
+        for (const n of R.fileNames) expect((await runKickAssembler({ java, jar: jar!, cwd: dir, entry: `${n}.asm`, outDir: 'out' })).ok).toBe(true);
+        const run = await runKickAssembler({ java, jar: jar!, cwd: dir, entry: 'mimir-demo.crt.asm', outDir: 'out' });
+        expect(run.ok, run.output).toBe(true);
+        expect(run.prgPath).toBe(join(dir, 'out', 'mimir-demo.crt'));
+        expect(run.prg).toEqual(crt);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
     }
   }, 60_000);
 });

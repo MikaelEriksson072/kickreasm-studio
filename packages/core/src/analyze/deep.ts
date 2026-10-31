@@ -14,7 +14,7 @@ import type { Addr, AnalysisResult, EntryKind, LogEntry } from '../types';
 import { cutKey, type Ctx, type CutWhy, type Deep } from './context';
 import { OPC } from '../cpu/opcodes';
 import { decode } from '../cpu/decode';
-import { areaAt, banked, portsOf, reaches } from '../c64/memconfig';
+import { areaAt, banked, portsOf, reaches, type CartMode } from '../c64/memconfig';
 import { $4 } from '../util/hex';
 
 /** What the Problems tab lists from the log. */
@@ -25,10 +25,11 @@ export const problemCount = (log: LogEntry[]): number => log.filter(isProblem).l
  * Why the JSR or JMP at `pc` to `t` is not followed, by what the round before learned; null: it is. `guess`: the code
  * is a guess traced on trial, which a routine that is not there yet does not excuse.
  */
-export function cutFor(deep: Deep, loaded: (a: Addr) => boolean, mem: Uint8Array, pc: Addr, t: Addr, guess = false): CutWhy | null {
+export function cutFor(deep: Deep, loaded: (a: Addr) => boolean, mem: Uint8Array, pc: Addr, t: Addr, guess = false, cart: CartMode = 'none'): CutWhy | null {
   if (deep.written && (deep.written[(pc + 1) & 0xffff] || deep.written[(pc + 2) & 0xffff])) return 'smc';
-  // ROM (or I/O) in every configuration the instruction can run with; new code runs with the main code's
-  if (deep.main && loaded(t) && banked(t) && reaches(t, deep.port?.[pc] || deep.main, false) === 'hw') return 'rom';
+  // ROM (or I/O) in every configuration the instruction can run with; new code runs with the main code's. A
+  // cartridge's ROM is the program's own bytes
+  if (deep.main && loaded(t) && banked(t, cart) && reaches(t, deep.port?.[pc] || deep.main, false, cart) === 'hw') return 'rom';
   // no routine starts with BRK or JAM: the code there is put in place at run time (unpacked or copied)
   if (!guess && loaded(t) && (mem[t] === 0x00 || OPC[mem[t]].jam)) return 'empty';
   return null;
@@ -77,7 +78,7 @@ export function learn(A: AnalysisResult, ctx: Ctx, deep: Deep): boolean {
     if (!insLen[pc] || skip.has(pc)) continue;
     const o = OPC[mem[pc]];
     if ((o.flow !== 'jsr' && o.flow !== 'jmp') || o.mode !== 'abs') continue;
-    const t = decode(mem, pc).target!, why = cutFor(next, loaded, mem, pc, t);
+    const t = decode(mem, pc).target!, why = cutFor(next, loaded, mem, pc, t, false, ctx.cart);
     if (why) would.set(cutKey(pc, t), why);
     else if (o.flow === 'jsr' && !inlineCalls.has(pc) && insLen[t]) calls.push(pc);
   }
@@ -92,7 +93,7 @@ export function learn(A: AnalysisResult, ctx: Ctx, deep: Deep): boolean {
   return changed;
 }
 
-const AREA = { kernal: 'KERNAL ROM', basic: 'BASIC ROM', io: 'I/O', char: 'character ROM', ram: 'RAM' } as const;
+const AREA = { kernal: 'KERNAL ROM', basic: 'BASIC ROM', io: 'I/O', char: 'character ROM', ram: 'RAM', cart: 'cartridge ROM' } as const;
 const list = (as: Addr[]) => as.slice(0, 4).map($4).join(', ') + (as.length > 4 ? ', …' : '');
 const KIND: Partial<Record<EntryKind, string>> = { ptr: 'pointer-table target', irq: 'IRQ handler', nmi: 'NMI handler', brk: 'BRK handler' };
 
@@ -110,7 +111,7 @@ export function deepLog(A: AnalysisResult, ctx: Ctx, before: number, rounds: num
     L('info', `${by ? `The code at ${$4(by.from)}` : 'Code'} writes the address of the ${mn} at ${$4(from)}, so its target ${$4(to)} is set at run time and is not followed`, from);
   }
   for (const [t, from] of rom) {
-    const area = mcfg ? AREA[areaAt(t, portsOf(mcfg.port[from[0]])[0] ?? 7, false)] : 'ROM';
+    const area = mcfg ? AREA[areaAt(t, portsOf(mcfg.port[from[0]])[0] ?? 7, false, mcfg.cart)] : 'ROM';
     L('info', `${from.length === 1 ? `The ${OPC[mem[from[0]]].mn} at ${$4(from[0])}` : `${from.length} calls and jumps (at ${list(from)})`} to ${$4(t)} reach${from.length === 1 ? 'es' : ''} the ${area} there, so the RAM below it is not traced`, from[0]);
   }
   // one line per data block: the first start left out in it, and how many more

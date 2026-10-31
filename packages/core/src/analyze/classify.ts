@@ -63,6 +63,14 @@ export function classify(ctx: Ctx, music: MusicInfo[], gfx: GfxCandidate[], mcfg
       if (n) { gfxBlocks.push(g); L('ok', `${typeInfo(g.type).label} at ${$4(g.start)} (${g.why})`, g.start, 'gfx'); }
     }
   }
+  // a cartridge's vectors and signature (5.3b), where no code was traced over them
+  const known = new Map<Addr, { props: BlockProps; reason: string }>();
+  for (const k of ctx.cartStart?.blocks ?? []) {
+    let free = true; for (let a = k.start; a < k.end; a++) if (tm[a] !== T.DATA) free = false;
+    if (!free) continue;
+    for (let a = k.start; a < k.end; a++) tm[a] = k.type;
+    known.set(k.start, { props: k.props, reason: k.reason });
+  }
   for (let a = 0; a < 0x10000; a++) if (ov[a] && owner[a] >= 0 && ov[a] !== T.CODE) tm[a] = ov[a];
 
   // ---- 5.11 data objects & classification of remaining data ----
@@ -76,7 +84,7 @@ export function classify(ctx: Ctx, music: MusicInfo[], gfx: GfxCandidate[], mcfg
   // below it (a memory dump over $d000-$dfff, say): the render writes the register, so it makes no label there.
   // At $d000-$dfff that is also so when the configuration cannot be told
   const toBytes = (to: Addr, x: XRef) => x.kind !== 'branch' && x.kind !== 'jump' && x.kind !== 'call'
-    && !(mcfg && reachesForName(to, mcfg.port[x.from], OPC[mem[x.from]].access === 'write') === 'hw');
+    && !(mcfg && reachesForName(to, mcfg.port[x.from], OPC[mem[x.from]].access === 'write', mcfg.cart) === 'hw');
   for (const [to, l] of xrefs) if (loaded(to) && l.some(x => toBytes(to, x)) && !offsetOf.has(to)) refTargets.add(to);
   const objStarts = new Set<Addr>([...refTargets, ...ptrTargets.keys(), ...textPtrs.keys(), ...lohiTabs.keys()]);
   const written = (a: Addr) => (xrefs.get(a) || []).some(x => x.kind === 'write' || x.kind === 'rmw');
@@ -180,9 +188,9 @@ export function classify(ctx: Ctx, music: MusicInfo[], gfx: GfxCandidate[], mcfg
       cuts.push(e);
       for (let i = 0; i < cuts.length - 1; i++) classifySpan(cuts[i], cuts[i + 1], objStarts.has(cuts[i]));
     } else {
-      while (e < 0x10000 && tm[e] === t && owner[e] === fileA && !(ovProps.has(e) && e !== a)) e++;
-      const o = ovProps.get(a);
-      const p: BlockProps = Object.assign({}, o ? o.props : {});
+      while (e < 0x10000 && tm[e] === t && owner[e] === fileA && !(ovProps.has(e) && e !== a) && !known.has(e)) e++;
+      const o = ovProps.get(a), k = !o ? known.get(a) : undefined;
+      const p: BlockProps = Object.assign({}, o ? o.props : k ? k.props : {});
       if (t === T.TEXT && !p.enc) p.enc = 'petscii';
       if (t === T.FILL) p.value = mem[a];
       if (t === T.MUSIC) {
@@ -194,7 +202,7 @@ export function classify(ctx: Ctx, music: MusicInfo[], gfx: GfxCandidate[], mcfg
       }
       // the candidate the block is part of (code can split one into several blocks)
       const g = gfxBlocks.find(x => x.type === t && a >= x.start && a < x.start + x.size);
-      pushBlock(a, e, t, p, o ? 1 : g ? 0.9 : 1, o ? 'user override' : g ? g.why : t === T.BASIC ? 'BASIC program lines' : t === T.MUSIC ? 'SID player heuristics' : '');
+      pushBlock(a, e, t, p, o ? 1 : g ? 0.9 : 1, o ? 'user override' : k ? k.reason : g ? g.why : t === T.BASIC ? 'BASIC program lines' : t === T.MUSIC ? 'SID player heuristics' : '');
     }
     a = e;
   }

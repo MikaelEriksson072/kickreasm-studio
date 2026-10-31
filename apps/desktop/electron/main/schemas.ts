@@ -72,6 +72,10 @@ export const settingsSchema = toolchainSettingsSchema.partial().extend({
 }).partial();
 
 const fileName = z.string().min(1).max(255);
+/** a cartridge's CHIP packet (spec 13.9); an EasyFlash has 128 */
+const chip = z.number().int().min(0).max(4095);
+/** a cartridge image: at most 16 MB (the largest VICE emulates are 16 MB) */
+const crtBytes = z.instanceof(Uint8Array).refine(b => b.length >= 0x40 && b.length <= 16 * 1024 * 1024 + 0x10000, 'not a cartridge image');
 /** code the user wrote over the loaded bytes (spec 10.2): what it wrote and what was there, as many bytes */
 const patchFields = { name: z.string().min(1).max(64), start: addr, end: addr, source: z.string().max(65536), fill: z.enum(['nop', 'keep']), over: z.boolean(), off: z.boolean().optional(), cycles: z.boolean().optional() };
 const base64 = z.string().max(0x20000).regex(/^[A-Za-z0-9+/]*={0,2}$/);
@@ -87,8 +91,8 @@ export const serializedProjectSchema = z.object({
   format: z.enum(['mimir-project', LEGACY_PROJECT_FORMAT]),
   version: z.literal(1),
   name: z.string().max(255).default('project'),
-  // project files from before snapshots were kept have no vsf
-  files: z.array(z.object({ name: fileName, load: addr, data: z.string(), vsf: z.string().optional() })).min(1).max(64),
+  // project files from before snapshots were kept have no vsf; a chip of the cartridge says which
+  files: z.array(z.object({ name: fileName, load: addr, data: z.string(), vsf: z.string().optional(), chip: chip.optional() })).min(1).max(64),
   overrides: z.array(overrideSchema).max(100000).default([]),
   entries: z.array(addr).max(65536).default([]),
   // project files from before the program start could be set have none
@@ -111,6 +115,8 @@ export const serializedProjectSchema = z.object({
   excluded: z.array(addr).max(65536).default([]),
   // project files from before blocks could be saved as binary files have none
   binary: z.array(addr).max(65536).default([]),
+  // project files from before cartridges, and those without one, have none
+  cart: z.object({ name: fileName, data: z.string() }).optional(),
   settings: settingsSchema.default({}),
 });
 
@@ -119,7 +125,7 @@ export const projectSchema = z.object({
   format: z.literal('mimir-project'),
   version: z.literal(1),
   name: z.string().max(255),
-  files: z.array(z.object({ id: z.string().max(64), name: fileName, load: addr, bytes: z.instanceof(Uint8Array), vsf: z.instanceof(Uint8Array).optional() })).min(1).max(64),
+  files: z.array(z.object({ id: z.string().max(64), name: fileName, load: addr, bytes: z.instanceof(Uint8Array), vsf: z.instanceof(Uint8Array).optional(), chip: chip.optional() })).min(1).max(64),
   overrides: z.array(overrideSchema).max(100000),
   entries: z.array(addr).max(65536),
   entryPoint: z.number().int().min(0).max(0xffff).nullable(),
@@ -134,6 +140,7 @@ export const projectSchema = z.object({
   bankZones: z.array(bankZone).max(100000),
   excluded: z.array(addr).max(65536),
   binary: z.array(addr).max(65536),
+  cart: z.object({ name: fileName, crt: crtBytes }).nullable().optional(),
   settings: settingsSchema,
 });
 
@@ -151,8 +158,10 @@ export const exportWriteSchema = z.object({
   name: z.string().max(64).regex(/^[A-Za-z0-9_-]*$/).optional(),
   files: z.record(z.string().min(1).max(512), z.union([z.string(), z.instanceof(Uint8Array)])),
 }).refine(r => !!r.dir !== !!r.target, 'give either dir or target');
-export const buildSchema = z.object({ dir: z.string().min(1).max(4096), entries: z.array(z.string().max(255)).min(1).max(64) });
-export const runSchema = z.object({ prgPath: z.string().min(1).max(4096), labelsPath: z.string().max(4096).optional(), start: z.number().int().min(0).max(0xffff).optional(), disk: z.string().min(1).max(4096).optional() });
+/** the sources to assemble: one per project file, and a cartridge's own source after them */
+export const buildSchema = z.object({ dir: z.string().min(1).max(4096), entries: z.array(z.string().max(255)).min(1).max(65) });
+/** `cart`: prgPath is a cartridge image VICE attaches (-cartcrt) */
+export const runSchema = z.object({ prgPath: z.string().min(1).max(4096), labelsPath: z.string().max(4096).optional(), start: z.number().int().min(0).max(0xffff).optional(), disk: z.string().min(1).max(4096).optional(), cart: z.boolean().optional() });
 const prg = z.instanceof(Uint8Array).refine(b => b.length >= 3 && b.length <= 0x10002, 'not a PRG');
 /** the built PRGs (one per project file, in order) and how to pack them */
 export const packSchema = z.object({ files: z.array(z.object({ name: fileName, prg })).min(1).max(64), prefs: packPrefsSchema });

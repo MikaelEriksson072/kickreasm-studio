@@ -40,6 +40,28 @@ describe('mimir CLI', () => {
     expect(JSON.parse(c.lines.join('\n')).packing).toEqual([null]);
   });
 
+  it('analyses a cartridge (or another bank of it), verifies the image rebuilt and exports it', async () => {
+    const crt = join(__dirname, '../../../fixtures/crt/mimir-demo.crt');
+    let c = capture(dir);
+    expect(await main(['analyse', crt], c.io)).toBe(0);
+    expect(c.lines).toContain('[ok  ] Cartridge: "CBM80" at $8004, cold start $8009, warm start $8034');
+    expect(c.lines.join('\n')).toMatch(/\$8000-\$8003 {2}Word table {4}cart_vectors/);
+
+    c = capture(dir);
+    expect(await main(['verify', crt], c.io)).toBe(0);
+    expect(c.lines).toEqual(['OK   bank00_8000.asm: 8192/8192 bytes identical to bank00_8000.prg (built-in assembler)', 'OK   mimir-demo.crt: 16480/16480 bytes identical to mimir-demo.crt (the cartridge rebuilt from the chips)']);
+
+    c = capture(dir);
+    expect(await main(['export', crt, '--bank', '1', '-o', 'cart'], c.io)).toBe(0);
+    const files = readdirSync(join(dir, 'cart'), { recursive: true }).map(String).map(f => f.replace(/\\/g, '/'));
+    expect(files).toEqual(expect.arrayContaining(['bank01_8000.asm', 'mimir-demo.crt.asm', 'banks/bank00_8000.bin', 'out/mimir-demo.crt', 'original/mimir-demo.crt', 'mimir-demo.mimir.json']));
+    expect(readFileSync(join(dir, 'cart', 'out', 'mimir-demo.crt'))).toEqual(readFileSync(crt));
+
+    c = capture(dir);
+    expect(await main(['analyse', crt, '--bank', '7'], c.io)).toBe(2);
+    expect(c.lines).toEqual(['ERR mimir: mimir-demo.crt has no bank 7']);
+  });
+
   it('says when a PRG is packed', async () => {
     const packed = join(__dirname, '../../../fixtures/prg/packed-demo.prg');
     let c = capture(dir);
