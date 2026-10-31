@@ -1613,6 +1613,57 @@ test('edit build.bat in the source view: the export writes it, Restore generated
   });
 });
 
+test('pack with Brokkr: checked in an emulated C64, effort max on threads, and crunched data', async ({ page }) => {
+  await waitForListing(page);
+  const view = page.locator('.pack-view');
+  const cmd = view.getByLabel('Brokkr command');
+  const card = view.getByRole('status', { name: 'Packed file' });
+  const packedSize = async () => Number(/packed to (\d+)/.exec(await card.innerText())?.[1]);
+
+  await test.step('Brokkr packs by default: the view shows its command, Pack builds, packs and checks it', async () => {
+    await page.locator('nav.activity').getByRole('button', { name: 'Pack' }).click();
+    await expect(view.getByRole('tab', { name: 'Brokkr' })).toHaveAttribute('aria-selected', 'true');
+    await expect(cmd).toHaveText('brokkr sfx --start sys -o raster-demo-brokkr.prg raster-demo.prg');
+    await view.getByRole('button', { name: 'Pack', exact: true }).click();
+    await expect(card).toContainText('raster-demo-brokkr.prg', { timeout: 90_000 });
+    await expect(card).toContainText("Decrunched in Brokkr's emulated C64: $0801–$37ff has the same 12287 bytes, and it starts at $0810");
+    await expect(card).toContainText('Decruncher');
+    await expect(toast(page, /^Packed \d+ bytes into raster-demo-brokkr\.prg \(\d+ bytes\), decrunch verified/)).toBeVisible();
+    await page.getByRole('tab', { name: 'Build output' }).click();
+    await expect(page.locator('.build-log')).toContainText('> brokkr sfx --start sys -o raster-demo-brokkr.prg raster-demo.prg');
+    await expect(page.locator('.build-log')).toContainText('checked in an emulated C64');
+  });
+
+  await test.step('effort max searches on every core and gives no larger file', async () => {
+    const normal = await packedSize();
+    await view.getByLabel('Effort').selectOption('max');
+    await expect(cmd).toHaveText('brokkr sfx --start sys --effort max -o raster-demo-brokkr.prg raster-demo.prg');
+    await view.getByRole('button', { name: 'Pack', exact: true }).click();
+    await expect(card).not.toContainText('Out of date', { timeout: 120_000 });
+    await expect(card).toContainText("Decrunched in Brokkr's emulated C64");
+    expect(await packedSize()).toBeLessThanOrEqual(normal);
+  });
+
+  await test.step('crunched data: Brokkr decrunches the stream again and says where it loads in place', async () => {
+    await view.getByLabel('Effort').selectOption('normal');
+    await view.getByRole('tab', { name: 'Crunched data' }).click();
+    await expect(cmd).toHaveText('brokkr mem -o raster-demo-brokkr.prg raster-demo.prg');
+    await view.getByRole('button', { name: 'Pack', exact: true }).click();
+    await expect(card).toContainText(/Brokkr decrunched the stream again: the same 12287 bytes\. In place it loads at \$0[0-9a-f]{3} or lower\./, { timeout: 90_000 });
+  });
+
+  await test.step("Brokkr's own format: a self-extracting file with its probabilities, checked the same way", async () => {
+    await view.getByRole('tab', { name: 'Self-extracting' }).click();
+    await view.getByLabel('Format').selectOption('brokkr');
+    await expect(cmd).toHaveText('brokkr sfx --format brokkr --start sys -o raster-demo-brokkr.prg raster-demo.prg');
+    await expect(view).toContainText('decrunching takes about 8 times as long');
+    await view.getByRole('button', { name: 'Pack', exact: true }).click();
+    await expect(card).not.toContainText('Out of date', { timeout: 120_000 });
+    await expect(card).toContainText("Decrunched in Brokkr's emulated C64: $0801–$37ff has the same 12287 bytes, and it starts at $0810");
+    await expect(card).toContainText('Probabilities');
+  });
+});
+
 test('pack with Exomizer: the whole build or chosen blocks, checked with desfx, saved with a dialog', async ({ workDir: work, app, page }) => {
   await waitForListing(page);
   const view = page.locator('.pack-view');
@@ -1629,6 +1680,7 @@ test('pack with Exomizer: the whole build or chosen blocks, checked with desfx, 
 
   await test.step('the whole build: the Pack view shows the command, Pack builds, packs and checks it', async () => {
     await page.locator('nav.activity').getByRole('button', { name: 'Pack' }).click();
+    await view.getByRole('tab', { name: 'Exomizer' }).click();
     await expect(cmd).toHaveText(/^exomizer(\.exe)? sfx sys -o raster-demo-exo\.prg raster-demo\.prg$/);
     await view.getByRole('button', { name: 'Pack', exact: true }).click();
     await expect(card).toContainText('raster-demo-exo.prg', { timeout: 90_000 });

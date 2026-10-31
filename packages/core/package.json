@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@mimir/brokkr": "workspace:*",
     "@mimir/sindri": "workspace:*"
   },
   "devDependencies": {

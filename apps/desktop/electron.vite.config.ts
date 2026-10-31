@@ -22,9 +22,10 @@ function devCsp(): Plugin {
 
 export default defineConfig({
   main: {
-    // @mimir/core is TypeScript source in the workspace: bundle it into the main process
+    // @mimir/core is TypeScript source in the workspace: bundle it into the main process; Brokkr packs in a worker
+    // thread of its own (electron/main/brokkr-worker.ts), a second entry
     plugins: [externalizeDepsPlugin({ exclude: ['@mimir/core'] })],
-    build: { rollupOptions: { input: { index: resolve(__dirname, 'electron/main/index.ts') } } },
+    build: { rollupOptions: { input: { index: resolve(__dirname, 'electron/main/index.ts'), 'brokkr-worker': resolve(__dirname, 'electron/main/brokkr-worker.ts') } } },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],

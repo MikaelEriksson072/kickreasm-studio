@@ -6,7 +6,7 @@ import { splitArgs } from './util/args';
 import { h2, h4 } from './util/hex';
 
 export const DEFAULT_PACK: PackPrefs = {
-  mode: 'sfx', ranges: null, start: 'sys', jmp: null, effect: 'default', ramExit: null, irqExit: null,
+  packer: 'brokkr', effort: 'normal', format: 'exomizer', mode: 'sfx', ranges: null, start: 'sys', jmp: null, effect: 'default', ramExit: null, irqExit: null,
   memLoad: 'auto', forward: false, compat: false, fast: false, extra: '', out: '',
 };
 
@@ -91,12 +91,13 @@ export function packProblem(p: PackPrefs): string | null {
   return extraProblem(p.extra);
 }
 
-/** The packed file's name: the one typed (made safe), else <first file>-exo.prg (.bin for a mem file without load address). */
+/** The packed file's name: the one typed (made safe), else <first file>-brokkr.prg or -exo.prg (.bin for a mem file
+ * without load address). */
 export function packOutName(p: PackPrefs, first: string): string {
   const ext = p.mode === 'mem' && p.memLoad === 'none' ? '.bin' : '.prg';
   const typed = p.out.trim();
   if (typed) return packFileName(typed, /\.(prg|bin)$/i.exec(typed)?.[0].toLowerCase() ?? ext);
-  return packFileName(`${first.replace(/\.prg$/i, '')}-exo`, ext);
+  return packFileName(`${first.replace(/\.prg$/i, '')}-${p.packer === 'exomizer' ? 'exo' : 'brokkr'}`, ext);
 }
 
 /** Exomizer's arguments (without the executable): the sub command, its options, `-o out`, then the in-files. */

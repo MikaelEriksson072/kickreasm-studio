@@ -1,0 +1,24 @@
+{
+  "name": "@mimir/brokkr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Brokkr, a C64 cruncher: Exomizer 3 compatible streams made smaller and faster, self-extracting programs that check themselves, and packing straight on a D64.",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts"
+  },
+  "scripts": {
+    "pack": "node src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "~5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

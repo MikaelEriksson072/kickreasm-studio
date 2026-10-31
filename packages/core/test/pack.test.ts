@@ -15,7 +15,8 @@ import {
 import { findExomizer, findVice, runExomizer } from '../src/node';
 import { fromSource, rng } from './helpers/programs';
 
-const P = (o: Partial<PackPrefs> = {}): PackPrefs => ({ ...DEFAULT_PACK, ...o });
+// these are Exomizer's settings (DEFAULT_PACK packs with Brokkr)
+const P = (o: Partial<PackPrefs> = {}): PackPrefs => ({ ...DEFAULT_PACK, packer: 'exomizer', ...o });
 const bytes = (n: number, f = (i: number) => i & 0xff) => Uint8Array.from({ length: n }, (_, i) => f(i));
 
 describe('pack ranges', () => {

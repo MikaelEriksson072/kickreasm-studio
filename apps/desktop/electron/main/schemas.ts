@@ -10,9 +10,13 @@ const notes = z.record(z.string().regex(/^\d+$/), z.object({ text: z.string().ma
 const bookmarks = z.record(z.string().regex(/^\d+$/), z.object({ title: z.string().max(200), text: z.string().max(20000) }));
 /** build.bat / build.sh as the user edited them */
 const scripts = z.object({ 'build.bat': z.string().max(65536), 'build.sh': z.string().max(65536) }).partial().strict();
-/** how the Pack view packs the project with Exomizer (spec 13.8) */
+/** how the Pack view packs the project, with Brokkr or Exomizer (spec 13.8) */
 const packRange = z.object({ start: addr, end: addr }).refine(r => r.end > r.start, 'empty range');
 export const packPrefsSchema = z.object({
+  // project files from before Brokkr have neither: they pack with Brokkr now
+  packer: z.enum(['brokkr', 'exomizer']).default('brokkr'),
+  effort: z.enum(['fast', 'normal', 'max']).default('normal'),
+  format: z.enum(['exomizer', 'brokkr']).default('exomizer'),
   mode: z.enum(['sfx', 'mem']),
   ranges: z.array(packRange).max(4096).nullable(),
   start: z.enum(['sys', 'basic', 'jmp']),

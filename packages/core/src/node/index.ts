@@ -6,4 +6,5 @@ export type { TerminalCommand, TerminalLaunch } from './terminal';
 export { canIdentify, identifyPacker, pickUnpacked, runUnpacker, UNPACK_OUT, unpackArgs, unpackEntry, unpackInputName, unpackPacker } from './unpack';
 export type { IdentifyResult, UnpackOptions, UnpackResult } from './unpack';
 export { DESFX_OUT, runExomizer } from './exomizer';
+export { brokkrThreads, packWithBrokkrThreads, serveBrokkr } from './brokkr';
 export type { ExomizerOptions, ExomizerResult } from './exomizer';

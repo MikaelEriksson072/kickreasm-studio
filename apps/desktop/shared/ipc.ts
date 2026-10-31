@@ -125,8 +125,10 @@ export interface IdentifyResponse { supported: boolean; known: boolean; packer: 
 export type RomsResponse = Roms | null;
 
 /**
- * Pack with Exomizer (spec 13.8): the built PRGs (load address first, one per project file in order) are copied to a
- * pack folder of its own, where Exomizer packs them, or the ranges `prefs` chooses, as `prefs` says.
+ * Pack with Brokkr or Exomizer (spec 13.8): the built PRGs (load address first, one per project file in order) are
+ * copied to a pack folder of its own, where the packer packs them, or the ranges `prefs` chooses, as `prefs` says.
+ * Brokkr runs in a worker thread of the main process; `argv` is then the standalone Brokkr's command for the same
+ * file, and `check` its own (an emulated C64 for sfx).
  */
 export interface PackRequest { files: { name: string; prg: Uint8Array }[]; prefs: PackPrefs }
 export interface PackResponse {
@@ -138,7 +140,7 @@ export interface PackResponse {
   /** the memory that was packed */
   packed: { start: number; length: number } | null;
   report: ExomizerReport;
-  /** sfx: Exomizer's desfx decrunched it, and this is how that compares with what was packed */
+  /** sfx: Exomizer's desfx (or Brokkr's emulated C64) decrunched it, and this is how that compares with what was packed */
   check: (PackCheck & { argv: string[]; output: string }) | null;
   error?: string;
 }

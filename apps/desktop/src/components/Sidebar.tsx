@@ -33,7 +33,7 @@ interface SidebarProps {
   onBmGo: (a: Addr) => void; onBmAdd: () => void; onBmEdit: (a: Addr) => void; onBmDelete: (a: Addr) => void;
   /** the bookmark editor at the top of the Bookmarks view */
   bmEditing: BookmarkEditing | null;
-  /** the Pack view (Exomizer) */
+  /** the Pack view (Brokkr or Exomizer) */
   pack: PackViewProps;
   /** VICE's quicksave snapshot (Alt+F11 in VICE) */
   quicksave: QuicksaveProps;

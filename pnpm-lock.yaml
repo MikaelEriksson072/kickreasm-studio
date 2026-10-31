@@ -90,6 +90,18 @@ importers:
         specifier: ^4.5.7
         version: 4.5.7(@types/react@18.3.31)(immer@10.2.0)(react@18.3.1)
 
+  packages/brokkr:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.20.5)
+
   packages/cli:
     dependencies:
       '@mimir/core':
@@ -114,6 +126,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@mimir/brokkr':
+        specifier: workspace:*
+        version: link:../brokkr
       '@mimir/sindri':
         specifier: workspace:*
         version: link:../sindri

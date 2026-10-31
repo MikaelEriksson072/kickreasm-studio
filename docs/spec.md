@@ -1331,7 +1331,7 @@ Med `-binarymonitor` (TCP 6502) kan appen: sätta brytpunkter från listningen, 
 | `export:write` | renderer → main | `{ dir, files: Record<string, string \| Uint8Array> }` → `{ written: string[] }` |
 | `toolchain:build` | renderer → main | `{ dir, entries: string[] }` → `{ ok, stdout, problems: Problem[], prg?: Uint8Array }` |
 | `toolchain:run` | renderer → main | `{ prgPath, labelsPath?, start?, disk? }` → `{ pid, via: 'run' \| 'sys' \| 'monitor' }` |
-| `toolchain:pack` | renderer → main | `{ files: { name, prg }[], prefs: PackPrefs }` → `{ ok, output, argv, dir, name?, path?, prg?, packed, report, check, error? }` (13.8) |
+| `toolchain:pack` | renderer → main | `{ files: { name, prg }[], prefs: PackPrefs }` → `{ ok, output, argv, dir, name?, path?, prg?, packed, report, check, error? }`: Brokkr i en arbetstråd eller Exomizer, efter `prefs.packer` (13.8) |
 | `vice:quicksave` | renderer → main | `{ zeroPage? }` → `{ found, path, saved?, files? }`: VICE:s nyaste quicksave öppnad som snapshot (13.7b) |
 | `vice:quicksave-info` | renderer → main | → `{ found, path, saved? }`: finns det en quicksave och när sparades den |
 | `vice:quicksaves` | renderer → main | → `{ id, name, saved, size, favourite? }[]`: quicksavesen appen sparat (de nyaste och favoriterna), den nyaste först (13.7b) |
@@ -1624,11 +1624,55 @@ Båda finns sedan i listan. Den nyaste döps till *intro* och sparas som `intro.
 med ett klick. Stjärnan flyttar *intro* till favoritlistan, över de nyaste, där den öppnas. Tas stjärnan bort kommer den
 tillbaka bland de nyaste.
 
-### 13.8 Packa med Exomizer
+### 13.8 Packa med Brokkr eller Exomizer
 
 Vyn **Pack** i aktivitetsraden (ikonen med en låda, kommandopaletten *Show the Pack view*) packar PRG:n som Build & Run
-bygger med Exomizer 3. Vyn ligger i sidopanelen, så listningen bredvid visar blocken som väljs. Inställningarna sparas
-i projektet (`Project.pack`, `PackPrefs`), och varje ändring kan ångras.
+bygger. Överst väljs packaren: **Brokkr**, Mimirs egen packare (`packages/brokkr`, standard), eller **Exomizer** 3
+(verktygsinställningen, 13.1). Vyn ligger i sidopanelen, så listningen bredvid visar blocken som väljs. Inställningarna
+sparas i projektet (`Project.pack`, `PackPrefs`), och varje ändring kan ångras. En projektfil från före Brokkr har ingen
+packare; den packar med Brokkr (`packer`, `effort` och `format` får sina standardvärden i zod-schemat).
+
+**Brokkr** skriver Exomizer 3:s strömformat (protokoll 39, som Exomizers egna uppackare läser) med egen kod: matchsökning
+med ett binärträd, en optimal parsning som håller flera vägar till varje position (en per tillstånd och offset som kan
+återanvändas), tabellerna optimerade mot parsningen tills strömmen slutar krympa, och en egen 6502-uppackare. På 163
+uppackade demos, spel och intron blir strömmarna mindre än Exomizer 3.1.1:s på normal nivå, och packningen går flera
+gånger fortare (siffrorna i Brokkrs README). Nivåer (`PackPrefs.effort`): *Fast*, *Normal* och *Max*, som söker vidare
+från flera starter och prövar varje tabellfack en bit bredare och smalare, på alla kärnor utom en.
+
+**Format** (`PackPrefs.format`, bara för Brokkr): *Exomizer 3* (standard) eller *Brokkr's own*, Brokkrs eget format för
+största möjliga packning. Det kodar samma slags LZ-tokens med en binär aritmetisk kodare vars sannolikheter anpassar
+sig efter varje bit, som LZMA: bokstäver i ett 8-bitars träd, längder med en sammanflätad gammakod, offset med längd i
+bitar (i sammanhang av matchens längd) och därefter bitarna, och "samma offset igen" efter en literal. Parsningen
+prissätter tokens efter vad kodaren tar block för block. På de 163 programmen blir strömmarna 6,6 % mindre än Exomizer
+3.1.1:s (mindre på 152), men uppackningen tar i median 8 gånger så lång tid (upp till 24 för data som knappt packas;
+varje bit kostar en multiplikation), och uppackaren behöver mer minne:
+512 byte sannolikheter, 1 KB kvadrattabeller när det finns plats (en tredjedel snabbare; annars multiplicerar den
+med skift och addition) och en resident del på omkring 425 byte i stället för 200. För små program är Exomizers format
+därför mindre som självuppackande fil (på 159 program blev filerna 3,5 % mindre sammanlagt, mindre på 98); där
+programmet inte lämnar plats blir filen i Exomizers format, med en notis.
+`--format brokkr` står då i kommandot, *Crunched data* packas bara bakåt (*Forward* och *Compatibility* döljs), och
+uppackaren för egen kod skrivs med `brokkr decruncher --format brokkr`.
+
+- *Self-extracting*: Brokkr planerar var uppackarens två delar, dess tabell, nollsidebytes och den packade datan ska ligga
+  (helst stackens sida `$0100-$01e7` och `$0334-$03ff`, så att inget syns på skärmen), så att uppackaren aldrig skriver över
+  byte den inte läst, och väljer `$01` medan den packar upp så att allt den läser och skriver är RAM (`$34` när data
+  ligger under I/O; då blinkar inte kanten). Filen körs sedan i Brokkrs emulerade C64 från SYS-raden tills programmet
+  startar, och minnet jämförs med det som packades. Kontrollen syns som *Decrunched in Brokkr's emulated C64: … has the
+  same … bytes, and it starts at $….*
+- *Crunched data*: Exomizers mem-format (`-T4` som standard, för `exodecrunch.s`). Strömmen packas upp igen och jämförs,
+  och kortet säger var den laddas för uppackning på plats. Brokkrs egen uppackare som Kick Assembler-källa skrivs med
+  `brokkr decruncher`.
+- Effekt: kantblink eller ingen. `$01` och avbrott efter uppackningen som för Exomizer. *Compatibility* blir `-T1` (inga
+  literal sequences).
+
+Huvudprocessen kör Brokkr i en arbetstråd (`electron/main/brokkr-worker.ts`, en egen ingång i electron-vite som blir
+`out/main/brokkr-worker.js`), så att fönstret svarar medan den packar; på nivån *Max* startar tråden fler trådar som kör
+samma fil (`workerData.brokkr`). Resultatet har samma form som en Exomizer-körning (`ExomizerReport`: minneslayout,
+`$01` och avbrott före, under och efter, kontrollen), så kortet visar båda på samma sätt. Pack-mappen får indatafilerna
+och den packade filen. Kommandot vyn visar är den fristående Brokkrs (`brokkr sfx --start sys -o x-brokkr.prg x.prg`,
+`brokkrArgs`), som gör samma fil i pack-mappen; standardnamnet är `<fil>-brokkr.prg`.
+
+**Exomizer** packar som förut:
 
 **Vad som packas:**
 - *Whole build*: de byggda PRG:erna hela. Flera filer packas ihop till en.
@@ -1688,6 +1732,21 @@ tom inställning behålls.
     plus hopp, `$01 = $35` och avbrott av.
 - `apps/desktop/test/main.test.ts`: inställningen, schemat och en packning med den medföljande Exomizer.
 - E2e-testet packar demon hel och med valda block (meny, markering och kryssrutor), sparar filen och ångrar.
+
+**Test av Brokkr:**
+- `packages/brokkr/test`: strömmen för alla protokoll, Exomizers `raw -d` packar upp Brokkrs strömmar och Exomizers
+  `desfx` en Brokkr-sfx, Kick Assembler assemblerar uppackarens källa till samma byte som Brokkrs assembler, mem-filer
+  packas upp av Brokkrs uppackare i den emulerade C64:an, VICE:s c1541 läser D64:or Brokkr skrivit, och trådpoolen ger
+  samma resultat som en tråd.
+- `packages/brokkr/test/brk.test.ts`: Brokkrs eget format packar upp till samma data (alla längder och offset), mem-filer
+  packas upp av dess 6502-uppackare (båda multiplikationerna) i den emulerade C64:an, självuppackande filer startar
+  programmet och faller tillbaka till Exomizers format utan plats; Kick Assembler assemblerar dess källa till samma byte.
+- `packages/core/test/brokkr.test.ts`: demon hel och med intervall och hopp, mem, felen, nivån *Max* på två trådar,
+  Brokkrs eget format (mindre fil, samma fil som kommandot), och att kommandot som visas gör samma fil med den
+  fristående Brokkr.
+- `apps/desktop/test/main.test.ts`: pack-mappen med indata och den packade filen, och schemat (en gammal projektfil
+  packar med Brokkr, i Exomizers format).
+- E2e-testet packar demon med Brokkr (hel, *Max*, mem, eget format) i den byggda appen, alltså med arbetstråden.
 
 ## 14. UI/UX-specifikation
 

@@ -112,7 +112,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   const [exportDir, setExportDir] = useState<string | null>(null);
   /** the last unpack (shown above the listing with the layer report, or the external unpacker's output) */
   const [unpacked, setUnpacked] = useState<{ ok: boolean; title: string; output: string; label: string } | null>(null);
-  /** the last pack with Exomizer (the Pack view shows it) */
+  /** the last pack, with Brokkr or Exomizer (the Pack view shows it) */
   const [packRes, setPackRes] = useState<PackResult | null>(null);
   // a packed file belongs to the program it was packed from: other files (a new project, an added PRG) drop it
   useEffect(() => setPackRes(null), [project.files]);
@@ -807,7 +807,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     try { const r = await kr.openTerminal(dir ? { dir } : {}); toast(`Terminal opened in ${r.dir}`, 'ok'); } catch (e) { toast(errorText(e), 'err'); }
   };
 
-  /* ---- pack with Exomizer (the Pack view) ---- */
+  /* ---- pack with Brokkr or Exomizer (the Pack view) ---- */
   const setPack = (p: PackPrefs, label: string) => update(label, d => { d.pack = p; });
   /** pack the range too (on) or leave it out; the Pack view then shows the chosen blocks */
   const packRange = (r: { start: Addr; end: Addr }, on: boolean) => {
@@ -817,10 +817,12 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     setUi({ activity: 'pack' });
     toast(on ? `${what} is packed with the chosen blocks (Pack view)` : `${what} is left out of the pack`, 'ok');
   };
-  /** Build and verify like Build & Run, then pack the PRGs it built with Exomizer as the Pack view says. */
+  /** Build and verify like Build & Run, then pack the PRGs it built with Brokkr or Exomizer as the Pack view says. */
   const runPack = async () => {
     if (!kr) return needDesktop();
-    if (!toolchain.exomizerPath) { toast('Set Exomizer in Settings → Toolchain first', 'warn'); setModal('settings'); return; }
+    const before = latest.current;
+    const exomizer = (before.project.pack ?? packDefaults(before.A, before.project)).packer === 'exomizer';
+    if (exomizer && !toolchain.exomizerPath) { toast('Set Exomizer in Settings → Toolchain first', 'warn'); setModal('settings'); return; }
     const res = await runVerify({ quiet: true });
     if (!res) return;
     if (!res.ok) { setUi({ bottom: 'build', panelOpen: true }); toast('The build failed verification; nothing was packed', 'err'); return; }
@@ -829,14 +831,15 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     const prefs = project.pack ?? packDefaults(A, project);
     const files = R.fileNames.map((n, i) => ({ name: `${n}.prg`, prg: res.kick?.compared[i]?.prg ?? res.V.results[i]?.prg ?? null }));
     if (files.some(f => !f.prg)) { toast('The build gave no PRG to pack', 'err'); return; }
+    const packer = prefs.packer === 'exomizer' ? 'Exomizer' : 'Brokkr';
     try {
-      setBuildBusy('Packing with Exomizer');
+      setBuildBusy(`Packing with ${packer}`);
       const r = await kr.pack({ files: files.map(f => ({ name: f.name, prg: f.prg! })), prefs });
       setPackRes({ ...r, key: packKeyOf(prefs, filesKey(R)) });
       const from = res.kick?.compared[0] ? `the PRG KickAss.jar built, ${res.kick.compared[0].prgPath}` : 'the PRG the built-in assembler built';
-      const check = r.check ? `\n\n> ${r.check.argv.map(shellWord).join(' ')}\n${r.check.output.trim()}\n${r.check.text}` : '';
+      const check = !r.check ? '' : r.check.argv.length ? `\n\n> ${r.check.argv.map(shellWord).join(' ')}\n${r.check.output.trim()}\n${r.check.text}` : `\n${r.check.text}`;
       setBuild(b => b && { ...b, log: `${b.log}\n\n> ${r.argv.map(shellWord).join(' ')}\n(in ${r.dir}, from ${from})\n${r.output.trim()}${check}${r.ok ? '' : `\n${r.error}`}` });
-      if (!r.ok) { setUi({ bottom: 'build', panelOpen: true }); toast(`Exomizer: ${r.error}`, 'err'); return; }
+      if (!r.ok) { setUi({ bottom: 'build', panelOpen: true }); toast(`${packer}: ${r.error}`, 'err'); return; }
       const bad = r.check?.status === 'differs';
       toast(`Packed ${r.packed?.length ?? 0} bytes into ${r.name} (${r.prg?.length ?? 0} bytes)${r.check?.status === 'same' ? ', decrunch verified' : bad ? ', but it does not decrunch to the same bytes' : ''}`, bad ? 'err' : 'ok');
     } catch (e) { toast(errorText(e), 'err'); } finally { setBuildBusy(null); }
@@ -968,7 +971,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     { id: 'panel', label: 'Toggle bottom panel', key: 'Ctrl+J', run: () => setUi({ panelOpen: !useUi.getState().panelOpen }) },
     { id: 'verify', label: 'Verify round-trip (re-assemble and compare)', key: 'F7', run: () => void runVerify() },
     { id: 'build', label: 'Build with KickAss.jar & run in VICE', key: 'F5', run: () => void runBuild() },
-    { id: 'pack', label: 'Pack with Exomizer (build, verify, pack as the Pack view says)', run: () => void runPack() },
+    { id: 'pack', label: `Pack with ${project.pack?.packer === 'exomizer' ? 'Exomizer' : 'Brokkr'} (build, verify, pack as the Pack view says)`, run: () => void runPack() },
     { id: 'pack-view', label: 'Show the Pack view (Exomizer)', run: () => setUi({ activity: 'pack' }) },
     ...(packRes?.ok && packRes.path ? [
       ...(packRes.argv[1] === 'sfx' ? [{ id: 'pack-run', label: `Run the packed ${packRes.name} in VICE`, run: () => void runPacked() }] : []),
@@ -1115,12 +1118,12 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         { label: project.excluded.includes(findBlock(A.blocks, l.a)?.start ?? -1) ? 'Include block in the build' : 'Exclude block from the build', run: () => toggleExcluded(l.a) },
         { label: project.binary.includes(findBlock(A.blocks, l.a)?.start ?? -1) ? 'Write block in the source again' : 'Save block as a binary file (.import binary)', run: () => toggleBinary(l.a) },
         ...(() => {
-          // Exomizer: the selection, else the whole block
+          // the Pack view: the selection, else the whole block
           const r = inSel && sel ? { start: sel.start, end: sel.end } : b ? { start: b.start, end: b.end } : null;
           if (!r) return [];
           const cover = project.pack?.ranges ? rangeCover(project.pack.ranges, r.start, r.end) : 0, what = inSel ? 'selection' : 'block';
           return [
-            ...(cover < r.end - r.start ? [{ label: `Pack ${what} with Exomizer`, run: () => packRange(r, true) }] : []),
+            ...(cover < r.end - r.start ? [{ label: `Pack ${what} with ${project.pack?.packer === 'exomizer' ? 'Exomizer' : 'Brokkr'}`, run: () => packRange(r, true) }] : []),
             ...(cover > 0 ? [{ label: `Leave ${what} out of the pack`, run: () => packRange(r, false) }] : []),
           ];
         })(),

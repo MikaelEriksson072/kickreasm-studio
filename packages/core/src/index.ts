@@ -51,6 +51,7 @@ export { applyPatch, assemblePatch, patchAt, patchEnd, patchesOn, patchFileName,
 export { NOTES_FILE, NOTES_TEXT_FILE, notesDocument, notesExport, notesFile, notesFor, notesText, lineHtml } from './notes-doc';
 export { detectPacking, packerSignature, type PackingInfo } from './packing';
 export { conclusive, depackers, depackerText, packerNames, unpackLog, unpackPrg, unpackSummary, type LayerReport, type Roms, type UnpackRun } from './sindri';
+export { brokkrArgs, brokkrCommandText, crunchHere, packWithBrokkr, type BrokkrCrunch, type BrokkrPack } from './brokkr';
 export {
   checkDecrunched, DEFAULT_PACK, editRanges, extraProblem, mergeRanges, packArgs, packFileName, packImage, packInputs, packOutName, packParts, packProblem,
   parseExomizer, rangeCover, shellWord, type ExomizerArea, type ExomizerReport, type PackCheck, type PackFile, type PackPart,

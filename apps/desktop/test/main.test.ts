@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { analyze, DEFAULT_PACK, demoProject, deserializeProject, LEGACY_PROJECT_FORMAT, makeD64, render, serializeProject, type SerializedProject, type ToolchainSettings } from '@mimir/core';
+import { analyze, DEFAULT_PACK, demoProject, packWithBrokkr as packWithBrokkrCore, deserializeProject, LEGACY_PROJECT_FORMAT, makeD64, render, serializeProject, type SerializedProject, type ToolchainSettings } from '@mimir/core';
 import { findKickAssJar, writeVfs } from '@mimir/core/node';
 import { CHANNELS } from '../shared/ipc';
 import { assertEntryName, PathPolicy } from '../electron/main/paths';
@@ -12,7 +12,7 @@ import { bringOldSettings } from '../electron/main/migrate';
 import { RecentFolders } from '../electron/main/recent';
 import { bundledExomizer, defaultToolchainSettings, SettingsStore } from '../electron/main/settings';
 import { diskOpenSchema, exportWriteSchema, fileSaveSchema, packSchema, prgOpenSchema, projectSchema, quicksaveEntrySchema, quicksaveFavouriteSchema, quicksaveRenameSchema, runSchema, serializedProjectSchema } from '../electron/main/schemas';
-import { buildWithKickAssembler, packWithExomizer } from '../electron/main/toolchain';
+import { buildWithKickAssembler, packWithBrokkr, packWithExomizer } from '../electron/main/toolchain';
 import { QUICKSAVE_FILE, QuicksaveHistory, QuicksaveWatcher, quicksaveFileName, quicksaveFiles, quicksaveInfo, quicksaveName, readQuicksave, viceConfigDir } from '../electron/main/quicksave';
 import { readDiskImage, readPrgFiles, readProjectFile, writeProjectFile } from '../electron/main/project-fs';
 import { charRomFiles, readCharRom } from '../electron/main/chargen';
@@ -345,6 +345,13 @@ describe('schemas', () => {
   it('accepts what to pack, and refuses paths, -o and empty ranges', () => {
     const files = [{ name: 'game.prg', prg: Uint8Array.of(1, 8, 0) }];
     expect(packSchema.safeParse({ files, prefs: DEFAULT_PACK }).success).toBe(true);
+    // project files from before Brokkr name no packer: they pack with Brokkr, at normal effort, in Exomizer's format
+    const { packer: _p, effort: _e, format: _f, ...old } = DEFAULT_PACK;
+    expect(packSchema.parse({ files, prefs: old }).prefs).toMatchObject({ packer: 'brokkr', effort: 'normal', format: 'exomizer' });
+    expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, format: 'brokkr' } }).success).toBe(true);
+    expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, format: 'zx0' } }).success).toBe(false);
+    expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, packer: 'zip' } }).success).toBe(false);
+    expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, effort: 'ultra' } }).success).toBe(false);
     expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, extra: '-p 4 -Di_ram_during=$34' } }).success).toBe(true);
     for (const extra of ['-o x.prg', '-N C:\\x', 'a/b.prg', '-- x']) {
       const r = packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, extra } });
@@ -530,11 +537,25 @@ describe('toolchain runner', () => {
   it.skipIf(!vendorExo)('packs the demo with the bundled Exomizer in a pack folder the session may run', async () => {
     const p = demoProject(), policy = new PathPolicy();
     const prg = Uint8Array.from([p.files[0].load & 0xff, p.files[0].load >> 8, ...p.files[0].bytes]);
-    const r = await packWithExomizer({ files: [{ name: 'raster-demo.prg', prg }], prefs: DEFAULT_PACK }, toolchain({ exomizerPath: vendorExo! }), policy);
+    const r = await packWithExomizer({ files: [{ name: 'raster-demo.prg', prg }], prefs: { ...DEFAULT_PACK, packer: 'exomizer' } }, toolchain({ exomizerPath: vendorExo! }), policy);
     expect(r.error).toBeUndefined();
     expect(r).toMatchObject({ ok: true, name: 'raster-demo-exo.prg', check: { status: 'same' } });
     expect(r.path).toBe(join(r.dir, 'raster-demo-exo.prg'));
     expect(readFileSync(r.path!)).toEqual(Buffer.from(r.prg!));
+    expect(policy.isAllowed(r.path!)).toBe(true);
+    expect(r.prg!.length).toBeLessThan(prg.length);
+  });
+
+  it('packs the demo with Brokkr in a pack folder the session may run, with the inputs its command names', async () => {
+    const p = demoProject(), policy = new PathPolicy();
+    const prg = Uint8Array.from([p.files[0].load & 0xff, p.files[0].load >> 8, ...p.files[0].bytes]);
+    // the worker thread is the built app's (out/main/brokkr-worker.js); here Brokkr runs in the test
+    const r = await packWithBrokkr({ files: [{ name: 'raster-demo.prg', prg }], prefs: DEFAULT_PACK }, policy, req => packWithBrokkrCore(req.files, req.prefs));
+    expect(r.error).toBeUndefined();
+    expect(r).toMatchObject({ ok: true, name: 'raster-demo-brokkr.prg', check: { status: 'same' } });
+    expect(r.argv).toEqual(['brokkr', 'sfx', '--start', 'sys', '-o', 'raster-demo-brokkr.prg', 'raster-demo.prg']);
+    expect(readFileSync(r.path!)).toEqual(Buffer.from(r.prg!));
+    expect(readFileSync(join(r.dir, 'raster-demo.prg'))).toEqual(Buffer.from(prg));
     expect(policy.isAllowed(r.path!)).toBe(true);
     expect(r.prg!.length).toBeLessThan(prg.length);
   });

@@ -1,7 +1,8 @@
 /* The Pack view's defaults and the command it shows (spec 13.8). The main process runs the same command on the
- * built PRGs, which Build & Run verified to be the loaded files byte for byte. */
+ * built PRGs (Exomizer), or packs them the same way with Brokkr, which Build & Run verified to be the loaded files
+ * byte for byte. */
 import {
-  DEFAULT_PACK, packArgs, packFileName, packImage, packInputs, packOutName, packParts, rangeCover, shellWord,
+  brokkrArgs, DEFAULT_PACK, packArgs, packFileName, packImage, packInputs, packOutName, packParts, rangeCover, shellWord,
   type AnalysisResult, type FileInput, type PackPart, type PackPrefs, type Project,
 } from '@mimir/core';
 
@@ -22,16 +23,22 @@ export const packNames = (fileNames: readonly string[]): string[] => fileNames.m
 
 export interface PackCommand { args: string[]; text: string; out: string; parts: PackPart[]; size: number }
 
-/** The command for `prefs` on these files (`exe`: the executable's name as shown). */
+/** The command for `prefs` on these files (`exe`: Exomizer's executable name as shown); for Brokkr, the standalone
+ * Brokkr's command that makes the same file in the pack folder. */
 export function packCommand(prefs: PackPrefs, files: readonly Pick<FileInput, 'load' | 'bytes'>[], fileNames: readonly string[], exe = 'exomizer'): PackCommand {
   const names = packNames(fileNames);
   const parts = packParts(prefs.ranges, files.map((f, i) => ({ name: names[i] ?? `file${i + 1}.prg`, load: f.load, bytes: f.bytes })));
   const out = packOutName(prefs, names[0] ?? 'packed.prg');
+  const size = packImage(parts)?.bytes.length ?? 0;
+  if (prefs.packer !== 'exomizer') {
+    const argv = brokkrArgs(prefs, packInputs(parts), out);
+    return { args: argv.slice(1), out, parts, size, text: argv.map(shellWord).join(' ') };
+  }
   const args = packArgs(prefs, packInputs(parts), out);
-  return { args, out, parts, size: packImage(parts)?.bytes.length ?? 0, text: [exe, ...args].map(shellWord).join(' ') };
+  return { args, out, parts, size, text: [exe, ...args].map(shellWord).join(' ') };
 }
 
-/** A warning about settings Exomizer would refuse or that would not start the program, or null. */
+/** A warning about settings the packer would refuse or that would not start the program, or null. */
 export function packWarning(prefs: PackPrefs, A: Pick<AnalysisResult, 'basics'>): string | null {
   if (prefs.mode !== 'sfx' || prefs.start !== 'sys') return null;
   const b = A.basics.find(x => x.sys != null && (x.file ?? 0) === 0);

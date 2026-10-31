@@ -2,7 +2,7 @@ import { Icon, type IconName } from '../lib/icons';
 import { cx } from '../lib/util';
 import type { Activity } from '../store/ui';
 
-const ITEMS: [Activity, IconName, string][] = [['explorer', 'files', 'Explorer'], ['blocks', 'blocks', 'Blocks'], ['symbols', 'tag', 'Symbols'], ['bookmarks', 'bookmark', 'Bookmarks (Ctrl+B)'], ['pack', 'pack', 'Pack (Exomizer)']];
+const ITEMS: [Activity, IconName, string][] = [['explorer', 'files', 'Explorer'], ['blocks', 'blocks', 'Blocks'], ['symbols', 'tag', 'Symbols'], ['bookmarks', 'bookmark', 'Bookmarks (Ctrl+B)'], ['pack', 'pack', 'Pack (Brokkr or Exomizer)']];
 
 export function ActivityBar({ activity, specOpen, counts = {}, onActivity, onSpec, onPalette }: {
   activity: Activity; specOpen: boolean;

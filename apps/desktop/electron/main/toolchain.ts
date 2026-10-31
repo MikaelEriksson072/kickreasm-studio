@@ -1,10 +1,11 @@
 /* Toolchain runner (spec 13.2): Kick Assembler and VICE are started with argument arrays, never
  * through a shell, using the executables from the main-process settings store. */
 import { existsSync, statSync } from 'node:fs';
+import { Worker } from 'node:worker_threads';
 import { join } from 'node:path';
-import type { KickProblem, ToolchainSettings } from '@mimir/core';
+import type { BrokkrPack, KickProblem, ToolchainSettings } from '@mimir/core';
 import { canIdentify, findC64Roms, identifyPacker, launchTerminal, launchVice, runExomizer, runKickAssembler, runUnpacker, splitArgs } from '@mimir/core/node';
-import { rm } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import type { BuildRequest, BuildResult, IdentifyResponse, PackRequest, PackResponse, RomsResponse, RunRequest, RunResult, TerminalOpenResult, UnpackRequest, UnpackResponse } from '../../shared/ipc';
 import { createBuildFolder } from './project-fs';
 import { assertEntryName, type PathPolicy } from './paths';
@@ -74,6 +75,38 @@ export async function packWithExomizer(req: PackRequest, settings: ToolchainSett
     ok: r.ok, output: r.output, argv: r.argv, ms: r.ms, dir, packed: r.packed, report: r.report, check: r.check, error: r.error,
     ...(r.out ? { name: r.out.name, path: join(dir, r.out.name), prg: r.out.prg } : {}),
   };
+}
+
+/** Pack the built PRGs (or ranges of them) with Brokkr, the built-in cruncher, in a worker thread (with effort
+ * 'max' a pool of them), so the window stays responsive. The inputs and the packed file go in a pack folder of their
+ * own, where the command shown makes the same file with the standalone Brokkr; the session may run it in VICE. */
+export async function packWithBrokkr(req: PackRequest, policy: PathPolicy, pack: (req: PackRequest) => Promise<BrokkrPack> = packInWorker): Promise<PackResponse> {
+  const dir = policy.allow(await createBuildFolder('pack'));
+  const r = await pack(req);
+  for (const f of r.inputs) await writeFile(join(dir, f.name), f.prg);
+  if (r.ok && r.name && r.prg) await writeFile(join(dir, r.name), r.prg);
+  return {
+    ok: r.ok, output: r.output, argv: r.argv, ms: r.ms, dir, packed: r.packed, report: r.report,
+    check: r.check && { ...r.check, argv: [], output: '' }, error: r.error,
+    ...(r.ok && r.name && r.prg ? { name: r.name, path: join(dir, r.name), prg: r.prg } : {}),
+  };
+}
+
+/** Brokkr in a worker thread: out/main/brokkr-worker.js, built from electron/main/brokkr-worker.ts. */
+async function packInWorker(req: PackRequest): Promise<BrokkrPack> {
+  const worker = new Worker(join(__dirname, 'brokkr-worker.js'));
+  try {
+    const reply = await new Promise<{ ok: true; result: BrokkrPack } | { ok: false; error: string }>((resolve, reject) => {
+      worker.once('message', resolve);
+      worker.once('error', reject);
+      worker.once('exit', code => reject(new Error(`Brokkr's worker stopped (exit code ${code}) before it answered.`)));
+      worker.postMessage(req);
+    });
+    if (!reply.ok) throw new Error(`Brokkr failed: ${reply.error}`);
+    return reply.result;
+  } finally {
+    await worker.terminate();
+  }
 }
 
 /** A terminal window in `dir` (already checked against the path policy), with VICE on PATH and `kickass` defined. */

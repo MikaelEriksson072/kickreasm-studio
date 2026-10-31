@@ -106,17 +106,29 @@ export interface Bookmark { title: string; text: string }
 /** the build scripts of an exported project, which the user can edit */
 export type BuildScript = 'build.bat' | 'build.sh';
 
-/** Exomizer's output (spec 13.8): a self-extracting program (sfx) or crunched data that your own code decrunches (mem) */
+/** who packs (spec 13.8): Brokkr, the built-in cruncher (@mimir/brokkr), or the Exomizer set in Settings */
+export type Packer = 'brokkr' | 'exomizer';
+/** how hard Brokkr crunches: fast, normal, or max (every core, a thorough search) */
+export type PackEffort = 'fast' | 'normal' | 'max';
+/** Brokkr's stream format: Exomizer 3's, or Brokkr's own (smaller, slower to decrunch, more RAM while it does) */
+export type PackFormat = 'exomizer' | 'brokkr';
+/** the packed file (spec 13.8): a self-extracting program (sfx) or crunched data that your own code decrunches (mem) */
 export type PackMode = 'sfx' | 'mem';
 /** sfx: what runs after decrunching: the SYS of the BASIC line, the BASIC program (RUN), or a jmp to `PackPrefs.jmp` */
 export type PackStart = 'sys' | 'basic' | 'jmp';
-/** sfx: Exomizer's decrunch effect (a flashing character), none (-n), or one of its border flashes (-x1 to -x3) */
+/** sfx: the decrunch effect: the packer's own (Brokkr: a border flash), none (-n), or one of Exomizer's border flashes (-x1 to -x3) */
 export type PackEffect = 'default' | 'none' | 'x1' | 'x2' | 'x3';
 /** an address range to pack; `end` exclusive */
 export interface PackRange { start: Addr; end: Addr }
 
-/** How the project is packed with Exomizer (the Pack view); kept in the project. */
+/** How the project is packed (the Pack view); kept in the project. */
 export interface PackPrefs {
+  /** Brokkr or Exomizer (project files from before Brokkr have none: Brokkr) */
+  packer: Packer;
+  /** Brokkr's effort */
+  effort: PackEffort;
+  /** Brokkr's stream format (project files from before it have none: Exomizer's) */
+  format: PackFormat;
   mode: PackMode;
   /** null: the built PRGs whole; otherwise these ranges of them (sorted, not overlapping) */
   ranges: PackRange[] | null;
@@ -134,11 +146,11 @@ export interface PackPrefs {
   forward: boolean;
   /** -c: no literal sequences (for old decrunchers) */
   compat: boolean;
-  /** -C: favour crunching speed over ratio */
+  /** Exomizer's -C: favour crunching speed over ratio */
   fast: boolean;
-  /** more Exomizer options as typed (no paths and no -o: the app names the files) */
+  /** Exomizer: more options as typed (no paths and no -o: the app names the files) */
   extra: string;
-  /** the packed file's name; empty: <first file>-exo.prg */
+  /** the packed file's name; empty: <first file>-brokkr.prg (Exomizer: -exo.prg) */
   out: string;
 }
 

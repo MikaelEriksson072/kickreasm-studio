@@ -77,7 +77,14 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   ones the original has (a `bne` for a `bne`), and the editor shows how many cycles are left. The listing marks the
   patched bytes. Each patch can be switched off and on in the Explorer, edited, removed (the original bytes come back)
   and saved as a PRG. The export writes each one's source to `patches/`, as a `.asm` file that assembles on its own.
-- **The toolchain is built in:** Kick Assembler builds, VICE (`F5`), Exomizer packing in the *Pack* view, and a
+- **Its own cruncher.** The *Pack* view packs the rebuilt program with [Brokkr](packages/brokkr/README.md), Mimir's own
+  cruncher (Sindri's brother: Sindri unpacks, Brokkr packs). It writes Exomizer 3's format, so every Exomizer
+  decruncher reads it, but crunches it smaller and several times faster than Exomizer 3.1.1, plans where the
+  decruncher, its table and the stream go and what `$01` must be, and runs every self-extracting file in an emulated
+  C64 before it hands it over. *Max* effort searches on every core. For the smallest files it has a format of its own,
+  coded adaptively as LZMA is: 6.6 % less crunched data than Exomizer 3.1.1, decrunched about 8 times slower.
+  Exomizer itself is still a choice.
+- **The toolchain is built in:** Kick Assembler builds, VICE (`F5`), Brokkr or Exomizer packing in the *Pack* view, and a
   terminal with the tools on its `PATH`.
 
 ![The Graphics tab drawing the showcase's multicolour bitmap logo](docs/images/graphics.png)
@@ -148,6 +155,7 @@ first PRG (or `--file NAME`) with the disk in the drive.
 | `packages/core` | the analysis, the Kick Assembler output and the verification (TypeScript, no UI and no I/O) |
 | `packages/cli` | the command-line front end |
 | `packages/sindri` | Sindri, the unpacker: an emulated C64 that follows a packed program through its layers (TypeScript, [its README](packages/sindri/README.md)) |
+| `packages/brokkr` | Brokkr, the cruncher: Exomizer 3 streams crunched smaller, self-extracting files, D64 packing and a 6502 decruncher (TypeScript, [its README](packages/brokkr/README.md)) |
 | `apps/desktop` | the Electron app (React), with its end-to-end tests |
 | `fixtures` | small test programs that the project builds itself |
 | `docs` | [the specification](docs/spec.md) (in Swedish) and [the development notes](docs/DEVELOPMENT.md) |
@@ -165,7 +173,7 @@ This runs the unit, round-trip, fuzz and differential tests of every package. `p
 ## Third-party tools
 
 The installer includes one tool, unchanged from its own release, from `apps/desktop/vendor/`: Exomizer 3.1.1 by
-Magnus Lind, the cruncher. Its licence lets anyone distribute it freely for **non-commercial, non-profit** use, as long
+Magnus Lind, a cruncher the Pack view can use instead of Brokkr. Its licence lets anyone distribute it freely for **non-commercial, non-profit** use, as long
 as its notice (`LICENSE.txt`) stays with it. Do not sell a build that includes it. Kick Assembler, Java and VICE are
 not included: install them yourself.
 
@@ -175,6 +183,10 @@ own from the command line. It uses the C64 ROMs of your VICE when it finds them,
 BASIC without them; for a disk it takes the 1541's DOS ROM from VICE too. unp64 by
 [iAN CooG](http://iancoog.altervista.org) no longer comes with the app; it can still be set as an external unpacker in
 Settings → Toolchain.
+
+Programs are packed by Brokkr, Mimir's own cruncher (`packages/brokkr`, GPL-3.0 like the rest), a copy of its own
+project, which also runs on its own from the command line. It writes the stream format of Exomizer 3 (whose decrunchers
+read it) with code of its own: its cruncher, its 6502 decruncher and its self-extracting files are written from scratch.
 
 ## License
 
