@@ -10,7 +10,7 @@ import {
   type CrunchOptions, type Crunched, type Start,
 } from '@mimir/brokkr';
 import type { PackPrefs } from './types';
-import { packFileName, packImage, packInputs, packOutName, packParts, shellWord, type ExomizerReport, type PackCheck } from './pack';
+import { packEffective, packFileName, packImage, packInputs, packOutName, packParts, shellWord, type ExomizerReport, type PackCheck } from './pack';
 import { h2, h4 } from './util/hex';
 
 /** A crunch: here (the default), or on a pool of threads (node/brokkr.ts). */
@@ -39,21 +39,25 @@ const $4 = (v: number) => `$${h4(v)}`;
 const $2 = (v: number) => `$${h2(v)}`;
 const range = (s: number, e: number) => `${$4(s)}–${$4(e - 1)}`;
 
-/** The standalone Brokkr's arguments for these settings (`inputs` as packInputs names them). */
-export function brokkrArgs(p: PackPrefs, inputs: readonly string[], out: string): string[] {
+/** mem with compatibility: no literal sequences, and still none of the lengths exodecrunch.s gets wrong (-T5) */
+const COMPAT_TRAITS = T.NO_LIT_SEQ | T.NO_MIRRORS;
+
+/** The standalone Brokkr's arguments for these settings (`inputs` as packInputs names them); the settings that take no
+ * effect (packOptions) are left out. */
+export function brokkrArgs(prefs: PackPrefs, inputs: readonly string[], out: string): string[] {
+  const p = packEffective(prefs);
   const args = ['brokkr', p.mode];
-  const own = p.format === 'brokkr' || p.format === 'fast';
-  if (own) args.push('--format', p.format);
+  if (p.format !== 'exomizer') args.push('--format', p.format);
   if (p.mode === 'sfx') {
     args.push('--start', p.start === 'jmp' ? $4(p.jmp ?? 0) : p.start);
     if (p.effect === 'none') args.push('--no-effect');
     if (p.ramExit != null) args.push('--ram-exit', $2(p.ramExit));
     if (p.irqExit != null) args.push('--irq', p.irqExit ? 'on' : 'off');
   } else {
-    if (p.forward && !own) args.push('-f');
+    if (p.forward) args.push('-f');
     if (p.memLoad !== 'auto') args.push('-l', p.memLoad === 'none' ? 'none' : $4(p.memLoad));
+    if (p.compat) args.push('-T', String(COMPAT_TRAITS));
   }
-  if (p.compat && !own) args.push('-T', p.mode === 'mem' ? String(T.NO_LIT_SEQ | T.NO_MIRRORS) : String(T.NO_LIT_SEQ));
   if (p.effort !== 'normal') args.push('--effort', p.effort);
   return [...args, '-o', out, ...inputs];
 }
@@ -61,8 +65,9 @@ export function brokkrArgs(p: PackPrefs, inputs: readonly string[], out: string)
 const empty = (): ExomizerReport => ({ crunched: null, saved: null, layout: [], decruncher: [], entry: null, errors: [] });
 
 /** Pack the built PRGs (load address first, in project order) as `prefs` says, with Brokkr. */
-export async function packWithBrokkr(files: readonly { name: string; prg: Uint8Array }[], prefs: PackPrefs, crunch: BrokkrCrunch = crunchHere): Promise<BrokkrPack> {
+export async function packWithBrokkr(files: readonly { name: string; prg: Uint8Array }[], typed: PackPrefs, crunch: BrokkrCrunch = crunchHere): Promise<BrokkrPack> {
   const t0 = performance.now();
+  const prefs = packEffective(typed);
   // the inputs get names the command line reads as one file name, distinct from each other and from the output
   const used = new Set<string>();
   const named = files.map((f, i) => {
@@ -82,9 +87,8 @@ export async function packWithBrokkr(files: readonly { name: string; prg: Uint8A
   if (!image) return fail('None of the chosen blocks is in the built files.');
   if (prefs.mode === 'sfx' && prefs.start === 'jmp' && prefs.jmp == null) return fail('Enter the address the program starts at after decrunching.');
   const own = prefs.format === 'brokkr' || prefs.format === 'fast';
-  if (own && prefs.mode === 'mem' && prefs.forward) return fail(`Brokkr's ${prefs.format === 'fast' ? 'fast' : 'own'} format is decrunched backward: turn off Forward, or pack with Exomizer's format.`);
 
-  const crunchOptions: CrunchOptions = { effort: prefs.effort, protocol: prefs.compat ? { traits: T.NO_LIT_SEQ } : {} };
+  const crunchOptions: CrunchOptions = { effort: prefs.effort, protocol: prefs.compat ? { traits: COMPAT_TRAITS } : {} };
   const lines = [`${named.map(f => f.name).join(', ')}: ${range(image.start, image.start + image.bytes.length)}, ${image.bytes.length} bytes`];
   try {
     if (prefs.mode === 'sfx') {
@@ -131,7 +135,7 @@ export async function packWithBrokkr(files: readonly { name: string; prg: Uint8A
     const report: ExomizerReport = { crunched: stream.stream.length, saved: r.at, layout, decruncher: [], entry: null, errors: [] };
     const check: PackCheck = {
       status: 'same',
-      text: `Brokkr decrunched the stream again: the same ${data.length} bytes. In place it loads at ${$4(r.inPlace.start)}${prefs.forward && !own ? ` and ends at ${$4(r.inPlace.end - 1)}` : ' or lower'}.${own ? ` Decrunch it with Brokkr's decruncher of its ${prefs.format === 'fast' ? 'fast' : 'own'} format (brokkr decruncher --format ${prefs.format}).` : ''}`,
+      text: `Brokkr decrunched the stream again: the same ${data.length} bytes. In place it loads at ${$4(r.inPlace.start)}${prefs.forward ? ` and ends at ${$4(r.inPlace.end - 1)}` : ' or lower'}.${own ? ` Decrunch it with Brokkr's decruncher of its ${prefs.format === 'fast' ? 'fast' : 'own'} format (brokkr decruncher --format ${prefs.format}).` : ''}`,
     };
     return { ok: true, output: lines.join('\n'), ms: performance.now() - t0, name: out, prg: r.bytes, report, check, ...base };
   } catch (e) {

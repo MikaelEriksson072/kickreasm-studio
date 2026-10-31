@@ -92,8 +92,10 @@ describe('packing with Brokkr', () => {
       const mem = await packWithBrokkr([{ name: 'game.prg', prg }], P({ format: 'brokkr', mode: 'mem' }));
       expect(mem.ok).toBe(true);
       expect(mem.check?.text).toMatch(/decruncher --format brokkr/);
-      expect(await packWithBrokkr([{ name: 'game.prg', prg }], P({ format: 'brokkr', mode: 'mem', forward: true })))
-        .toMatchObject({ ok: false, error: expect.stringMatching(/decrunched backward/) });
+      // forward is for Exomizer's format: the Pack view hides it here, so a stale tick changes nothing
+      const backward = await packWithBrokkr([{ name: 'game.prg', prg }], P({ format: 'brokkr', mode: 'mem', forward: true }));
+      expect(backward.ok).toBe(true);
+      expect(backward.prg).toEqual(mem.prg);
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
 
@@ -112,6 +114,38 @@ describe('packing with Brokkr', () => {
       const mem = await packWithBrokkr([{ name: 'game.prg', prg: demo.prg }], P({ format: 'fast', mode: 'mem' }));
       expect(mem.ok).toBe(true);
       expect(mem.check?.text).toMatch(/decruncher --format fast/);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
+  it('leaves out the settings that take no effect, as the Pack view hides them', async () => {
+    const args = (o: Partial<PackPrefs>) => brokkrArgs(P(o), ['a.prg'], 'o.prg');
+    // literal sequences in a self-extracting file: its decruncher reads them, and Brokkr tries the stream both ways
+    expect(args({ compat: true, forward: true, memLoad: 0x2000 })).toEqual(['brokkr', 'sfx', '--start', 'sys', '-o', 'o.prg', 'a.prg']);
+    // RUN needs $37; the fast format's decruncher does not flash the border
+    expect(args({ start: 'basic', ramExit: 0x35, irqExit: false })).toEqual(['brokkr', 'sfx', '--start', 'basic', '--irq', 'off', '-o', 'o.prg', 'a.prg']);
+    expect(args({ format: 'fast', effect: 'none' })).toEqual(['brokkr', 'sfx', '--format', 'fast', '--start', 'sys', '-o', 'o.prg', 'a.prg']);
+    // crunched data has no start; Brokkr's own formats are decrunched backward by its own decruncher
+    expect(args({ mode: 'mem', start: 'jmp', jmp: 0x1000, effect: 'none', ramExit: 0x35 })).toEqual(['brokkr', 'mem', '-o', 'o.prg', 'a.prg']);
+    expect(args({ mode: 'mem', format: 'brokkr', forward: true, compat: true })).toEqual(['brokkr', 'mem', '--format', 'brokkr', '-o', 'o.prg', 'a.prg']);
+    // Exomizer's settings are not Brokkr's
+    expect(args({ fast: true, extra: '-p 4' })).toEqual(['brokkr', 'sfx', '--start', 'sys', '-o', 'o.prg', 'a.prg']);
+    const r = await packWithBrokkr([{ name: 'raster demo.prg', prg: demo.prg }], P({ start: 'basic', ramExit: 0x35 }));
+    expect(r.report.decruncher.find(d => d.what === 'RAM config')?.exit).toBe('$37');
+    expect(r.output).not.toMatch(/RUN needs BASIC/);
+  });
+
+  it('crunches data for old decrunchers as the command it shows does (-T 5: no literal sequences, no mirrors)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-brokkr-'));
+    try {
+      // long runs, so the stream has lengths above 256 that exodecrunch.s gets wrong unless they are left out
+      const prg = makePrg(0x1000, bytes(0x3000, i => ((i >> 9) & 1 ? 0 : (i * 7) ^ (i >> 4))));
+      const r = await packWithBrokkr([{ name: 'game.prg', prg }], P({ mode: 'mem', compat: true }));
+      expect(r.ok).toBe(true);
+      expect(r.argv).toEqual(['brokkr', 'mem', '-T', '5', '-o', 'game-brokkr.prg', 'game.prg']);
+      for (const i of r.inputs) await writeFile(join(dir, i.name), i.prg);
+      const run = spawnSync(process.execPath, [cli, ...r.argv.slice(1), '-q'], { cwd: dir, encoding: 'utf8' });
+      expect(run.stderr).toBe('');
+      expect(new Uint8Array(await readFile(join(dir, r.name!)))).toEqual(r.prg);
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
 

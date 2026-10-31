@@ -117,12 +117,14 @@ export type PackFormat = 'exomizer' | 'brokkr' | 'fast';
 export type PackMode = 'sfx' | 'mem';
 /** sfx: what runs after decrunching: the SYS of the BASIC line, the BASIC program (RUN), or a jmp to `PackPrefs.jmp` */
 export type PackStart = 'sys' | 'basic' | 'jmp';
-/** sfx: the decrunch effect: the packer's own (Brokkr: a border flash), none (-n), or one of Exomizer's border flashes (-x1 to -x3) */
+/** sfx: the decrunch effect: the packer's own (Brokkr: a border flash, not in its fast format), none (-n), or one of
+ * Exomizer's border flashes (-x1 to -x3) */
 export type PackEffect = 'default' | 'none' | 'x1' | 'x2' | 'x3';
 /** an address range to pack; `end` exclusive */
 export interface PackRange { start: Addr; end: Addr }
 
-/** How the project is packed (the Pack view); kept in the project. */
+/** How the project is packed (the Pack view); kept in the project. Settings that take no effect with the packer, format,
+ * kind of file and start chosen are kept but not used (packOptions, packEffective). */
 export interface PackPrefs {
   /** Brokkr or Exomizer (project files from before Brokkr have none: Brokkr) */
   packer: Packer;
@@ -137,15 +139,16 @@ export interface PackPrefs {
   /** the jmp address for start 'jmp' */
   jmp: Addr | null;
   effect: PackEffect;
-  /** sfx: $01 after decrunching (null: Exomizer's default, $37) */
+  /** sfx, not with RUN (which needs $37): $01 after decrunching (null: the default, $37) */
   ramExit: number | null;
-  /** sfx: interrupts after decrunching, cli (true) or sei (false); null: Exomizer's default (enabled) */
+  /** sfx: interrupts after decrunching, cli (true) or sei (false); null: the default (Exomizer: on; Brokkr: on when
+   * the KERNAL is in) */
   irqExit: boolean | null;
   /** mem: the load address of the output: in-place decrunching (auto), a plain file without one (none), or this address */
   memLoad: 'auto' | 'none' | Addr;
-  /** mem: crunch forward (-f) instead of backward */
+  /** mem, Exomizer's format: crunch forward (-f) instead of backward */
   forward: boolean;
-  /** -c: no literal sequences (for old decrunchers) */
+  /** mem, Exomizer's format: no literal sequences, for old decrunchers (Exomizer -c, Brokkr -T 5) */
   compat: boolean;
   /** Exomizer's -C: favour crunching speed over ratio */
   fast: boolean;

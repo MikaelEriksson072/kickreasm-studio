@@ -10,6 +10,38 @@ export const DEFAULT_PACK: PackPrefs = {
   memLoad: 'auto', forward: false, compat: false, fast: false, extra: '', out: '',
 };
 
+/** Which settings take effect with this packer, format, kind of file and start: the Pack view shows only these. */
+export function packOptions(p: PackPrefs) {
+  const brokkr = p.packer !== 'exomizer', sfx = p.mode === 'sfx';
+  // Exomizer's stream: Exomizer's own, or Brokkr's in Exomizer's format
+  const exo = !brokkr || p.format === 'exomizer';
+  return {
+    format: brokkr, effort: brokkr, fast: !brokkr, extra: !brokkr,
+    start: sfx, jmp: sfx && p.start === 'jmp',
+    // the fast format's decruncher does not flash the border
+    effect: sfx && (!brokkr || p.format !== 'fast'),
+    // RUN needs BASIC and the KERNAL: $01 is $37
+    ramExit: sfx && p.start !== 'basic',
+    irqExit: sfx,
+    memLoad: !sfx,
+    // Brokkr's own formats are decrunched backward; a self-extracting file brings its own decruncher, which reads
+    // literal sequences
+    forward: !sfx && exo, compat: !sfx && exo,
+  };
+}
+
+/** The settings with those that take no effect (packOptions) at their defaults: what is packed, and what the command
+ * says. A setting hidden in the Pack view never changes the packed file. */
+export function packEffective(p: PackPrefs): PackPrefs {
+  const on = packOptions(p), d = DEFAULT_PACK;
+  return {
+    ...p, format: on.format ? p.format : d.format, effort: on.effort ? p.effort : d.effort, start: on.start ? p.start : d.start,
+    jmp: on.jmp ? p.jmp : null, effect: on.effect ? p.effect : d.effect, ramExit: on.ramExit ? p.ramExit : null,
+    irqExit: on.irqExit ? p.irqExit : null, memLoad: on.memLoad ? p.memLoad : d.memLoad, forward: on.forward && p.forward,
+    compat: on.compat && p.compat, fast: on.fast && p.fast, extra: on.extra ? p.extra : '',
+  };
+}
+
 /** a built PRG as Exomizer gets it: its file name in the pack folder, load address and bytes (without the address) */
 export interface PackFile { name: string; load: Addr; bytes: Uint8Array }
 
@@ -88,7 +120,7 @@ export function extraProblem(extra: string): string | null {
 export function packProblem(p: PackPrefs): string | null {
   if (p.ranges && !p.ranges.some(r => r.end > r.start)) return 'Choose the blocks to pack (or pack the whole build).';
   if (p.mode === 'sfx' && p.start === 'jmp' && p.jmp == null) return 'Enter the address the program starts at after decrunching.';
-  return extraProblem(p.extra);
+  return extraProblem(packEffective(p).extra);
 }
 
 /** The packed file's name: the one typed (made safe), else <first file>-brokkr.prg or -exo.prg (.bin for a mem file
@@ -101,7 +133,8 @@ export function packOutName(p: PackPrefs, first: string): string {
 }
 
 /** Exomizer's arguments (without the executable): the sub command, its options, `-o out`, then the in-files. */
-export function packArgs(p: PackPrefs, inputs: readonly string[], out: string): string[] {
+export function packArgs(prefs: PackPrefs, inputs: readonly string[], out: string): string[] {
+  const p = packEffective(prefs);
   const args: string[] = [p.mode];
   if (p.mode === 'sfx') {
     args.push(p.start === 'jmp' ? `$${h4(p.jmp ?? 0)}` : p.start);

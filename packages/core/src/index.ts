@@ -53,7 +53,7 @@ export { detectPacking, packerSignature, type PackingInfo } from './packing';
 export { conclusive, depackers, depackerText, packerNames, unpackLog, unpackPrg, unpackSummary, type LayerReport, type Roms, type UnpackRun } from './sindri';
 export { brokkrArgs, brokkrCommandText, crunchHere, packWithBrokkr, type BrokkrCrunch, type BrokkrPack } from './brokkr';
 export {
-  checkDecrunched, DEFAULT_PACK, editRanges, extraProblem, mergeRanges, packArgs, packFileName, packImage, packInputs, packOutName, packParts, packProblem,
+  checkDecrunched, DEFAULT_PACK, editRanges, extraProblem, mergeRanges, packArgs, packEffective, packFileName, packImage, packInputs, packOptions, packOutName, packParts, packProblem,
   parseExomizer, rangeCover, shellWord, type ExomizerArea, type ExomizerReport, type PackCheck, type PackFile, type PackPart,
 } from './pack';
 export { splitArgs } from './util/args';

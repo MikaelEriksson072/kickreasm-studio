@@ -1,9 +1,10 @@
 /* Pack (spec 13.8): Brokkr, the built-in cruncher, or Exomizer packs the PRG that Build & Run builds, whole or the
  * blocks you choose, as a self-extracting program (sfx) or as crunched data for your own decruncher (mem). The view sits
- * in the sidebar, so the listing beside it shows the blocks you choose. Its settings are kept in the project; Pack
- * builds, verifies and packs. */
-import { useEffect, useState, type KeyboardEvent } from 'react';
-import { editRanges, extraProblem, h2, h4, kindInfo, mergeRanges, packProblem, rangeCover, type Addr, type AnalysisResult, type PackPrefs, type Project, type RenderResult } from '@mimir/core';
+ * in the sidebar, so the listing beside it shows the blocks you choose. It shows only the settings that take effect
+ * with the packer, format and kind of file chosen (packOptions); they are kept in the project. Pack builds, verifies
+ * and packs. */
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { editRanges, extraProblem, h2, h4, kindInfo, mergeRanges, packOptions, packProblem, rangeCover, type Addr, type AnalysisResult, type PackFormat, type PackPrefs, type Project, type RenderResult } from '@mimir/core';
 import type { PackResponse } from '../../shared/ipc';
 import { Icon } from '../lib/icons';
 import { SideSection } from './SideSection';
@@ -14,6 +15,9 @@ import type { Sel } from '../lib/types';
 /** the last pack, with the fingerprint of what it packed (prefs and build) */
 export interface PackResult extends PackResponse { key: string }
 
+/** a pack under way: building and verifying first, then packing (crunching and checking) with these settings */
+export interface PackProgress { step: 'verify' | 'pack'; since: number; prefs: PackPrefs }
+
 export interface PackViewProps {
   A: AnalysisResult; R: RenderResult; project: Project; cursor: Addr | null; sel: Sel | null;
   prefs: PackPrefs;
@@ -22,6 +26,8 @@ export interface PackViewProps {
   desktop: boolean;
   /** what the app is busy with (Verifying, Packing…), or null */
   busy: string | null;
+  /** the pack under way, or null */
+  packing: PackProgress | null;
   result: PackResult | null;
   /** the fingerprint of what would be packed now: a result with another one is out of date */
   current: string;
@@ -29,6 +35,26 @@ export interface PackViewProps {
   onPack: () => void; onRun: () => void; onSave: () => void; onLog: () => void; onSettings: () => void;
   onNavigate: (a: Addr) => void;
 }
+
+/** what Brokkr's own formats give and cost, measured on the reference corpus against Exomizer 3.1.1 */
+const FORMAT_NOTE: Record<Exclude<PackFormat, 'exomizer'>, string> = {
+  brokkr: "About 6.5 % smaller than Exomizer's format, but decrunching takes about 8 times as long, with more memory.",
+  fast: "About 13 % larger than Exomizer's format, decrunched about twice as fast, without a border flash.",
+};
+
+/** how crunched data (mem) is decrunched: Brokkr's stream by its format, or Exomizer's own */
+const DECRUNCH: Record<PackFormat | 'exomizer-tool', ReactNode> = {
+  'exomizer-tool': <>Decrunch it with Exomizer's <span className="mono">exodecrunch.s</span> (in the Exomizer release, exodecrs\).</>,
+  exomizer: <>Decrunch it with Exomizer's <span className="mono">exodecrunch.s</span>, or with Brokkr's: <span className="mono">brokkr decruncher</span> writes it as Kick Assembler source.</>,
+  brokkr: <>Decrunched backward by <span className="mono">brokkr decruncher --format brokkr</span> (Kick Assembler source), with 0.5 KB of RAM for its probabilities (1.5 KB to run a third faster).</>,
+  fast: <>Decrunched backward by <span className="mono">brokkr decruncher --format fast</span> (Kick Assembler source): 10 bytes of zero page, no tables.</>,
+};
+
+/** Scroll an element into the side panel's view (the Pack button sits low, so its cards start out of sight). */
+const reveal = (el: HTMLElement | null): void => {
+  // newer Chromium returns a promise here: never hand it to useEffect as a cleanup
+  void el?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+};
 
 const parseHex = (s: string, max = 0xffff): number | null | undefined => {
   const t = s.trim().replace(/^(\$|0x)/i, '');
@@ -69,7 +95,7 @@ function TextField({ id, label, value, placeholder, error, help, onCommit }: { i
 }
 
 export function PackView(p: PackViewProps) {
-  const { A, R, project, cursor, sel, prefs, exomizer, desktop, busy, result, current } = p;
+  const { A, R, project, cursor, sel, prefs, exomizer, desktop, busy, packing, result, current } = p;
   const [q, setQ] = useState('');
   const set = (patch: Partial<PackPrefs>, label: string) => p.onChange({ ...prefs, ...patch }, label);
   const exe = exomizer ? exomizer.split(/[\\/]/).pop()! : 'exomizer';
@@ -83,9 +109,17 @@ export function PackView(p: PackViewProps) {
   const ql = q.trim().toLowerCase().replace(/^\$/, '');
   const list = prefs.ranges ? A.blocks.filter(b => { const l = R.labels.get(b.start); return !ql || h4(b.start).includes(ql) || kindInfo(b.type).label.toLowerCase().includes(ql) || !!l?.name.toLowerCase().includes(ql); }) : [];
   const fresh = !!result && result.key === current;
-  const brokkr = prefs.packer !== 'exomizer';
-  const own = brokkr && prefs.format === 'brokkr', fast = brokkr && prefs.format === 'fast';
-  const ready = desktop && (brokkr || !!exomizer) && !problem && !busy;
+  const brokkr = prefs.packer !== 'exomizer', sfx = prefs.mode === 'sfx';
+  // what is shown: only the settings that take effect
+  const o = packOptions(prefs);
+  const ready = desktop && (brokkr || !!exomizer) && !problem && !busy && !packing;
+  // a new result comes into view when the pack is done (not the one there was when the view opened)
+  const resultRef = useRef<HTMLDivElement>(null), seen = useRef(result);
+  useEffect(() => {
+    if (packing || !result || result === seen.current) return;
+    seen.current = result;
+    reveal(resultRef.current);
+  }, [result, packing]);
 
   return (
     <div className="side-inner pack-view">
@@ -142,86 +176,114 @@ export function PackView(p: PackViewProps) {
 
       <SideSection id="pack-file" title="Packed file">
         <div className="seg wide pack-seg" role="tablist" aria-label="Kind of packed file">
-          <button role="tab" aria-selected={prefs.mode === 'sfx'} className={cx(prefs.mode === 'sfx' && 'on')} title={`A program that decrunches itself and starts (${brokkr ? 'brokkr' : 'exomizer'} sfx)`} onClick={() => set({ mode: 'sfx' }, 'Pack as a self-extracting program')}>Self-extracting</button>
-          <button role="tab" aria-selected={prefs.mode === 'mem'} className={cx(prefs.mode === 'mem' && 'on')} title={`Crunched data that your own code decrunches (${brokkr ? 'brokkr' : 'exomizer'} mem)`} onClick={() => set({ mode: 'mem' }, 'Pack as crunched data')}>Crunched data</button>
+          <button role="tab" aria-selected={sfx} className={cx(sfx && 'on')} title={`A program that decrunches itself and starts (${brokkr ? 'brokkr' : 'exomizer'} sfx)`} onClick={() => set({ mode: 'sfx' }, 'Pack as a self-extracting program')}>Self-extracting</button>
+          <button role="tab" aria-selected={!sfx} className={cx(!sfx && 'on')} title={`Crunched data that your own code decrunches (${brokkr ? 'brokkr' : 'exomizer'} mem)`} onClick={() => set({ mode: 'mem' }, 'Pack as crunched data')}>Crunched data</button>
         </div>
-        {prefs.mode === 'sfx' ? <>
-          <div className="field"><label htmlFor="pack-start">Start after decrunching</label>
+        {o.format && <div className="field"><label htmlFor="pack-format">Format</label>
+          <select id="pack-format" value={prefs.format} onChange={e => set({ format: e.target.value as PackFormat }, 'Pack: format')}>
+            <option value="exomizer">Exomizer 3</option>
+            <option value="brokkr">Brokkr — smaller</option>
+            <option value="fast">Brokkr fast — faster</option>
+          </select>
+          {prefs.format !== 'exomizer' && <small className="muted">{FORMAT_NOTE[prefs.format]}{sfx ? " Where the program leaves no room for its decruncher, the file is in Exomizer's format." : ''}</small>}</div>}
+        {o.effort && <div className="field"><label htmlFor="pack-effort">Effort</label>
+          <select id="pack-effort" value={prefs.effort} onChange={e => set({ effort: e.target.value as PackPrefs['effort'] }, 'Pack: effort')}>
+            <option value="fast">Fast — a little larger</option>
+            <option value="normal">Normal</option>
+            <option value="max">Max — every core</option>
+          </select></div>}
+        {o.fast && <label className="check"><input id="pack-fast" type="checkbox" checked={prefs.fast} onChange={e => set({ fast: e.target.checked }, 'Pack: faster crunching')} /><span>Crunch faster (-C)<small className="muted"> — a little larger</small></span></label>}
+        {o.extra && <TextField id="pack-extra" label="More options" value={prefs.extra} placeholder="-p 4 -Di_line_number=1987" error={extraProblem(prefs.extra)} onCommit={v => set({ extra: v }, 'Pack: options')} />}
+        <TextField id="pack-out" label="File name" value={prefs.out} placeholder={cmd.out} onCommit={v => set({ out: v }, 'Pack: file name')} />
+      </SideSection>
+
+      {sfx ? (
+        <SideSection id="pack-sfx" title="Self-extracting">
+          <div className="field"><label htmlFor="pack-start">Start</label>
             <select id="pack-start" value={prefs.start} onChange={e => set({ start: e.target.value as PackPrefs['start'], ...(e.target.value === 'jmp' && prefs.jmp == null ? { jmp: A.entry } : {}) }, 'Pack: start')}>
-              <option value="sys">The SYS in the BASIC line</option>
+              <option value="sys">SYS in the BASIC line</option>
               <option value="jmp">Jump to an address</option>
               <option value="basic">RUN (a BASIC program)</option>
             </select></div>
-          {prefs.start === 'jmp' && <HexField id="pack-jmp" label="Jump to" value={prefs.jmp} placeholder="$0810" onCommit={v => set({ jmp: v }, 'Pack: jump address')}
+          {o.jmp && <HexField id="pack-jmp" label="Jump to" value={prefs.jmp} placeholder="$0810" onCommit={v => set({ jmp: v }, 'Pack: jump address')}
             help={A.entry != null && A.entry !== prefs.jmp ? `The program start is $${h4(A.entry)}.` : undefined} />}
           {warning && <p className="warn-text small">{warning}</p>}
-          {fast ? <p className="muted small">The fast format's decruncher does not flash the border.</p> : <div className="field"><label htmlFor="pack-effect">Effect while decrunching</label>
-            {brokkr ? (
-              <select id="pack-effect" value={prefs.effect === 'none' ? 'none' : 'default'} onChange={e => set({ effect: e.target.value as PackPrefs['effect'] }, 'Pack: effect')}>
-                <option value="default">Border flash</option>
-                <option value="none">None</option>
-              </select>
-            ) : (
+          <div className="pack-row">
+            {o.ramExit && <HexField id="pack-ram" label="$01 after" value={prefs.ramExit} max={0xff} placeholder="$37" onCommit={v => set({ ramExit: v }, 'Pack: $01 after decrunching')} />}
+            <div className="field"><label htmlFor="pack-irq">Interrupts after</label>
+              <select id="pack-irq" value={prefs.irqExit == null ? 'default' : prefs.irqExit ? 'on' : 'off'} title={brokkr ? 'By default on when the KERNAL is in after decrunching' : "By default on, as Exomizer leaves them"}
+                onChange={e => set({ irqExit: e.target.value === 'default' ? null : e.target.value === 'on' }, 'Pack: interrupts after decrunching')}>
+                <option value="default">Default</option>
+                <option value="on">On (cli)</option>
+                <option value="off">Off (sei)</option>
+              </select></div>
+          </div>
+          {o.effect && (brokkr
+            ? <label className="check"><input id="pack-effect" type="checkbox" checked={prefs.effect !== 'none'} onChange={e => set({ effect: e.target.checked ? 'default' : 'none' }, 'Pack: border flash')} /><span>Flash the border while decrunching</span></label>
+            : <div className="field"><label htmlFor="pack-effect">Decrunch effect</label>
               <select id="pack-effect" value={prefs.effect} onChange={e => set({ effect: e.target.value as PackPrefs['effect'] }, 'Pack: effect')}>
                 <option value="default">Exomizer's own</option>
                 <option value="none">None (-n)</option>
                 <option value="x1">Border flash 1 (-x1)</option>
                 <option value="x2">Border flash 2 (-x2)</option>
                 <option value="x3">Border flash 3 (-x3)</option>
-              </select>)}</div>}
-          <HexField id="pack-ram" label="$01 after decrunching" value={prefs.ramExit} max={0xff} placeholder="$37 (the default)" onCommit={v => set({ ramExit: v }, 'Pack: $01 after decrunching')}
-            help={brokkr ? 'While decrunching, Brokkr sets $01 itself so that everything it reads and writes is RAM.' : undefined} />
-          <div className="field"><label htmlFor="pack-irq">Interrupts after decrunching</label>
-            <select id="pack-irq" value={prefs.irqExit == null ? 'default' : prefs.irqExit ? 'on' : 'off'} onChange={e => set({ irqExit: e.target.value === 'default' ? null : e.target.value === 'on' }, 'Pack: interrupts after decrunching')}>
-              <option value="default">{brokkr ? 'On with the KERNAL in (the default)' : "On (Exomizer's default)"}</option>
-              <option value="on">On (cli)</option>
-              <option value="off">Off (sei)</option>
-            </select></div>
-        </> : <>
-          <div className="field"><label htmlFor="pack-load">Load address of the crunched data</label>
+              </select></div>)}
+        </SideSection>
+      ) : (
+        <SideSection id="pack-mem" title="Crunched data">
+          <div className="field"><label htmlFor="pack-load">Load address</label>
             <select id="pack-load" value={typeof prefs.memLoad === 'number' ? 'addr' : prefs.memLoad} onChange={e => set({ memLoad: e.target.value === 'addr' ? (cmd.parts[0]?.start ?? 0x1000) : e.target.value as 'auto' | 'none' }, 'Pack: load address')}>
-              <option value="auto">For decrunching in place</option>
+              <option value="auto">To decrunch in place</option>
               <option value="addr">This address</option>
               <option value="none">None: a plain .bin file</option>
             </select></div>
           {typeof prefs.memLoad === 'number' && <HexField id="pack-load-at" label="Load at" value={prefs.memLoad} onCommit={v => set({ memLoad: v ?? 'auto' }, 'Pack: load address')} />}
-          {!own && !fast && <label className="check"><input id="pack-forward" type="checkbox" checked={prefs.forward} onChange={e => set({ forward: e.target.checked }, 'Pack: forward')} /><span>Crunch forward (-f)<small className="muted"> — the default decrunches backward</small></span></label>}
-          <p className="muted small">{fast
-            ? <>It is Brokkr's fast format, decrunched backward: decrunch it with Brokkr's decruncher of it (<span className="mono">brokkr decruncher --format fast</span> writes it as Kick Assembler source; 10 bytes of zero page, no tables).</>
-            : own
-            ? <>It is Brokkr's own format, decrunched backward: decrunch it with Brokkr's decruncher of it (<span className="mono">brokkr decruncher --format brokkr</span> writes it as Kick Assembler source; it needs 0.5 KB of RAM for its probabilities, 1.5 KB to run a third faster).</>
-            : brokkr
-            ? <>It is Exomizer 3's mem format: decrunch it with Brokkr's decruncher (<span className="mono">brokkr decruncher</span> writes it as Kick Assembler source) or with Exomizer's exodecrunch.s.</>
-            : <>Decrunch it with Exomizer's exodecrunch.s (in the Exomizer release, exodecrs\).</>}</p>
-        </>}
-        {brokkr && <div className="field"><label htmlFor="pack-format">Format</label>
-          <select id="pack-format" value={prefs.format} onChange={e => set({ format: e.target.value as PackPrefs['format'] }, 'Pack: format')}>
-            <option value="exomizer">Exomizer 3</option>
-            <option value="brokkr">Brokkr's own — smaller, decrunches slowly</option>
-            <option value="fast">Brokkr fast — larger, decrunches fast</option>
-          </select></div>}
-        {fast && <p className="muted small">Brokkr's fast format is whole bytes, so its decruncher reads no bits: about 13 % more crunched data than Exomizer's format, decrunched about 1.8 times as fast (twice on most programs), with a decruncher of 215 bytes and no tables.</p>}
-        {own && <p className="muted small">Brokkr's own format codes every bit with probabilities that adapt, as LZMA does: about 6.5 % less crunched data than Exomizer's format, but decrunching takes about 8 times as long (up to 24 for data that hardly packs){prefs.mode === 'sfx' ? ', and 0.9 to 1.9 KB more memory. Small programs come out smaller in Exomizer\'s format; where a program leaves no room, the file is in Exomizer\'s format' : ''}.</p>}
-        {brokkr && <div className="field"><label htmlFor="pack-effort">Effort</label>
-          <select id="pack-effort" value={prefs.effort} onChange={e => set({ effort: e.target.value as PackPrefs['effort'] }, 'Pack: effort')}>
-            <option value="fast">Fast — a little larger</option>
-            <option value="normal">Normal</option>
-            <option value="max">Max — every core, a thorough search</option>
-          </select></div>}
-        {!own && !fast && <label className="check"><input id="pack-compat" type="checkbox" checked={prefs.compat} onChange={e => set({ compat: e.target.checked }, 'Pack: compatibility')} /><span>Compatibility ({brokkr ? '-T1' : '-c'})<small className="muted"> — no literal sequences</small></span></label>}
-        {!brokkr && <label className="check"><input id="pack-fast" type="checkbox" checked={prefs.fast} onChange={e => set({ fast: e.target.checked }, 'Pack: faster crunching')} /><span>Crunch faster (-C)<small className="muted"> — a little larger</small></span></label>}
-        {!brokkr && <TextField id="pack-extra" label="More Exomizer options" value={prefs.extra} placeholder="-p 4 -Di_line_number=1987" error={extraProblem(prefs.extra)} onCommit={v => set({ extra: v }, 'Pack: options')} />}
-        <TextField id="pack-out" label="File name" value={prefs.out} placeholder={cmd.out} onCommit={v => set({ out: v }, 'Pack: file name')} />
-      </SideSection>
+          {o.forward && <label className="check"><input id="pack-forward" type="checkbox" checked={prefs.forward} onChange={e => set({ forward: e.target.checked }, 'Pack: forward')} /><span>Crunch forward (-f)<small className="muted"> — the default decrunches backward</small></span></label>}
+          {o.compat && <label className="check"><input id="pack-compat" type="checkbox" checked={prefs.compat} onChange={e => set({ compat: e.target.checked }, 'Pack: no literal sequences')} /><span>No literal sequences ({brokkr ? '-T 5' : '-c'})<small className="muted"> — for old decrunchers</small></span></label>}
+          <p className="muted small">{DECRUNCH[brokkr ? prefs.format : 'exomizer-tool']}</p>
+        </SideSection>
+      )}
 
       <SideSection id="pack-command" title="Command">
         <pre className="pack-cmd mono" aria-label={brokkr ? 'Brokkr command' : 'Exomizer command'} title={brokkr ? 'What the standalone Brokkr runs to make the same file, in the pack folder' : undefined}>{cmd.text}</pre>
         {problem && <p className="err-text small">{problem}</p>}
         <button className="btn primary pack-go" disabled={!ready} onClick={p.onPack} title="Build and verify with Build & Run's toolchain, then pack the result">
-          <Icon name="download" size={14} />{busy ?? 'Pack'}</button>
-        <p className="muted small">Pack builds and verifies the program first, like Build &amp; Run, then packs the PRG it built.</p>
-        {result && <PackResultCard result={result} fresh={fresh} onRun={p.onRun} onSave={p.onSave} onLog={p.onLog} />}
+          {packing ? <><span className="spinner" aria-hidden />Packing…</> : <><Icon name="download" size={14} />{busy ?? 'Pack'}</>}</button>
+        {!packing && <p className="muted small">Pack builds and verifies the program first, like Build &amp; Run.</p>}
+        {packing ? <PackingCard packing={packing} /> : <div ref={resultRef}>{result && <PackResultCard result={result} fresh={fresh} onRun={p.onRun} onSave={p.onSave} onLog={p.onLog} />}</div>}
       </SideSection>
+    </div>
+  );
+}
+
+const FORMAT_NAME: Record<PackFormat, string> = { exomizer: "Exomizer's format", brokkr: "Brokkr's own format", fast: "Brokkr's fast format" };
+
+/** What a pack under way is doing, step by step, with the time since it began (ticking each second). */
+function PackingCard({ packing }: { packing: PackProgress }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { reveal(ref.current); }, []);
+  const s = Math.max(0, Math.floor((now - packing.since) / 1000));
+  const time = s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const p = packing.prefs, brokkr = p.packer !== 'exomizer', sfx = p.mode === 'sfx', verifying = packing.step === 'verify';
+  const who = brokkr ? 'Brokkr' : 'Exomizer';
+  const how = brokkr ? `${FORMAT_NAME[p.format]}, effort ${p.effort === 'max' ? 'Max, on every core' : p.effort === 'fast' ? 'Fast' : 'Normal'}` : sfx ? 'a self-extracting program' : 'crunched data';
+  const check = !sfx ? (brokkr ? 'then Brokkr decrunches the stream again and compares' : null)
+    : brokkr ? "then the file runs in Brokkr's emulated C64 and is compared" : "then Exomizer's desfx decrunches it and it is compared";
+  const step = (current: boolean, done: boolean, title: string, note?: string | null) => (
+    <li className={cx(current && 'now', done && 'done')}>
+      {done ? <Icon name="ok" size={13} /> : current ? <span className="spinner" aria-hidden /> : <span className="dot" aria-hidden />}
+      <span>{title}{note && <small className="muted"><br />{note}</small>}</span>
+    </li>);
+  return (
+    <div ref={ref} className="pack-progress" role="status" aria-label="Packing">
+      <div className="pack-progress-bar" aria-hidden />
+      <div className="pack-progress-head"><b>{verifying ? 'Building and verifying…' : `Packing with ${who}…`}</b><span className="mono muted" title="Time since Pack was pressed">{time}</span></div>
+      <ol className="pack-steps">
+        {step(verifying, !verifying, 'Build and verify the program')}
+        {step(!verifying, false, `${sfx ? 'Crunch and check' : 'Crunch'} with ${who}`, check ? `${how}; ${check}.` : `${how}.`)}
+      </ol>
     </div>
   );
 }

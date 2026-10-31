@@ -1632,6 +1632,30 @@ bygger. Överst väljs packaren: **Brokkr**, Mimirs egen packare (`packages/brok
 sparas i projektet (`Project.pack`, `PackPrefs`), och varje ändring kan ångras. En projektfil från före Brokkr har ingen
 packare; den packar med Brokkr (`packer`, `effort` och `format` får sina standardvärden i zod-schemat).
 
+**Vyn** visar bara de inställningar som gäller för vald packare, format, sorts fil och start (`packOptions` i
+`packages/core/src/pack.ts`). Efter packaren kommer korten *What to pack*; *Packed file* (sorten *Self-extracting* eller
+*Crunched data*, för Brokkr *Format* med en rad om vad formatet ger och kostar och *Effort*, för Exomizer *Crunch faster
+(-C)* och *More options*, sist *File name*); *Self-extracting* (*Start*, *Jump to*, *$01 after* och *Interrupts after* på en
+rad, effekten) eller *Crunched data* (*Load address*, *Crunch forward*, *No literal sequences* och en rad om vilken
+uppackare som läser datan); och *Command*. En dold inställning finns kvar i projektet men ändrar ingenting:
+`packEffective` sätter den till sitt standardvärde innan kommandot skrivs och filen packas, och resultatkortet blir inte
+*Out of date* av den.
+
+| Inställning | Brokkr | Exomizer |
+|---|---|---|
+| *Format*, *Effort* | alltid | – |
+| *Crunch faster (-C)*, *More options* | – | alltid |
+| *Start*, *Interrupts after* | sfx | sfx |
+| *Jump to* | sfx med hopp | sfx med hopp |
+| *$01 after* | sfx utom RUN (som behöver `$37`) | sfx utom RUN |
+| Effekt | sfx utom *Brokkr fast*: kryssrutan *Flash the border while decrunching* | sfx: listan *Decrunch effect* |
+| *Load address* | mem | mem |
+| *Crunch forward*, *No literal sequences* | mem i Exomizers format (`-f`, `-T 5`) | mem (`-f`, `-c`) |
+
+*No literal sequences* gäller bara packad data, för äldre uppackare: en självuppackande fil har sin egen uppackare, som
+läser literal sequences, och Brokkr prövar där strömmen både med och utan dem. Brokkrs egna format packas bara bakåt
+och läses bara av Brokkrs uppackare, så där döljs båda kryssrutorna.
+
 **Brokkr** skriver Exomizer 3:s strömformat (protokoll 39, som Exomizers egna uppackare läser) med egen kod: matchsökning
 med ett binärträd, en optimal parsning som håller flera vägar till varje position (en per tillstånd och offset som kan
 återanvändas), tabellerna optimerade mot parsningen tills strömmen slutar krympa, och en egen 6502-uppackare. På 163
@@ -1650,8 +1674,8 @@ varje bit kostar en multiplikation), och uppackaren behöver mer minne:
 med skift och addition) och en resident del på omkring 425 byte i stället för 200. För små program är Exomizers format
 därför mindre som självuppackande fil (på 159 program blev filerna 3,5 % mindre sammanlagt, mindre på 98); där
 programmet inte lämnar plats blir filen i Exomizers format, med en notis.
-`--format brokkr` står då i kommandot, *Crunched data* packas bara bakåt (*Forward* och *Compatibility* döljs), och
-uppackaren för egen kod skrivs med `brokkr decruncher --format brokkr`.
+`--format brokkr` står då i kommandot, *Crunched data* packas bara bakåt (*Crunch forward* och *No literal sequences*
+döljs), och uppackaren för egen kod skrivs med `brokkr decruncher --format brokkr`.
 
 *Brokkr fast* består bara av hela byte, så uppackaren läser inga bitar: en literalkörning på upp till 32 byte, en match
 på 2–3 byte upp till 16 bakåt i en byte, en på 2–8 byte upp till 4096 bakåt i två, vilken match som helst i tre, och
@@ -1672,8 +1696,12 @@ uppackaren för egen kod skrivs med `brokkr decruncher --format fast`. Ett förs
 - *Crunched data*: Exomizers mem-format (`-T4` som standard, för `exodecrunch.s`). Strömmen packas upp igen och jämförs,
   och kortet säger var den laddas för uppackning på plats. Brokkrs egen uppackare som Kick Assembler-källa skrivs med
   `brokkr decruncher`.
-- Effekt: kantblink eller ingen. `$01` och avbrott efter uppackningen som för Exomizer. *Compatibility* blir `-T1` (inga
-  literal sequences).
+- Effekt: kantblink eller inget (`--no-effect`). Uppackaren skriver varje literal till `$d020`; i VICE syns det som
+  ränder i kanten medan filen packas upp. Kanten blinkar inte när I/O är bortkopplat under uppackningen, och inte i det
+  snabba formatet (där döljs kryssrutan). `$01` och avbrott efter uppackningen som för Exomizer; med RUN är `$01` alltid
+  `$37`.
+- *No literal sequences* (bara *Crunched data* i Exomizers format) blir `-T 5`: inga literal sequences, och fortfarande
+  inga av de längder `exodecrunch.s` tar fel på.
 
 Huvudprocessen kör Brokkr i en arbetstråd (`electron/main/brokkr-worker.ts`, en egen ingång i electron-vite som blir
 `out/main/brokkr-worker.js`), så att fönstret svarar medan den packar; på nivån *Max* startar tråden fler trådar som kör
@@ -1696,15 +1724,16 @@ och den packade filen. Kommandot vyn visar är den fristående Brokkrs (`brokkr 
   BASIC-raden (`sys`), med RUN (`basic`) eller med ett hopp till en adress (`$xxxx`, förvalt programstarten). Vyn varnar
   när de valda blocken lämnar ut BASIC-raden och starten är `sys`. Övriga val:
   - Effekt: Exomizers egen, ingen (`-n`) eller kantblink (`-x1`–`-x3`).
-  - `$01` efter uppackningen: `-Di_ram_exit`.
+  - `$01` efter uppackningen: `-Di_ram_exit` (inte med RUN).
   - Avbrott efter uppackningen: `-Di_irq_exit`.
 - *Crunched data* (`exomizer mem`): packad data som programmets egen kod packar upp med Exomizers `exodecrunch.s`.
   Laddadressen är för uppackning på plats (standard), en vald adress (`-l $xxxx`) eller ingen (`-l none`, en `.bin`).
-  `-f` packar framlänges.
-- För båda: `-c` (inga literal sequences), `-C` (snabbare packning), fler flaggor som text och filnamnet
-  (standard `<fil>-exo.prg`).
+  `-f` packar framlänges och `-c` (*No literal sequences*) utan literal sequences, för äldre uppackare.
+- För båda: `-C` (snabbare packning), fler flaggor som text (*More options*, där också `-c` kan stå för en sfx) och
+  filnamnet (standard `<fil>-exo.prg`).
 
-Vyn visar exakt det kommando som körs (`packCommand` i `src/lib/pack.ts`, `packArgs` i `packages/core/src/pack.ts`).
+Vyn visar exakt det kommando som körs (`packCommand` i `src/lib/pack.ts`, `packArgs` i `packages/core/src/pack.ts`,
+med de inställningar som gäller).
 En del av en PRG anges som Exomizer läser den, `fil.prg,$adress,offset,längd`. Offset räknas efter laddadressen.
 Exomizer laddar delarna i tur och ordning (en senare vinner) och nollfyller luckor mellan dem.
 
@@ -1712,7 +1741,17 @@ Exomizer laddar delarna i tur och ordning (en senare vinner) och nollfyller luck
 skickar sedan de byggda PRG:erna till `toolchain:pack`. Main-processen skriver dem i en egen packmapp, kör Exomizer med en
 argumentlista (aldrig genom ett skal), läser filen den skrev och tillåter mappen för sessionen. De fria flaggorna får
 inte innehålla sökvägar, `-o` eller `--` (`extraProblem`, även i zod-schemat), eftersom filerna kommer från det som
-valts. Resultatkortet visar:
+valts.
+
+**Medan den packar** visar vyn det tydligt (`PackingCard` i `Pack.tsx`, `packRun` i `App.tsx`): knappen blir *Packing…*
+med en snurra och går inte att trycka, och i stället för resultatkortet står ett kort med en rörlig rand överst, rubriken
+(*Building and verifying…*, sedan *Packing with Brokkr…* eller *…Exomizer…*), tiden sedan Pack trycktes (räknas varje
+sekund) och stegen: *Build and verify the program*, sedan *Crunch and check with …* med format, nivå och kontroll
+(Brokkrs emulerade C64, desfx, eller strömmen packas upp igen). Kortet rullas fram i sidopanelen när packningen börjar,
+eftersom knappen ligger långt ner, och det nya resultatkortet rullas fram när den är klar. Pack-knappen i aktivitetsraden
+får en snurra (`aria-busy`) så att det syns från andra vyer. Med *reduced motion* snurrar det långsammare.
+
+Resultatkortet visar:
 - storlek före och efter, med procent;
 - Exomizers minneslayout (packad data, uppackad data, uppackningstabell, packaren och dess nollsidebytes);
 - `$01` och avbrott efter uppackningen;
@@ -1736,6 +1775,8 @@ tom inställning behålls.
 **Test:**
 - `packages/core/test/pack.test.ts`:
   - intervallen, kommandoraden, Exomizers utskrift och jämförelsen;
+  - vilka inställningar som gäller för varje packare, format och sorts fil (`packOptions`), och att de andra får sina
+    standardvärden (`packEffective`) och inte når kommandot;
   - riktiga Exomizer på demon (hela, intervall med hopp, mem, fel), där desfx ska ge samma bytes;
   - riktiga VICE (`-console`, egen konfigurationsfil): det packade programmet räknar en xor över sina 4 KB data
     efter uppackningen och avslutar VICE med den genom debug-cartridgen. Det körs via SYS-raden och med valda block
@@ -1756,11 +1797,16 @@ tom inställning behålls.
   programmet och faller tillbaka till Exomizers format utan plats; Kick Assembler assemblerar dess källa till samma byte.
 - `packages/core/test/brokkr.test.ts`: demon hel och med intervall och hopp, mem, felen, nivån *Max* på två trådar,
   Brokkrs eget format (mindre fil, samma fil som kommandot), det snabba formatet (uppackaren i stackens sida, samma fil
-  som kommandot), och att kommandot som visas gör samma fil med den fristående Brokkr.
+  som kommandot), att kommandot som visas gör samma fil med den fristående Brokkr (också mem med `-T 5`), och att dolda
+  inställningar inte når kommandot eller filen (`-T` i en sfx, `$01` med RUN, effekten i det snabba formatet, framlänges i
+  Brokkrs eget format).
 - `apps/desktop/test/main.test.ts`: pack-mappen med indata och den packade filen, och schemat (en gammal projektfil
   packar med Brokkr, i Exomizers format).
-- E2e-testet packar demon med Brokkr (hel, *Max*, mem, eget format, snabbt format) i den byggda appen, alltså med
-  arbetstråden.
+- E2e-testet packar demon med Brokkr (hel, *Max*, mem med `-T 5`, eget format, snabbt format) i den byggda appen, alltså
+  med arbetstråden; medan den packar på nivån *Max* syns kortet *Packing* med stegen, knappen *Packing…* och snurran på
+  aktivitetsknappen, och alla tre försvinner när den är klar. Testet kontrollerar också att vyn bara visar det som gäller: inget `$01` med RUN, kantblinket av och på, ingen
+  start eller effekt för packad data, inga *Crunch forward* och *No literal sequences* i Brokkrs eget format och ingen
+  effekt i det snabba.
 
 ## 14. UI/UX-specifikation
 
@@ -1770,7 +1816,7 @@ tom inställning behålls.
 |---|---|
 | Titelrad | Öppna, Spara, Ångra/Gör om, kommandosök, Verify, Export, Terminal (13.6), **Build & Run**, tema, inställningar |
 | Aktivitetsrad | Explorer, Blocks, Symbols, Bookmarks (med antal), Pack (med antal intervall), specifikation, kommandopalett |
-| Sidopanel | **Explorer**: filer, monterad disk (13.5) direkt under dem, VICE-quicksave, patchar (10.2, när det finns några), loaders, programstart och minneskarta (64 KB-remsa och segmentlista), var och en ett kort vars rubrik fäller ihop det (valet sparas per användare, `sideClosed`) med vad det rymmer bredvid rubriken (*1 file*, *none found*, quicksavens tid, startadressen, antal block). *Demo* och *+* (lägg till en PRG) står i Files rubrik; hjälptexterna är en rad, resten står i knapparnas tips. Pack-vyns sektioner är likadana kort. **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Exomizer (13.8) |
+| Sidopanel | **Explorer**: filer, monterad disk (13.5) direkt under dem, VICE-quicksave, patchar (10.2, när det finns några), loaders, programstart och minneskarta (64 KB-remsa och segmentlista), var och en ett kort vars rubrik fäller ihop det (valet sparas per användare, `sideClosed`) med vad det rymmer bredvid rubriken (*1 file*, *none found*, quicksavens tid, startadressen, antal block). *Demo* och *+* (lägg till en PRG) står i Files rubrik; hjälptexterna är en rad, resten står i knapparnas tips. Pack-vyns sektioner är likadana kort. **Blocks**: filtrerbar lista. **Symbols**: etiketter (med antal referenser) och använda hårdvaruregister. **Bookmarks**: anteckningarna efter adress (10). **Pack**: packning med Brokkr eller Exomizer (13.8) |
 | Editor | Flikar: **Listing** (interaktiv, virtualiserad; vänsterkolumnen visar adress eller radnummer), **Graphics** (allt minne som tecken, sprites eller bitmappar, 14.5), **Memory** (minnet som VICE-monitorns `m`, `i` och `ii`, 14.6), **main.asm** (Monaco), **SPEC.md** |
 | Inspektor | **Memory map** (256 × 256 heatmap, lägen Type/Bytes/Refs, zoom till laddade sidor), **Block** (intervall, evidens, konfidens, typ, etikett, kommentar), **Preview** (sprite/chars/bitmap, multicolor, text, musik- och rutininfo) |
 | Bottenpanel | Analysis log, Problems (med kryssrutan *Deep analysis*, 8.11e), Cross-references, Raster IRQs (8.11d), Spindle script (Pefchain-drivers, 8.11f, och en Spindle 3-disks laddskript, 13.5b, när de finns), Bitfire script (en Bitfire-disks filer och d64writes kommandorad, 13.5c, när en sådan disk är monterad), Statistics, Build output |

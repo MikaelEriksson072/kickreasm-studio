@@ -1634,12 +1634,37 @@ test('pack with Brokkr: checked in an emulated C64, effort max on threads, and c
     await expect(page.locator('.build-log')).toContainText('checked in an emulated C64');
   });
 
+  await test.step('only the settings that take effect are shown: no $01 with RUN, the border flash on or off', async () => {
+    const flash = view.getByLabel('Flash the border while decrunching');
+    await expect(view.getByLabel('More options')).toHaveCount(0);
+    await expect(view.getByLabel('Load address')).toHaveCount(0);
+    await view.getByLabel('Start', { exact: true }).selectOption('basic');
+    await expect(view.getByLabel('$01 after')).toHaveCount(0);
+    await flash.uncheck();
+    await expect(cmd).toHaveText('brokkr sfx --start basic --no-effect -o raster-demo-brokkr.prg raster-demo.prg');
+    await flash.check();
+    await view.getByLabel('Start', { exact: true }).selectOption('sys');
+    await expect(view.getByLabel('$01 after')).toBeVisible();
+    await expect(cmd).toHaveText('brokkr sfx --start sys -o raster-demo-brokkr.prg raster-demo.prg');
+    await expect(card).not.toContainText('Out of date');
+  });
+
   await test.step('effort max searches on every core and gives no larger file', async () => {
     const normal = await packedSize();
     await view.getByLabel('Effort').selectOption('max');
     await expect(cmd).toHaveText('brokkr sfx --start sys --effort max -o raster-demo-brokkr.prg raster-demo.prg');
     await view.getByRole('button', { name: 'Pack', exact: true }).click();
+    // while it packs: the steps and the time in a card, the button says so, and the Pack view's button spins
+    const progress = view.getByRole('status', { name: 'Packing' });
+    await expect(progress).toBeVisible();
+    await expect(progress).toContainText('Build and verify the program');
+    await expect(progress).toContainText('Crunch and check with Brokkr');
+    await expect(progress).toContainText("Exomizer's format, effort Max, on every core; then the file runs in Brokkr's emulated C64");
+    await expect(view.getByRole('button', { name: 'Packing…' })).toBeDisabled();
+    await expect(page.locator('nav.activity').getByRole('button', { name: 'Pack' })).toHaveAttribute('aria-busy', 'true');
     await expect(card).not.toContainText('Out of date', { timeout: 120_000 });
+    await expect(progress).toHaveCount(0);
+    await expect(page.locator('nav.activity').getByRole('button', { name: 'Pack' })).not.toHaveAttribute('aria-busy');
     await expect(card).toContainText("Decrunched in Brokkr's emulated C64");
     expect(await packedSize()).toBeLessThanOrEqual(normal);
   });
@@ -1648,15 +1673,26 @@ test('pack with Brokkr: checked in an emulated C64, effort max on threads, and c
     await view.getByLabel('Effort').selectOption('normal');
     await view.getByRole('tab', { name: 'Crunched data' }).click();
     await expect(cmd).toHaveText('brokkr mem -o raster-demo-brokkr.prg raster-demo.prg');
+    // no start and nothing after decrunching: your own code decrunches it
+    await expect(view.getByLabel('Start', { exact: true })).toHaveCount(0);
+    await expect(view.getByLabel('Flash the border while decrunching')).toHaveCount(0);
+    await view.getByLabel('No literal sequences (-T 5)').check();
+    await expect(cmd).toHaveText('brokkr mem -T 5 -o raster-demo-brokkr.prg raster-demo.prg');
     await view.getByRole('button', { name: 'Pack', exact: true }).click();
     await expect(card).toContainText(/Brokkr decrunched the stream again: the same 12287 bytes\. In place it loads at \$0[0-9a-f]{3} or lower\./, { timeout: 90_000 });
   });
 
   await test.step("Brokkr's own format: a self-extracting file with its probabilities, checked the same way", async () => {
-    await view.getByRole('tab', { name: 'Self-extracting' }).click();
     await view.getByLabel('Format').selectOption('brokkr');
+    // decrunched backward by Brokkr's own decruncher: no forward, no literal sequences to leave out
+    await expect(view.getByLabel(/Crunch forward/)).toHaveCount(0);
+    await expect(view.getByLabel(/No literal sequences/)).toHaveCount(0);
+    await expect(cmd).toHaveText('brokkr mem --format brokkr -o raster-demo-brokkr.prg raster-demo.prg');
+    await view.getByRole('tab', { name: 'Self-extracting' }).click();
+    // the -T 5 ticked for crunched data takes no effect in a self-extracting file
     await expect(cmd).toHaveText('brokkr sfx --format brokkr --start sys -o raster-demo-brokkr.prg raster-demo.prg');
     await expect(view).toContainText('decrunching takes about 8 times as long');
+    await expect(view.getByLabel('Flash the border while decrunching')).toBeChecked();
     await view.getByRole('button', { name: 'Pack', exact: true }).click();
     await expect(card).not.toContainText('Out of date', { timeout: 120_000 });
     await expect(card).toContainText("Decrunched in Brokkr's emulated C64: $0801–$37ff has the same 12287 bytes, and it starts at $0810");
@@ -1666,7 +1702,8 @@ test('pack with Brokkr: checked in an emulated C64, effort max on threads, and c
   await test.step("Brokkr's fast format: whole bytes, the decruncher in the stack page, checked the same way", async () => {
     await view.getByLabel('Format').selectOption('fast');
     await expect(cmd).toHaveText('brokkr sfx --format fast --start sys -o raster-demo-brokkr.prg raster-demo.prg');
-    await expect(view).toContainText("The fast format's decruncher does not flash the border.");
+    await expect(view).toContainText('decrunched about twice as fast, without a border flash');
+    await expect(view.getByLabel('Flash the border while decrunching')).toHaveCount(0);
     await view.getByRole('button', { name: 'Pack', exact: true }).click();
     await expect(card).not.toContainText('Out of date', { timeout: 120_000 });
     await expect(card).toContainText("Decrunched in Brokkr's emulated C64: $0801–$37ff has the same 12287 bytes, and it starts at $0810");
@@ -1733,9 +1770,9 @@ test('pack with Exomizer: the whole build or chosen blocks, checked with desfx, 
     await expect(ranges).toHaveText('$0866–$37ff');
     await view.getByRole('checkbox', { name: 'Pack $0810-$0865' }).check();
     await expect(ranges).toHaveText('$0810–$37ff');
-    await view.getByLabel('Start after decrunching').selectOption('jmp');
+    await view.getByLabel('Start', { exact: true }).selectOption('jmp');
     await expect(view.getByLabel('Jump to')).toHaveValue('$0810');
-    await view.getByLabel('Effect while decrunching').selectOption('none');
+    await view.getByLabel('Decrunch effect').selectOption('none');
     await expect(cmd).toHaveText(/ sfx \$0810 -n -o raster-demo-exo\.prg raster-demo\.prg,\$0810,15,12272$/);
     await view.getByRole('button', { name: 'Pack', exact: true }).click();
     await expect(card).toContainText('Decrunched by desfx: $0810–$37ff has the same 12272 bytes, and it starts at $0810', { timeout: 90_000 });

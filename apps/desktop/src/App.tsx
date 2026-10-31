@@ -35,7 +35,7 @@ import { PatchModal, type PatchDraft } from './components/Patch';
 import { MemoryGfx } from './components/MemoryGfx';
 import { MemoryDump } from './components/MemoryDump';
 import { bookmarkList } from './components/Bookmarks';
-import type { PackResult } from './components/Pack';
+import type { PackProgress, PackResult } from './components/Pack';
 import { ContextMenu } from './components/ContextMenu';
 import { Splitter } from './components/Splitter';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -114,6 +114,8 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   const [unpacked, setUnpacked] = useState<{ ok: boolean; title: string; output: string; label: string } | null>(null);
   /** the last pack, with Brokkr or Exomizer (the Pack view shows it) */
   const [packRes, setPackRes] = useState<PackResult | null>(null);
+  /** the pack under way (building and verifying, then packing): the Pack view and its activity button show it */
+  const [packRun, setPackRun] = useState<PackProgress | null>(null);
   // a packed file belongs to the program it was packed from: other files (a new project, an added PRG) drop it
   useEffect(() => setPackRes(null), [project.files]);
   /** files whose "packed" notice was dismissed */
@@ -821,8 +823,16 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
   const runPack = async () => {
     if (!kr) return needDesktop();
     const before = latest.current;
-    const exomizer = (before.project.pack ?? packDefaults(before.A, before.project)).packer === 'exomizer';
-    if (exomizer && !toolchain.exomizerPath) { toast('Set Exomizer in Settings → Toolchain first', 'warn'); setModal('settings'); return; }
+    const asked = before.project.pack ?? packDefaults(before.A, before.project);
+    if (asked.packer === 'exomizer' && !toolchain.exomizerPath) { toast('Set Exomizer in Settings → Toolchain first', 'warn'); setModal('settings'); return; }
+    if (packRun) return;
+    // the Pack view shows the pack under way from here to the end, through building, verifying and packing
+    setPackRun({ step: 'verify', since: Date.now(), prefs: asked });
+    try { await packVerified(); } finally { setPackRun(null); }
+  };
+  /** runPack after its checks: build and verify, then pack what was verified */
+  const packVerified = async () => {
+    if (!kr) return;
     const res = await runVerify({ quiet: true });
     if (!res) return;
     if (!res.ok) { setUi({ bottom: 'build', panelOpen: true }); toast('The build failed verification; nothing was packed', 'err'); return; }
@@ -832,6 +842,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
     const files = R.fileNames.map((n, i) => ({ name: `${n}.prg`, prg: res.kick?.compared[i]?.prg ?? res.V.results[i]?.prg ?? null }));
     if (files.some(f => !f.prg)) { toast('The build gave no PRG to pack', 'err'); return; }
     const packer = prefs.packer === 'exomizer' ? 'Exomizer' : 'Brokkr';
+    setPackRun(p => p && { ...p, step: 'pack', prefs });
     try {
       setBuildBusy(`Packing with ${packer}`);
       const r = await kr.pack({ files: files.map(f => ({ name: f.name, prg: f.prg! })), prefs });
@@ -1191,7 +1202,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
         onTheme={() => setUi({ theme: theme === 'dark' ? 'light' : 'dark' })} onSettings={() => setModal('settings')}
         onToggleSide={() => setDrawer(d => d === 'side' ? null : 'side')} onToggleInspector={() => setDrawer(d => d === 'insp' ? null : 'insp')} />
 
-      <ActivityBar activity={activity} specOpen={tab === 'spec'} counts={{ bookmarks: Object.keys(project.bookmarks).length, pack: project.pack?.ranges?.length ?? 0 }} onActivity={(a: Activity) => { setUi({ activity: a }); if (narrow) setDrawer('side'); }} onSpec={() => setUi({ tab: 'spec' })} onPalette={() => setModal('palette')} />
+      <ActivityBar activity={activity} specOpen={tab === 'spec'} counts={{ bookmarks: Object.keys(project.bookmarks).length, pack: project.pack?.ranges?.length ?? 0 }} busy={{ pack: !!packRun }} onActivity={(a: Activity) => { setUi({ activity: a }); if (narrow) setDrawer('side'); }} onSpec={() => setUi({ tab: 'spec' })} onPalette={() => setModal('palette')} />
 
       <aside className="sidebar"><ErrorBoundary>
         <Sidebar view={activity} A={A} R={R} project={project} colors={colors} cursor={cursor} onNavigate={a => { nav(a); setDrawer(null); }}
@@ -1208,7 +1219,7 @@ function Workspace({ A, R, aKey, renderMs, rProject, busy, toolchain, setToolcha
           disk={disk} packing={packing} onMount={() => void mountDisk()} onEject={ejectDisk} onShowSpindle={() => setUi({ bottom: 'spindle', panelOpen: true })} onShowBitfire={() => setUi({ bottom: 'bitfire', panelOpen: true })} onOpenFromDisk={(f, add) => { openFromDisk(f, add); setDrawer(null); }}
           bmSel={bmSel} onBmSelect={setBmSel} onBmGo={goBookmark} onBmAdd={() => startBookmark()} onBmEdit={openBookmarkEditor} onBmDelete={deleteBookmark}
           bmEditing={bmEdit != null ? { addr: bmEdit, cursorAt: lineAddr() ?? null, onSave: saveBookmark, onCancel: () => { setBmEdit(null); listRef.current?.focus(); }, onPreview: a => navigate(a, { center: true, listing: true, noHistory: true }) } : null}
-          pack={{ A, R, project, cursor, sel, prefs: packPrefs, exomizer: toolchain.exomizerPath, desktop: !!kr, busy: buildBusy, result: packRes, current: packKey,
+          pack={{ A, R, project, cursor, sel, prefs: packPrefs, exomizer: toolchain.exomizerPath, desktop: !!kr, busy: buildBusy, packing: packRun, result: packRes, current: packKey,
             onChange: setPack, onPack: () => void runPack(), onRun: () => void runPacked(), onSave: () => void savePacked(), onSettings: () => setModal('settings'),
             onLog: () => setUi({ bottom: 'build', panelOpen: true }), onNavigate: a => { nav(a); setDrawer(null); } }} />
       </ErrorBoundary></aside>

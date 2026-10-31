@@ -9,7 +9,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  checkDecrunched, DEFAULT_PACK, editRanges, extraProblem, makeDemo, makePrg, mergeRanges, packArgs, packFileName, packImage, packInputs, packOutName,
+  checkDecrunched, DEFAULT_PACK, editRanges, extraProblem, makeDemo, makePrg, mergeRanges, packArgs, packEffective, packFileName, packImage, packInputs, packOptions, packOutName,
   packParts, packProblem, parseExomizer, parsePrg, rangeCover, type PackPrefs,
 } from '../src';
 import { findExomizer, findVice, runExomizer } from '../src/node';
@@ -47,12 +47,40 @@ describe('pack ranges', () => {
 describe('Exomizer command line', () => {
   it('writes the sub command, the start, the options, -o and the in-files', () => {
     expect(packArgs(P(), ['a.prg'], 'a-exo.prg')).toEqual(['sfx', 'sys', '-o', 'a-exo.prg', 'a.prg']);
-    expect(packArgs(P({ start: 'jmp', jmp: 0x0810, effect: 'none', ramExit: 0x35, irqExit: false, compat: true, fast: true, extra: '-p 4 -Di_line_number=1987' }), ['a.prg,$0810,15,100'], 'o.prg'))
-      .toEqual(['sfx', '$0810', '-n', '-Di_ram_exit=$35', '-Di_irq_exit=0', '-c', '-C', '-p', '4', '-Di_line_number=1987', '-o', 'o.prg', 'a.prg,$0810,15,100']);
+    expect(packArgs(P({ start: 'jmp', jmp: 0x0810, effect: 'none', ramExit: 0x35, irqExit: false, fast: true, extra: '-p 4 -Di_line_number=1987' }), ['a.prg,$0810,15,100'], 'o.prg'))
+      .toEqual(['sfx', '$0810', '-n', '-Di_ram_exit=$35', '-Di_irq_exit=0', '-C', '-p', '4', '-Di_line_number=1987', '-o', 'o.prg', 'a.prg,$0810,15,100']);
     expect(packArgs(P({ start: 'basic', effect: 'x2', irqExit: true }), ['a.prg'], 'o.prg')).toEqual(['sfx', 'basic', '-x2', '-Di_irq_exit=1', '-o', 'o.prg', 'a.prg']);
     expect(packArgs(P({ mode: 'mem', start: 'jmp', jmp: 0x1000, effect: 'none' }), ['a.prg'], 'o.prg')).toEqual(['mem', '-o', 'o.prg', 'a.prg']);
-    expect(packArgs(P({ mode: 'mem', memLoad: 'none', forward: true }), ['a.prg'], 'o.bin')).toEqual(['mem', '-l', 'none', '-f', '-o', 'o.bin', 'a.prg']);
+    expect(packArgs(P({ mode: 'mem', memLoad: 'none', forward: true, compat: true }), ['a.prg'], 'o.bin')).toEqual(['mem', '-l', 'none', '-f', '-c', '-o', 'o.bin', 'a.prg']);
     expect(packArgs(P({ mode: 'mem', memLoad: 0x4000 }), ['a.prg'], 'o.prg')).toEqual(['mem', '-l', '$4000', '-o', 'o.prg', 'a.prg']);
+  });
+
+  it('leaves out the settings that take no effect, as the Pack view hides them', () => {
+    // -c in a self-extracting file: its own decruncher reads literal sequences; $01 with RUN, which needs $37
+    expect(packArgs(P({ compat: true, forward: true, memLoad: 0x4000 }), ['a.prg'], 'o.prg')).toEqual(['sfx', 'sys', '-o', 'o.prg', 'a.prg']);
+    expect(packArgs(P({ start: 'basic', ramExit: 0x35 }), ['a.prg'], 'o.prg')).toEqual(['sfx', 'basic', '-o', 'o.prg', 'a.prg']);
+    expect(packArgs(P({ mode: 'mem', effect: 'x1', ramExit: 0x35, irqExit: false }), ['a.prg'], 'o.prg')).toEqual(['mem', '-o', 'o.prg', 'a.prg']);
+  });
+});
+
+describe('the settings that take effect', () => {
+  const shown = (o: ReturnType<typeof packOptions>) => Object.keys(o).filter(k => o[k as keyof typeof o]).sort();
+  it('shows for each packer, format and kind of file only what it uses', () => {
+    expect(shown(packOptions(P()))).toEqual(['effect', 'extra', 'fast', 'irqExit', 'ramExit', 'start']);
+    expect(shown(packOptions(P({ mode: 'mem' })))).toEqual(['compat', 'extra', 'fast', 'forward', 'memLoad']);
+    expect(shown(packOptions(P({ packer: 'brokkr' })))).toEqual(['effect', 'effort', 'format', 'irqExit', 'ramExit', 'start']);
+    expect(shown(packOptions(P({ packer: 'brokkr', mode: 'mem' })))).toEqual(['compat', 'effort', 'format', 'forward', 'memLoad']);
+    // Brokkr's own formats are decrunched backward by Brokkr's decruncher; the fast one does not flash the border
+    expect(shown(packOptions(P({ packer: 'brokkr', mode: 'mem', format: 'brokkr' })))).toEqual(['effort', 'format', 'memLoad']);
+    expect(shown(packOptions(P({ packer: 'brokkr', format: 'fast' })))).toEqual(['effort', 'format', 'irqExit', 'ramExit', 'start']);
+    expect(packOptions(P({ start: 'jmp' })).jmp).toBe(true);
+    expect(packOptions(P({ start: 'basic' })).ramExit).toBe(false);
+  });
+
+  it('puts the hidden ones at their defaults', () => {
+    const typed = P({ packer: 'brokkr', format: 'fast', mode: 'mem', effect: 'none', ramExit: 0x35, irqExit: false, forward: true, compat: true, fast: true, extra: '-p 4', jmp: 0x1000 });
+    expect(packEffective(typed)).toEqual({ ...typed, effect: 'default', ramExit: null, irqExit: null, forward: false, compat: false, fast: false, extra: '', jmp: null });
+    expect(packEffective(P({ effort: 'max', format: 'brokkr' }))).toEqual(P());
   });
 
   it('names the files so Exomizer reads one name, and refuses paths and -o in the extra options', () => {

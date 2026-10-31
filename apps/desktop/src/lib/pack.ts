@@ -2,7 +2,7 @@
  * built PRGs (Exomizer), or packs them the same way with Brokkr, which Build & Run verified to be the loaded files
  * byte for byte. */
 import {
-  brokkrArgs, DEFAULT_PACK, packArgs, packFileName, packImage, packInputs, packOutName, packParts, rangeCover, shellWord,
+  brokkrArgs, DEFAULT_PACK, packArgs, packEffective, packFileName, packImage, packInputs, packOutName, packParts, rangeCover, shellWord,
   type AnalysisResult, type FileInput, type PackPart, type PackPrefs, type Project,
 } from '@mimir/core';
 
@@ -47,5 +47,6 @@ export function packWarning(prefs: PackPrefs, A: Pick<AnalysisResult, 'basics'>)
   return null;
 }
 
-/** what a pack result belongs to: the pack settings and the generated files (a result with another key is stale) */
-export const packKeyOf = (prefs: PackPrefs, filesKey: string): string => `${JSON.stringify(prefs)}|${filesKey}`;
+/** what a pack result belongs to: the settings that take effect and the generated files (a result with another key is
+ * stale; a hidden setting changes nothing) */
+export const packKeyOf = (prefs: PackPrefs, filesKey: string): string => `${JSON.stringify(packEffective(prefs))}|${filesKey}`;

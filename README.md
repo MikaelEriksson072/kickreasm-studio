@@ -84,6 +84,9 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   C64 before it hands it over. *Max* effort searches on every core. For the smallest files it has a format of its own,
   coded adaptively as LZMA is: 6.6 % less crunched data than Exomizer 3.1.1, decrunched about 8 times slower; for the
   fastest decrunching one of whole bytes: 13 % more, decrunched about twice as fast. Exomizer itself is still a choice.
+  The view shows only the settings that work for the packer, format and kind of file you choose: what to pack, the
+  packed file (format, effort, name), then how a self-extracting file starts (start, `$01` and interrupts after, the
+  border flash) or how crunched data loads, and the exact command it runs.
 - **The toolchain is built in:** Kick Assembler builds, VICE (`F5`), Brokkr or Exomizer packing in the *Pack* view, and a
   terminal with the tools on its `PATH`.
 
