@@ -1,28 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <!-- Mimir Studio: the rune ᛗ (Mannaz, Mímir's M) on a dark violet tile, with the eye in Mímir's well, over a broken
-       chain (half of it, drawn twice) -->
+  <!-- Mimir Studio, drawn for the small sizes (build/logo.jpg is the logo from 48 px up): the rune ᛗ glowing over the
+       rings of Mímir's well, on a black tile -->
   <defs>
-    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#3d358f"/>
-      <stop offset="1" stop-color="#191640"/>
+    <radialGradient id="well" cx="12" cy="16.4" r="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0c3346"/>
+      <stop offset="0.55" stop-color="#04111a"/>
+      <stop offset="1" stop-color="#010306"/>
+    </radialGradient>
+    <linearGradient id="rune" x1="0" y1="5" x2="0" y2="16.4" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f0feff"/>
+      <stop offset="1" stop-color="#a8f0ff"/>
     </linearGradient>
-    <linearGradient id="eye" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffe08a"/>
-      <stop offset="1" stop-color="#ffb627"/>
-    </linearGradient>
-    <clipPath id="in"><rect x="0.75" y="0.75" width="22.5" height="22.5" rx="5.6"/></clipPath>
-    <g id="chain" clip-path="url(#in)" fill="none" stroke="#8f86f0" stroke-width="1" stroke-linecap="round">
-      <path d="M0 18.6H4.8M5.6 18.6H9.8" stroke-width="1.1"/>
-      <rect x="-2.2" y="17.3" width="4.2" height="2.6" rx="1.3"/>
-      <rect x="3.4" y="17.3" width="4.2" height="2.6" rx="1.3"/>
-      <path d="M10.2 17.3H9.7A1.3 1.3 0 0 0 9.7 19.9H10.2"/>
-      <path d="M11.35 17.15L10.95 16.5M11.35 20.05L10.95 20.7" stroke-width="0.7"/>
-    </g>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="0.9" result="b"/>
+      <feFlood flood-color="#26c4ff"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="in"><rect x="0.75" y="0.75" width="22.5" height="22.5" rx="5"/></clipPath>
   </defs>
-  <rect x="0.75" y="0.75" width="22.5" height="22.5" rx="5.6" fill="url(#tile)"/>
-  <use href="#chain"/>
-  <use href="#chain" transform="matrix(-1 0 0 1 24 0)"/>
-  <rect x="0.75" y="0.75" width="22.5" height="22.5" rx="5.6" fill="none" stroke="#a59cff" stroke-opacity="0.4" stroke-width="0.6"/>
-  <path d="M7 15.4V4.4l10 6.6M17 15.4V4.4L7 11" fill="none" stroke="#ece9ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="12" cy="13" r="1.6" fill="url(#eye)"/>
+  <rect x="0.75" y="0.75" width="22.5" height="22.5" rx="5" fill="url(#well)"/>
+  <g clip-path="url(#in)" fill="none" stroke="#3fcfff" stroke-width="0.55">
+    <ellipse cx="12" cy="16.6" rx="10.2" ry="3.3" stroke-opacity="0.28"/>
+    <ellipse cx="12" cy="16.6" rx="7.6" ry="2.45" stroke-opacity="0.45"/>
+    <ellipse cx="12" cy="16.6" rx="5.1" ry="1.6" stroke-opacity="0.65"/>
+  </g>
+  <!-- the stems, the long stroke from the top left to the right stem, and the short one from the top right down to it -->
+  <path filter="url(#glow)" fill="url(#rune)"
+        d="M7.1 5H8.9V16.4H7.1Z M15.1 5H16.9V16.4H15.1Z M7.1 5H9.6L16.9 11.6V13.86Z M14.4 5H16.9L12 9.43V7.17Z"/>
+  <rect x="0.75" y="0.75" width="22.5" height="22.5" rx="5" fill="none" stroke="#5fd8ff" stroke-opacity="0.2" stroke-width="0.25"/>
 </svg>

@@ -141,9 +141,10 @@ The package holds `out/` and the production dependencies (only `zod`; `@mimir/co
 electron-vite, so it is a dev dependency). Electron is taken from `node_modules/electron/dist`. Electron 44 has no install
 script: it fetches its binary the first time it is required, so the package script does `node -e "require('electron')"`
 before electron-builder (a fresh clone has no binary until then). The NSIS tools are downloaded once into the electron-builder cache. The exe is not code-signed. Its icon is the Mimir Studio logo:
-`apps/desktop/build/icon.svg` is the source, and `npx electron scripts/make-icons.cjs` (in `apps/desktop`) draws it into
-`build/icon.png` and `build/icon.ico` (16-256 px) with Electron's own Chromium; the title bar draws the same logo
-(`src/components/Logo.tsx`). Like `pnpm dev`, the packaged app keeps its settings in
+`apps/desktop/build/logo.jpg` is the picture and `build/icon.svg` the same logo drawn as a vector, and
+`npx electron scripts/make-icons.cjs` (in `apps/desktop`) draws them into `build/icon.png` and `build/icon.ico`
+(16-256 px) with Electron's own Chromium: from 48 px up a square of the picture around the rune, below that the vector,
+where the picture would blur. The title bar draws the vector (`src/components/Logo.tsx`). Like `pnpm dev`, the packaged app keeps its settings in
 `%APPDATA%\@mimir\desktop\settings.json` (the app name comes from `package.json`); KickAss.jar and x64sc are found the
 same way as in development.
 

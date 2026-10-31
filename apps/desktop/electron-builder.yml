@@ -27,7 +27,7 @@ extraResources:
     to: exomizer
 
 win:
-  # build/icon.ico: the Mimir Studio logo, drawn from build/icon.svg by scripts/make-icons.cjs
+  # build/icon.ico: the Mimir Studio logo, drawn from build/logo.jpg and build/icon.svg by scripts/make-icons.cjs
   icon: build/icon.ico
   target:
     - target: nsis
