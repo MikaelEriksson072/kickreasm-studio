@@ -302,8 +302,9 @@ top:    .byte 0
 length: .word 0
 `;
 
-/** the end of a self-extracting file's decrunching: $01, the interrupts, and the program's start */
-const SFX_EXIT = `        lda #RAM_EXIT
+/** the end of a self-extracting file's decrunching (for every format but Exomizer's): $01, the interrupts, and the
+ * program's start */
+export const SFX_EXIT = `        lda #RAM_EXIT
         sta $01
 .if (IRQ_EXIT == 1) {
         cli
@@ -431,11 +432,9 @@ ${INIT}        lda #0
 ${DEST_SET}${resident('        rts\n', !o.small, '0')}`;
 }
 
-/**
- * The start of a self-extracting file: $01, the resident part copied to B_TO, the stream moved, the probabilities
- * set to a half, the coder started, the quarter squares made (QSQ), then the resident part's `next`.
- */
-export const BRK_START = `${SYMBOLS}* = A_ADDR
+/** The start of a self-extracting file up to its own set-up (for every format): $01, the resident part copied from
+ * B_FROM to B_TO, and the stream moved from MOVE_FROM to MOVE_TO (down from its first byte, up from its last). */
+export const SFX_START_HEAD = `* = A_ADDR
 .if (PROLOGUE == 1) {
         sei
         lda #RAM_DURING
@@ -516,7 +515,13 @@ move_to:
 }
 move_done:
 }
-${INIT}        lda STREAM_END - 1                  // the coder's first 16 bits
+`;
+
+/**
+ * The start of a self-extracting file: $01, the resident part copied to B_TO, the stream moved, the probabilities
+ * set to a half, the coder started, the quarter squares made (QSQ), then the resident part's `next`.
+ */
+export const BRK_START = `${SYMBOLS}${SFX_START_HEAD}${INIT}        lda STREAM_END - 1                  // the coder's first 16 bits
         sta CODE+1
         lda STREAM_END - 2
         sta CODE

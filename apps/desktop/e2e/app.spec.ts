@@ -1662,6 +1662,16 @@ test('pack with Brokkr: checked in an emulated C64, effort max on threads, and c
     await expect(card).toContainText("Decrunched in Brokkr's emulated C64: $0801–$37ff has the same 12287 bytes, and it starts at $0810");
     await expect(card).toContainText('Probabilities');
   });
+
+  await test.step("Brokkr's fast format: whole bytes, the decruncher in the stack page, checked the same way", async () => {
+    await view.getByLabel('Format').selectOption('fast');
+    await expect(cmd).toHaveText('brokkr sfx --format fast --start sys -o raster-demo-brokkr.prg raster-demo.prg');
+    await expect(view).toContainText("The fast format's decruncher does not flash the border.");
+    await view.getByRole('button', { name: 'Pack', exact: true }).click();
+    await expect(card).not.toContainText('Out of date', { timeout: 120_000 });
+    await expect(card).toContainText("Decrunched in Brokkr's emulated C64: $0801–$37ff has the same 12287 bytes, and it starts at $0810");
+    await expect(card).toContainText('$0100–$01d6');
+  });
 });
 
 test('pack with Exomizer: the whole build or chosen blocks, checked with desfx, saved with a dialog', async ({ workDir: work, app, page }) => {

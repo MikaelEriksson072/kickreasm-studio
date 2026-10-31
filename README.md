@@ -82,8 +82,8 @@ it in [VICE](https://vice-emu.sourceforge.io/) with one key.
   decruncher reads it, but crunches it smaller and several times faster than Exomizer 3.1.1, plans where the
   decruncher, its table and the stream go and what `$01` must be, and runs every self-extracting file in an emulated
   C64 before it hands it over. *Max* effort searches on every core. For the smallest files it has a format of its own,
-  coded adaptively as LZMA is: 6.6 % less crunched data than Exomizer 3.1.1, decrunched about 8 times slower.
-  Exomizer itself is still a choice.
+  coded adaptively as LZMA is: 6.6 % less crunched data than Exomizer 3.1.1, decrunched about 8 times slower; for the
+  fastest decrunching one of whole bytes: 13 % more, decrunched about twice as fast. Exomizer itself is still a choice.
 - **The toolchain is built in:** Kick Assembler builds, VICE (`F5`), Brokkr or Exomizer packing in the *Pack* view, and a
   terminal with the tools on its `PATH`.
 

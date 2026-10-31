@@ -84,7 +84,7 @@ export function PackView(p: PackViewProps) {
   const list = prefs.ranges ? A.blocks.filter(b => { const l = R.labels.get(b.start); return !ql || h4(b.start).includes(ql) || kindInfo(b.type).label.toLowerCase().includes(ql) || !!l?.name.toLowerCase().includes(ql); }) : [];
   const fresh = !!result && result.key === current;
   const brokkr = prefs.packer !== 'exomizer';
-  const own = brokkr && prefs.format === 'brokkr';
+  const own = brokkr && prefs.format === 'brokkr', fast = brokkr && prefs.format === 'fast';
   const ready = desktop && (brokkr || !!exomizer) && !problem && !busy;
 
   return (
@@ -155,7 +155,7 @@ export function PackView(p: PackViewProps) {
           {prefs.start === 'jmp' && <HexField id="pack-jmp" label="Jump to" value={prefs.jmp} placeholder="$0810" onCommit={v => set({ jmp: v }, 'Pack: jump address')}
             help={A.entry != null && A.entry !== prefs.jmp ? `The program start is $${h4(A.entry)}.` : undefined} />}
           {warning && <p className="warn-text small">{warning}</p>}
-          <div className="field"><label htmlFor="pack-effect">Effect while decrunching</label>
+          {fast ? <p className="muted small">The fast format's decruncher does not flash the border.</p> : <div className="field"><label htmlFor="pack-effect">Effect while decrunching</label>
             {brokkr ? (
               <select id="pack-effect" value={prefs.effect === 'none' ? 'none' : 'default'} onChange={e => set({ effect: e.target.value as PackPrefs['effect'] }, 'Pack: effect')}>
                 <option value="default">Border flash</option>
@@ -168,7 +168,7 @@ export function PackView(p: PackViewProps) {
                 <option value="x1">Border flash 1 (-x1)</option>
                 <option value="x2">Border flash 2 (-x2)</option>
                 <option value="x3">Border flash 3 (-x3)</option>
-              </select>)}</div>
+              </select>)}</div>}
           <HexField id="pack-ram" label="$01 after decrunching" value={prefs.ramExit} max={0xff} placeholder="$37 (the default)" onCommit={v => set({ ramExit: v }, 'Pack: $01 after decrunching')}
             help={brokkr ? 'While decrunching, Brokkr sets $01 itself so that everything it reads and writes is RAM.' : undefined} />
           <div className="field"><label htmlFor="pack-irq">Interrupts after decrunching</label>
@@ -185,8 +185,10 @@ export function PackView(p: PackViewProps) {
               <option value="none">None: a plain .bin file</option>
             </select></div>
           {typeof prefs.memLoad === 'number' && <HexField id="pack-load-at" label="Load at" value={prefs.memLoad} onCommit={v => set({ memLoad: v ?? 'auto' }, 'Pack: load address')} />}
-          {!own && <label className="check"><input id="pack-forward" type="checkbox" checked={prefs.forward} onChange={e => set({ forward: e.target.checked }, 'Pack: forward')} /><span>Crunch forward (-f)<small className="muted"> — the default decrunches backward</small></span></label>}
-          <p className="muted small">{own
+          {!own && !fast && <label className="check"><input id="pack-forward" type="checkbox" checked={prefs.forward} onChange={e => set({ forward: e.target.checked }, 'Pack: forward')} /><span>Crunch forward (-f)<small className="muted"> — the default decrunches backward</small></span></label>}
+          <p className="muted small">{fast
+            ? <>It is Brokkr's fast format, decrunched backward: decrunch it with Brokkr's decruncher of it (<span className="mono">brokkr decruncher --format fast</span> writes it as Kick Assembler source; 10 bytes of zero page, no tables).</>
+            : own
             ? <>It is Brokkr's own format, decrunched backward: decrunch it with Brokkr's decruncher of it (<span className="mono">brokkr decruncher --format brokkr</span> writes it as Kick Assembler source; it needs 0.5 KB of RAM for its probabilities, 1.5 KB to run a third faster).</>
             : brokkr
             ? <>It is Exomizer 3's mem format: decrunch it with Brokkr's decruncher (<span className="mono">brokkr decruncher</span> writes it as Kick Assembler source) or with Exomizer's exodecrunch.s.</>
@@ -194,9 +196,11 @@ export function PackView(p: PackViewProps) {
         </>}
         {brokkr && <div className="field"><label htmlFor="pack-format">Format</label>
           <select id="pack-format" value={prefs.format} onChange={e => set({ format: e.target.value as PackPrefs['format'] }, 'Pack: format')}>
-            <option value="exomizer">Exomizer 3 — decrunches fast</option>
+            <option value="exomizer">Exomizer 3</option>
             <option value="brokkr">Brokkr's own — smaller, decrunches slowly</option>
+            <option value="fast">Brokkr fast — larger, decrunches fast</option>
           </select></div>}
+        {fast && <p className="muted small">Brokkr's fast format is whole bytes, so its decruncher reads no bits: about 13 % more crunched data than Exomizer's format, decrunched about 1.8 times as fast (twice on most programs), with a decruncher of 215 bytes and no tables.</p>}
         {own && <p className="muted small">Brokkr's own format codes every bit with probabilities that adapt, as LZMA does: about 6.5 % less crunched data than Exomizer's format, but decrunching takes about 8 times as long (up to 24 for data that hardly packs){prefs.mode === 'sfx' ? ', and 0.9 to 1.9 KB more memory. Small programs come out smaller in Exomizer\'s format; where a program leaves no room, the file is in Exomizer\'s format' : ''}.</p>}
         {brokkr && <div className="field"><label htmlFor="pack-effort">Effort</label>
           <select id="pack-effort" value={prefs.effort} onChange={e => set({ effort: e.target.value as PackPrefs['effort'] }, 'Pack: effort')}>
@@ -204,7 +208,7 @@ export function PackView(p: PackViewProps) {
             <option value="normal">Normal</option>
             <option value="max">Max — every core, a thorough search</option>
           </select></div>}
-        {!own && <label className="check"><input id="pack-compat" type="checkbox" checked={prefs.compat} onChange={e => set({ compat: e.target.checked }, 'Pack: compatibility')} /><span>Compatibility ({brokkr ? '-T1' : '-c'})<small className="muted"> — no literal sequences</small></span></label>}
+        {!own && !fast && <label className="check"><input id="pack-compat" type="checkbox" checked={prefs.compat} onChange={e => set({ compat: e.target.checked }, 'Pack: compatibility')} /><span>Compatibility ({brokkr ? '-T1' : '-c'})<small className="muted"> — no literal sequences</small></span></label>}
         {!brokkr && <label className="check"><input id="pack-fast" type="checkbox" checked={prefs.fast} onChange={e => set({ fast: e.target.checked }, 'Pack: faster crunching')} /><span>Crunch faster (-C)<small className="muted"> — a little larger</small></span></label>}
         {!brokkr && <TextField id="pack-extra" label="More Exomizer options" value={prefs.extra} placeholder="-p 4 -Di_line_number=1987" error={extraProblem(prefs.extra)} onCommit={v => set({ extra: v }, 'Pack: options')} />}
         <TextField id="pack-out" label="File name" value={prefs.out} placeholder={cmd.out} onCommit={v => set({ out: v }, 'Pack: file name')} />

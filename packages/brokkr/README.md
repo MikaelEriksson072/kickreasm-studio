@@ -4,7 +4,8 @@
 written for Exomizer reads its files, and it crunches them smaller than Exomizer 3.1.1 does, in a fraction of the time.
 It makes self-extracting programs that it plans and checks itself, crunched data for your own decruncher, and it packs
 files straight on a D64. For the smallest files it also has a format of its own, coded adaptively as LZMA is
-(`--format brokkr`): 6.6 % smaller than Exomizer 3.1.1's streams, decrunched about 8 times slower.
+(`--format brokkr`): 6.6 % smaller than Exomizer 3.1.1's streams, decrunched about 8 times slower. For the fastest
+decrunching it has one of whole bytes (`--format fast`): 13 % larger, decrunched about twice as fast.
 
 It is named after Brokkr, the dwarf who forged Mjölnir with his brother Sindri. [Sindri](https://github.com/MikaelEriksson072/Sindri)
 unpacks; Brokkr packs. Both were made for [Mimir Studio](https://github.com/MikaelEriksson072/mimir-studio), whose
@@ -58,6 +59,23 @@ probabilities the file is in Exomizer's format, with a note (26 of them).
 `brokkr decruncher --format brokkr` writes its decruncher for `mem` files (backward only) as Kick Assembler source:
 `--zp` (12 bytes), `--table` (a page: 1.5 KB, or 512 bytes with `--small`), `--at`, `--effect`.
 
+## Its fast format
+
+`--format fast` packs for decrunching fast. Every token is whole bytes, so the decruncher reads no bits: a literal run
+of up to 32 bytes, a match of 2 or 3 bytes up to 16 back in one byte, one of 2 to 8 bytes up to 4096 back in two, any
+match in three, and "the last offset again" in one; a full length field takes a byte more, up to 255. The parse prices
+them in bytes. The decruncher keeps the write position in Y and copies each byte with `dey`, `lda`, `sta`, `dex` and
+`bne`; it is 215 bytes (229 with RUN) and needs no tables, so it fits in the stack page.
+
+On the 163 programs below the streams are 13.2 % larger than Exomizer 3.1.1's (3 273 438 bytes against 2 891 460),
+crunched in 19 s on one thread. As self-extracting files on 159 of them they are 12.5 % larger than in Exomizer's format
+and decrunch in 0.56 of its time in all: half of it on the median program, 0.4 at best, 0.8 for one that is nearly all
+long runs (a copy costs the same in both). 5 programs that fill memory leave no room for the larger stream, and are in
+Exomizer's format. It does not flash the border. Before this format Brokkr tried one of bits in the manner of ZX0:
+3 % larger than Exomizer's, but only 1.27 times as fast, as reading bits costs about what Exomizer's tables do.
+
+`brokkr decruncher --format fast` writes its decruncher for `mem` files: `--zp` (10 bytes), `--at`.
+
 ## Results
 
 On 163 unpacked C64 programs (demos, games and intros from CSDB, unpacked with Sindri; 7.1 MB), as raw streams:
@@ -99,10 +117,10 @@ The commands:
 | `mem <file>...` | crunched data with its address, decrunched in place (as `exomizer mem`); `-f` forward, `-l <address>` or `-l none` |
 | `raw <file>...` | a bare stream (as `exomizer raw`); `-b` backward, `-r` reversed |
 | `d64 <disk> [name]...` | list a disk, or pack the files named on it into `<disk>-brokkr.d64`; `--mode sfx` or `mem` |
-| `decruncher` | the 6502 decruncher as Kick Assembler source; `--zp`, `--table`, `--at`, `--four`, `--no-reuse`, `--effect` (with `--format brokkr`: `--small`) |
+| `decruncher` | the 6502 decruncher as Kick Assembler source; `--zp`, `--table`, `--at`, `--four`, `--no-reuse`, `--effect` (with `--format brokkr`: `--small`; with `--format fast`: `--zp`, `--at`) |
 
 A file is a `.prg`, `<file>@<address>` for raw bytes, or `<file>,<address>[,<offset>[,<length>]]` for a part of one, as
-Exomizer takes it. Several files are merged into one memory image. Everywhere: `--format exomizer|brokkr`,
+Exomizer takes it. Several files are merged into one memory image. Everywhere: `--format exomizer|brokkr|fast`,
 `--effort fast|normal|max`, `--threads`, `-o <file>`, `--json`, `-q`; for `mem` and `raw` in Exomizer's format also
 Exomizer's `-P`, `-T`, `-M`, `-m`, `-e` and `-E`.
 
@@ -128,6 +146,8 @@ thread pool).
 - `src/brk.ts`, `src/parse-brk.ts`, `src/crunch-brk.ts`, `src/brk-decruncher.ts`: Brokkr's own format: its coder,
   model and prices, its parse, the rounds of parse and prices, and its 6502 decruncher (the self-extracting one and the
   one for `mem` files).
+- `src/fast.ts`, `src/parse-fast.ts`, `src/fast-decruncher.ts`: the fast format, its parse (costs in whole bytes), and
+  its 6502 decruncher.
 - `src/files.ts`, `src/d64.ts`, `src/cli.ts`: the `raw` and `mem` files, D64 images, and the command line.
 
 ## Tests
@@ -139,7 +159,8 @@ pnpm test
 Besides Brokkr's own checks they compare with the real tools when they are installed: Exomizer 3.1.1 decrunches
 Brokkr's streams for several protocols and its `desfx` a Brokkr self-extracting file; Kick Assembler assembles the
 decruncher source to the same bytes as Brokkr's assembler; VICE's `c1541` reads the disks Brokkr writes. The decruncher
-for your own code decrunches `mem` files in the emulated C64, in both formats.
+for your own code decrunches `mem` files in the emulated C64, in every format; the fast one's in fewer cycles than
+Exomizer's format takes.
 
 ## Licence
 

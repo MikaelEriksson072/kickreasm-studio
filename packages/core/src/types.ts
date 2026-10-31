@@ -110,8 +110,9 @@ export type BuildScript = 'build.bat' | 'build.sh';
 export type Packer = 'brokkr' | 'exomizer';
 /** how hard Brokkr crunches: fast, normal, or max (every core, a thorough search) */
 export type PackEffort = 'fast' | 'normal' | 'max';
-/** Brokkr's stream format: Exomizer 3's, or Brokkr's own (smaller, slower to decrunch, more RAM while it does) */
-export type PackFormat = 'exomizer' | 'brokkr';
+/** Brokkr's stream format: Exomizer 3's, Brokkr's own (smaller, slower to decrunch, more RAM while it does), or its
+ * fast one (whole bytes: larger, faster to decrunch) */
+export type PackFormat = 'exomizer' | 'brokkr' | 'fast';
 /** the packed file (spec 13.8): a self-extracting program (sfx) or crunched data that your own code decrunches (mem) */
 export type PackMode = 'sfx' | 'mem';
 /** sfx: what runs after decrunching: the SYS of the BASIC line, the BASIC program (RUN), or a jmp to `PackPrefs.jmp` */

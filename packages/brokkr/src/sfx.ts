@@ -5,19 +5,21 @@
  * Brokkr plans where everything goes: the decruncher, its tables and zero page bytes where the data and the stream
  * leave room, the stream so that the decruncher never writes over bytes it has not read yet, and $01 so that every
  * byte it reads and writes is RAM. Then it runs the file in an emulated C64 and compares the memory with the program
- * before it hands the file over. The stream is Exomizer 3's format (src/decruncher.ts) or Brokkr's own
- * (src/brk-decruncher.ts). */
+ * before it hands the file over. The stream is Exomizer 3's format (src/decruncher.ts), Brokkr's own
+ * (src/brk-decruncher.ts) or its fast one (src/fast-decruncher.ts). */
 import { assemble, AsmError } from './asm.ts';
 import { BRK_START, BRK_ZP_BYTES, brkResident } from './brk-decruncher.ts';
 import { crunchBrk, type BrkCrunched, type BrkOptions } from './crunch-brk.ts';
 import { crunchData, type CrunchOptions, type Crunched } from './crunch.ts';
 import { SFX_PROLOGUE, SFX_RESIDENT, SFX_START, ZP_BYTES } from './decruncher.ts';
+import { crunchFast, type FastCrunched, type FastOptions } from './fast.ts';
+import { FAST_RESIDENT, FAST_START, FAST_ZP_BYTES } from './fast-decruncher.ts';
 import { Machine } from './emulate.ts';
 import { BrokkrError, h2, h4, span } from './errors.ts';
 import { P, T } from './format.ts';
 
 export type Start = 'sys' | 'basic' | number;
-export type SfxFormat = 'exomizer' | 'brokkr';
+export type SfxFormat = 'exomizer' | 'brokkr' | 'fast';
 
 export interface SfxOptions {
   /** what runs after decrunching: the SYS of the program's BASIC line (default), RUN, or a jump to an address */
@@ -30,9 +32,10 @@ export interface SfxOptions {
   effect?: boolean;
   /** the number of the file's BASIC line (default 0) */
   line?: number;
-  /** the stream's format: Exomizer 3's (default), or Brokkr's own (smaller, slower to decrunch, more RAM) */
+  /** the stream's format: Exomizer 3's (default), Brokkr's own (smaller, slower to decrunch, more RAM), or its fast one
+   * (a little larger, faster to decrunch) */
   format?: SfxFormat;
-  /** Brokkr's own format: Exomizer's when the program leaves no room for its decruncher (default), or false: an error */
+  /** Brokkr's formats: Exomizer's when the program leaves no room for their decruncher (default), or false: an error */
   fallback?: boolean;
   crunch?: CrunchOptions;
   /** Exomizer format: a table of its own for the offsets of length 3 (-P+16); 'auto' crunches both ways */
@@ -55,9 +58,10 @@ export interface SfxResult {
   format: SfxFormat;
   /** the crunched stream, in reading order */
   stream: Uint8Array;
-  /** Exomizer's format: the crunch, and its -P bits in `protocol`; Brokkr's own: `brk` (protocol 0) */
+  /** Exomizer's format: the crunch, and its -P bits in `protocol`; Brokkr's own: `brk`, its fast one: `fast` (protocol 0) */
   crunched?: Crunched;
   brk?: BrkCrunched;
+  fast?: FastCrunched;
   protocol: number;
   /** what the emulated C64 took from SYS to the program's start */
   cycles: number;
@@ -151,15 +155,17 @@ interface Kit {
   size: number;
   /** tried before the others when it finds room (the faster decruncher), whatever its size */
   first: boolean;
-  format: SfxFormat; protocol: number; crunched?: Crunched; brk?: BrkCrunched;
+  format: SfxFormat; protocol: number; crunched?: Crunched; brk?: BrkCrunched; fast?: FastCrunched;
 }
 type Plan = { layout: 'end' | 'start'; fB: number; fC: number; aAt: number; fE: number; B: Range; tables: Range[]; x: number };
 
 /** What to crunch, and how: to Exomizer's format, or to Brokkr's own. */
-export type CrunchRequest = { format: 'exomizer'; data: Uint8Array; options: CrunchOptions } | { format: 'brokkr'; data: Uint8Array; options: BrkOptions };
+export type CrunchRequest = { format: 'exomizer'; data: Uint8Array; options: CrunchOptions } | { format: 'brokkr'; data: Uint8Array; options: BrkOptions }
+  | { format: 'fast'; data: Uint8Array; options: FastOptions };
+type Crunch = Crunched | BrkCrunched | FastCrunched;
 
-function crunchHere(r: CrunchRequest): Crunched | BrkCrunched {
-  return r.format === 'brokkr' ? crunchBrk(r.data, r.options) : crunchData(r.data, r.options);
+function crunchHere(r: CrunchRequest): Crunch {
+  return r.format === 'brokkr' ? crunchBrk(r.data, r.options) : r.format === 'fast' ? crunchFast(r.data, r.options) : crunchData(r.data, r.options);
 }
 
 /**
@@ -181,7 +187,7 @@ export async function sfxAsync(data: Uint8Array, load: number, o: SfxOptions, cr
   return r.value;
 }
 
-function* sfxSteps(data: Uint8Array, load: number, o: SfxOptions): Generator<CrunchRequest, SfxResult, Crunched | BrkCrunched> {
+function* sfxSteps(data: Uint8Array, load: number, o: SfxOptions): Generator<CrunchRequest, SfxResult, Crunch> {
   const lo = load, hi = load + data.length;
   if (!data.length) throw new BrokkrError('BRK-E100', 'There is nothing to crunch: the program is empty.');
   if (hi > 0x10000) throw new BrokkrError('BRK-E101', `The program ${span(lo, hi)} goes past $ffff.`);
@@ -241,7 +247,7 @@ function* sfxSteps(data: Uint8Array, load: number, o: SfxOptions): Generator<Cru
 
   // crunch backward, as the decruncher reads
   const reversed = data.slice().reverse();
-  function* exomizerKits(): Generator<CrunchRequest, Kit[], Crunched | BrkCrunched> {
+  function* exomizerKits(): Generator<CrunchRequest, Kit[], Crunch> {
     const out: Kit[] = [];
     const zp = zpFor(ZP_BYTES);
     // with a table for length 3 or not, and without literal sequences too when the stream has some (the
@@ -276,6 +282,12 @@ function* sfxSteps(data: Uint8Array, load: number, o: SfxOptions): Generator<Cru
         links: ['next'], first: qsq, format: 'brokkr', protocol: 0, brk,
       }));
     }
+  } else if (o.format === 'fast') {
+    const fast = (yield { format: 'fast', data: reversed, options: { effort: o.crunch?.effort, profile: o.crunch?.profile } }) as FastCrunched;
+    kits.push(sized({
+      stream: fast.stream, safety: fast.safety, zp: zpFor(FAST_ZP_BYTES), zpBytes: FAST_ZP_BYTES, resident: FAST_RESIDENT, start: FAST_START,
+      base: { ...exitDefs }, tables: [], links: ['next'], first: false, format: 'fast', protocol: 0, fast,
+    }));
   } else kits = yield* exomizerKits();
 
   /**
@@ -348,12 +360,17 @@ function* sfxSteps(data: Uint8Array, load: number, o: SfxOptions): Generator<Cru
     return best;
   };
   let chosen = choose();
-  if (!chosen && o.format === 'brokkr' && o.fallback !== false) {
-    // Brokkr's own format needs its probabilities (512 bytes) and a bigger decruncher; Exomizer's may still fit
+  if (!chosen && (o.format === 'brokkr' || o.format === 'fast') && o.fallback !== false) {
+    // Brokkr's own format needs its probabilities (512 bytes) and a bigger decruncher, the fast one a bigger stream;
+    // Exomizer's may still fit
     const own = kits[kits.length - 1];
     kits = yield* exomizerKits();
     chosen = choose();
-    if (chosen) warnings.push(`The program leaves no room for the probabilities (512 bytes) and the decruncher (${own.bSize} bytes) of Brokkr's own format while it decrunches, so the file is in Exomizer's format.`);
+    if (chosen) {
+      warnings.push(own.format === 'brokkr'
+        ? `The program leaves no room for the probabilities (512 bytes) and the decruncher (${own.bSize} bytes) of Brokkr's own format while it decrunches, so the file is in Exomizer's format.`
+        : `The program leaves no room for the decruncher (${own.bSize} bytes) and the crunched data (${own.stream.length} bytes) of Brokkr's fast format, so the file is in Exomizer's format.`);
+    }
   }
   if (!chosen) {
     const k = kits.reduce((x, y) => (y.size < x.size ? y : x));
@@ -375,8 +392,10 @@ function* sfxSteps(data: Uint8Array, load: number, o: SfxOptions): Generator<Cru
   const X: Range = [x, x + C], file: Range = [0x0801, fE];
   const ramDuring = ramFor([U, file, X, B, ...tables]);
   const ioVisible = (ramDuring & 3) !== 0 && (ramDuring & 4) !== 0;
-  const effect = o.effect !== false && ioVisible;
-  if (o.effect !== false && !ioVisible) warnings.push('No border flashing: I/O is switched out while decrunching, as data goes to or comes from $d000-$dfff.');
+  // the fast format's decruncher does not flash the border
+  const flashes = k.format !== 'fast';
+  const effect = flashes && o.effect !== false && ioVisible;
+  if (flashes && o.effect !== false && !ioVisible) warnings.push('No border flashing: I/O is switched out while decrunching, as data goes to or comes from $d000-$dfff.');
   if (overlaps(X, [0x0400, 0x07e8]) && !overlaps(U, [0x0400, 0x07e8])) warnings.push(`The crunched data lies on the screen (${span(Math.max(x, 0x0400), Math.min(x + C, 0x07e8))}) while decrunching, so the screen shows it.`);
   if (overlaps(B, [0x0400, 0x07e8])) warnings.push(`The decruncher runs on the screen (${span(B[0], B[1])}), as the program leaves no room for it in $0100-$01df or $0334-$03ff.`);
   for (let i = 0; i < tables.length; i++) {
@@ -427,6 +446,6 @@ function* sfxSteps(data: Uint8Array, load: number, o: SfxOptions): Generator<Cru
   ];
   return {
     prg: prg.subarray(0, 2 + used - 0x0801), areas, entry, basic, ramDuring, ramExit, irqExit, effect, format: k.format,
-    stream: k.stream, crunched: k.crunched, brk: k.brk, protocol: k.protocol, cycles: run.cycles, warnings,
+    stream: k.stream, crunched: k.crunched, brk: k.brk, fast: k.fast, protocol: k.protocol, cycles: run.cycles, warnings,
   };
 }

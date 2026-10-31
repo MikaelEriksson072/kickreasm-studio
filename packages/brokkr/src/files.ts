@@ -1,8 +1,10 @@
 /* The files Exomizer writes, made by Brokkr: `raw` (a bare stream) and `mem` (a stream with the data's address,
  * loaded where it can be decrunched in place). Both are byte for byte what Exomizer 3.1's decrunchers read, so
  * exodecrunch.s, Krill's loader and the rest decrunch them as they decrunch Exomizer's own. The same files in
- * Brokkr's own format (memBrk, rawBrk) are for Brokkr's decruncher of it (brkDecrunchSource). */
+ * Brokkr's own format (memBrk, rawBrk) and its fast one (memFast, rawFast) are for Brokkr's decrunchers of them
+ * (brkDecrunchSource, fastDecrunchSource). */
 import { crunchBrk, type BrkCrunched, type BrkOptions } from './crunch-brk.ts';
+import { crunchFast, type FastCrunched, type FastOptions } from './fast.ts';
 import { crunchData, type CrunchOptions, type Crunched } from './crunch.ts';
 import { BrokkrError, h4, span } from './errors.ts';
 import { P, T } from './format.ts';
@@ -78,7 +80,24 @@ export function memFile(data: Uint8Array, start: number, crunched: Crunched, o: 
   return { ...placed, warnings: [...warnings, ...placed.warnings], crunched };
 }
 
+/** A bare stream in Brokkr's fast format, as rawBrk. */
+export function rawFast(data: Uint8Array, o: { backward?: boolean; reversed?: boolean; crunch?: FastOptions } = {}): { bytes: Uint8Array; fast: FastCrunched } {
+  const fast = crunchFast(o.backward ? data.slice().reverse() : data, o.crunch);
+  return { bytes: rawBytes(fast.stream, o), fast };
+}
+
 export interface MemBrkResult extends Omit<MemResult, 'crunched'> { brk: BrkCrunched }
+export interface MemFastResult extends Omit<MemResult, 'crunched'> { fast: FastCrunched }
+
+/** A mem file in Brokkr's fast format, laid out as memBrk's. Backward only, as its decruncher reads. */
+export function memFast(data: Uint8Array, start: number, o: Omit<MemOptions, 'forward' | 'crunch'> & { crunch?: FastOptions } = {}): MemFastResult {
+  return memFastFile(data, start, crunchFast(data.slice().reverse(), o.crunch), o);
+}
+
+/** The mem file of a crunch of the data reversed in Brokkr's fast format. */
+export function memFastFile(data: Uint8Array, start: number, fast: FastCrunched, o: Omit<MemOptions, 'forward' | 'crunch'> = {}): MemFastResult {
+  return { ...place(data, start, fast.stream, fast.safety, o), fast };
+}
 
 /**
  * A mem file in Brokkr's own format: the stream reversed, then the data's end address, as Exomizer's backward mem

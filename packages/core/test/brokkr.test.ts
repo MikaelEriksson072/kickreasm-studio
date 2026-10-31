@@ -97,6 +97,24 @@ describe('packing with Brokkr', () => {
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
 
+  it("packs in Brokkr's fast format, as the command it shows does", async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mimir-brokkr-'));
+    try {
+      const r = await packWithBrokkr([{ name: 'raster demo.prg', prg: demo.prg }], P({ format: 'fast' }));
+      expect(r.ok).toBe(true);
+      expect(r.argv).toEqual(['brokkr', 'sfx', '--format', 'fast', '--start', 'sys', '-o', 'raster demo-brokkr.prg', 'raster demo.prg']);
+      expect(r.report.layout.find(a => a.name === 'Decruncher')?.start).toBe(0x0100);
+      expect(r.check?.status).toBe('same');
+      for (const i of r.inputs) await writeFile(join(dir, i.name), i.prg);
+      const run = spawnSync(process.execPath, [cli, ...r.argv.slice(1), '-q'], { cwd: dir, encoding: 'utf8' });
+      expect(run.stderr).toBe('');
+      expect(new Uint8Array(await readFile(join(dir, r.name!)))).toEqual(r.prg);
+      const mem = await packWithBrokkr([{ name: 'game.prg', prg: demo.prg }], P({ format: 'fast', mode: 'mem' }));
+      expect(mem.ok).toBe(true);
+      expect(mem.check?.text).toMatch(/decruncher --format fast/);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
   it('spreads effort max over threads', async () => {
     const prg = makePrg(0x1000, bytes(3000, i => (i * 5) ^ (i >> 4)));
     const prefs = P({ effort: 'max', start: 'jmp', jmp: 0x1000 });

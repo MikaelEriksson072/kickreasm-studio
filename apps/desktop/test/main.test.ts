@@ -349,6 +349,7 @@ describe('schemas', () => {
     const { packer: _p, effort: _e, format: _f, ...old } = DEFAULT_PACK;
     expect(packSchema.parse({ files, prefs: old }).prefs).toMatchObject({ packer: 'brokkr', effort: 'normal', format: 'exomizer' });
     expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, format: 'brokkr' } }).success).toBe(true);
+    expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, format: 'fast' } }).success).toBe(true);
     expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, format: 'zx0' } }).success).toBe(false);
     expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, packer: 'zip' } }).success).toBe(false);
     expect(packSchema.safeParse({ files, prefs: { ...DEFAULT_PACK, effort: 'ultra' } }).success).toBe(false);

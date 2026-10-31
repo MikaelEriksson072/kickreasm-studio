@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { assemble } from '../src/asm.ts';
 import { brkDecrunchSource } from '../src/brk-decruncher.ts';
 import { decrunchSource } from '../src/decruncher.ts';
+import { fastDecrunchSource } from '../src/fast-decruncher.ts';
 import { JAVA, KICKASS } from './tools.ts';
 
 describe('the assembler', () => {
@@ -68,4 +69,5 @@ describe.skipIf(!KICKASS || !JAVA)('against Kick Assembler', () => {
   for (const [name, o] of [['quarter squares', {}], ['shift and add, effect', { small: true, effect: true }]] as const) {
     it(`assembles the decruncher of Brokkr's own format to the same bytes (${name})`, () => same(brkDecrunchSource({ ...o, at: 0xc000 })));
   }
+  it("assembles the decruncher of Brokkr's fast format to the same bytes", () => same(fastDecrunchSource({ at: 0xc000 })));
 });

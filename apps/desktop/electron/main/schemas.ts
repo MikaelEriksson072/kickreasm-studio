@@ -16,7 +16,7 @@ export const packPrefsSchema = z.object({
   // project files from before Brokkr have neither: they pack with Brokkr now
   packer: z.enum(['brokkr', 'exomizer']).default('brokkr'),
   effort: z.enum(['fast', 'normal', 'max']).default('normal'),
-  format: z.enum(['exomizer', 'brokkr']).default('exomizer'),
+  format: z.enum(['exomizer', 'brokkr', 'fast']).default('exomizer'),
   mode: z.enum(['sfx', 'mem']),
   ranges: z.array(packRange).max(4096).nullable(),
   start: z.enum(['sys', 'basic', 'jmp']),

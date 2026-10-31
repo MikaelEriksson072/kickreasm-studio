@@ -1639,8 +1639,8 @@ uppackade demos, spel och intron blir strömmarna mindre än Exomizer 3.1.1:s p�
 gånger fortare (siffrorna i Brokkrs README). Nivåer (`PackPrefs.effort`): *Fast*, *Normal* och *Max*, som söker vidare
 från flera starter och prövar varje tabellfack en bit bredare och smalare, på alla kärnor utom en.
 
-**Format** (`PackPrefs.format`, bara för Brokkr): *Exomizer 3* (standard) eller *Brokkr's own*, Brokkrs eget format för
-största möjliga packning. Det kodar samma slags LZ-tokens med en binär aritmetisk kodare vars sannolikheter anpassar
+**Format** (`PackPrefs.format`, bara för Brokkr): *Exomizer 3* (standard), *Brokkr's own*, Brokkrs eget format för
+största möjliga packning, eller *Brokkr fast*, dess snabba format för snabbast möjliga uppackning (nedan). Det kodar samma slags LZ-tokens med en binär aritmetisk kodare vars sannolikheter anpassar
 sig efter varje bit, som LZMA: bokstäver i ett 8-bitars träd, längder med en sammanflätad gammakod, offset med längd i
 bitar (i sammanhang av matchens längd) och därefter bitarna, och "samma offset igen" efter en literal. Parsningen
 prissätter tokens efter vad kodaren tar block för block. På de 163 programmen blir strömmarna 6,6 % mindre än Exomizer
@@ -1652,6 +1652,16 @@ därför mindre som självuppackande fil (på 159 program blev filerna 3,5 % min
 programmet inte lämnar plats blir filen i Exomizers format, med en notis.
 `--format brokkr` står då i kommandot, *Crunched data* packas bara bakåt (*Forward* och *Compatibility* döljs), och
 uppackaren för egen kod skrivs med `brokkr decruncher --format brokkr`.
+
+*Brokkr fast* består bara av hela byte, så uppackaren läser inga bitar: en literalkörning på upp till 32 byte, en match
+på 2–3 byte upp till 16 bakåt i en byte, en på 2–8 byte upp till 4096 bakåt i två, vilken match som helst i tre, och
+"samma offset igen" i en; ett fullt längdfält tar en byte till, upp till 255. Uppackaren håller skrivpositionen i Y och
+kopierar varje byte med `dey`, `lda`, `sta`, `dex` och `bne`; den är 215 byte (229 med RUN), utan tabeller, och ryms
+i stackens sida. På de 163 programmen blir strömmarna 13,2 % större än Exomizer 3.1.1:s; som självuppackande filer (159
+program) 12,5 % större än i Exomizers format, men uppackningen tar 0,56 av tiden sammanlagt (hälften på
+medianprogrammet, 0,4 som bäst). Den blinkar inte med kanten (effekten döljs). `--format fast` står i kommandot, och
+uppackaren för egen kod skrivs med `brokkr decruncher --format fast`. Ett första försök med bitar i ZX0:s stil blev bara
+1,27 gånger så snabbt och lämnades.
 
 - *Self-extracting*: Brokkr planerar var uppackarens två delar, dess tabell, nollsidebytes och den packade datan ska ligga
   (helst stackens sida `$0100-$01e7` och `$0334-$03ff`, så att inget syns på skärmen), så att uppackaren aldrig skriver över
@@ -1738,15 +1748,19 @@ tom inställning behålls.
   `desfx` en Brokkr-sfx, Kick Assembler assemblerar uppackarens källa till samma byte som Brokkrs assembler, mem-filer
   packas upp av Brokkrs uppackare i den emulerade C64:an, VICE:s c1541 läser D64:or Brokkr skrivit, och trådpoolen ger
   samma resultat som en tråd.
+- `packages/brokkr/test/fast.test.ts`: det snabba formatet packar upp till samma data (alla tokens, längder över 255,
+  offset upp till 65535), dess 6502-uppackare packar upp mem-filer på färre än tre fjärdedelar av cyklerna Exomizers
+  format tar, och självuppackande filer (SYS och RUN) har uppackaren i stackens sida och går fortare.
 - `packages/brokkr/test/brk.test.ts`: Brokkrs eget format packar upp till samma data (alla längder och offset), mem-filer
   packas upp av dess 6502-uppackare (båda multiplikationerna) i den emulerade C64:an, självuppackande filer startar
   programmet och faller tillbaka till Exomizers format utan plats; Kick Assembler assemblerar dess källa till samma byte.
 - `packages/core/test/brokkr.test.ts`: demon hel och med intervall och hopp, mem, felen, nivån *Max* på två trådar,
-  Brokkrs eget format (mindre fil, samma fil som kommandot), och att kommandot som visas gör samma fil med den
-  fristående Brokkr.
+  Brokkrs eget format (mindre fil, samma fil som kommandot), det snabba formatet (uppackaren i stackens sida, samma fil
+  som kommandot), och att kommandot som visas gör samma fil med den fristående Brokkr.
 - `apps/desktop/test/main.test.ts`: pack-mappen med indata och den packade filen, och schemat (en gammal projektfil
   packar med Brokkr, i Exomizers format).
-- E2e-testet packar demon med Brokkr (hel, *Max*, mem, eget format) i den byggda appen, alltså med arbetstråden.
+- E2e-testet packar demon med Brokkr (hel, *Max*, mem, eget format, snabbt format) i den byggda appen, alltså med
+  arbetstråden.
 
 ## 14. UI/UX-specifikation
 

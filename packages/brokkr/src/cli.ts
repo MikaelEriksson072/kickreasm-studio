@@ -4,11 +4,13 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { brkDecrunchSource } from './brk-decruncher.ts';
 import { crunchBrk, type BrkCrunched } from './crunch-brk.ts';
+import { crunchFast, type FastCrunched } from './fast.ts';
+import { fastDecrunchSource } from './fast-decruncher.ts';
 import { crunchData, PROFILES, type CrunchOptions, type Crunched, type Effort } from './crunch.ts';
 import { Disk } from './d64.ts';
 import { decrunchSource } from './decruncher.ts';
 import { BrokkrError, h2, h4, span } from './errors.ts';
-import { memBrkFile, memCrunchOptions, memFile, rawBrk, rawFile, type MemOptions } from './files.ts';
+import { memBrkFile, memCrunchOptions, memFastFile, memFile, rawBrk, rawFast, rawFile, type MemOptions } from './files.ts';
 import { encodingText, parseEncoding, protocol, type Protocol } from './format.ts';
 import { defaultThreads, Pool } from './node.ts';
 import { crunchSearch } from './search.ts';
@@ -33,7 +35,8 @@ image (a later one wins, gaps are zero).
 options:
   -o <file>              the output (default: <first file>-brokkr.prg, .bin, .d64, .asm)
   --format <f>           exomizer (default): Exomizer 3's format; brokkr: Brokkr's own, about 6.5 %
-                         smaller, decrunched about 8 times slower with 0.9-1.9 KB more RAM
+                         smaller, decrunched about 8 times slower with 0.9-1.9 KB more RAM; fast: Brokkr's
+                         fast one, whole bytes, about 13 % larger and decrunched about 1.8 times as fast
   --effort <e>           fast, normal (default) or max (every core, a thorough search)
   --threads <n>          threads for --effort max (default ${defaultThreads()})
   --json                 print the result as JSON
@@ -56,6 +59,7 @@ d64:
 decruncher:
   --zp <a> --table <a> --at <a> --four --no-reuse --effect --no-literal-sequences
   with --format brokkr: --zp <a> --table <page> (1.5 KB) --small (0.5 KB, slower) --at <a> --effect
+  with --format fast: --zp <a> --at <a>
 `;
 
 interface Args { _: string[]; [k: string]: string | boolean | string[] }
@@ -123,10 +127,10 @@ function loadInputs(names: string[]): { inputs: Input[]; start: number; data: Ui
 
 function formatOf(a: Args): SfxFormat {
   const f = String(a.format ?? 'exomizer');
-  if (f !== 'exomizer' && f !== 'brokkr') throw new BrokkrError('BRK-E012', `--format is exomizer or brokkr, not "${f}".`);
-  if (f === 'brokkr') {
+  if (f !== 'exomizer' && f !== 'brokkr' && f !== 'fast') throw new BrokkrError('BRK-E012', `--format is exomizer, brokkr or fast, not "${f}".`);
+  if (f !== 'exomizer') {
     const given = ['P', 'T', 'M', 'm', 'e', 'E', 'four-tables'].find(k => a[k] != null);
-    if (given) throw new BrokkrError('BRK-E013', `-${given.length > 1 ? '-' : ''}${given} is an option of Exomizer's format, not of Brokkr's own.`);
+    if (given) throw new BrokkrError('BRK-E013', `-${given.length > 1 ? '-' : ''}${given} is an option of Exomizer's format, not of Brokkr's ${f === 'fast' ? 'fast one' : 'own'}.`);
   }
   return f;
 }
@@ -176,6 +180,7 @@ const stats = (c: Crunched) => ({
   encoding: encodingText(c.encoding), ...c.stats,
 });
 const brkStats = (b: BrkCrunched) => ({ format: 'brokkr', bytes: b.stream.length, rounds: b.rounds, ms: Math.round(b.ms), safety: b.safety, ...b.stats });
+const fastStats = (f: FastCrunched) => ({ format: 'fast', bytes: f.stream.length, ms: Math.round(f.ms), safety: f.safety, ...f.stats });
 
 async function main(argv: string[]): Promise<number> {
   const a = parseArgs(argv);
@@ -209,17 +214,19 @@ async function main(argv: string[]): Promise<number> {
         say(`  checked in an emulated C64: ${r.cycles} cycles (${(r.cycles / 985248).toFixed(2)} s)`);
         for (const w of r.warnings) say(`  note: ${w}`);
         say(`${out}: ${r.prg.length} bytes (${(100 * r.prg.length / data.length).toFixed(1)} % of ${data.length})`);
-        result = { input: inInfo, output: { file: out, bytes: r.prg.length }, crunched: r.crunched ? stats(r.crunched) : brkStats(r.brk!), protocol: r.protocol,
+        result = { input: inInfo, output: { file: out, bytes: r.prg.length }, crunched: r.crunched ? stats(r.crunched) : r.brk ? brkStats(r.brk) : fastStats(r.fast!), protocol: r.protocol,
           areas: r.areas, entry: r.entry, basic: r.basic, ramDuring: r.ramDuring, ramExit: r.ramExit, irqExit: r.irqExit,
           effect: r.effect, cycles: r.cycles, warnings: r.warnings };
       } else if (command === 'mem') {
         const load: MemOptions['load'] = a.l == null ? 'auto' : a.l === 'none' ? 'none' : number(String(a.l), 'The load address');
         const mo = { forward: !!a.f, load, crunch: o };
-        if (format === 'brokkr' && a.f) throw new BrokkrError('BRK-E014', "Brokkr's own format is decrunched backward; -f is for Exomizer's format.");
+        if (format !== 'exomizer' && a.f) throw new BrokkrError('BRK-E014', `Brokkr's ${format === 'fast' ? 'fast' : 'own'} format is decrunched backward; -f is for Exomizer's format.`);
         const r = format === 'brokkr'
           ? memBrkFile(data, start, crunchBrk(data.slice().reverse(), { effort: o.effort }), mo)
+          : format === 'fast'
+          ? memFastFile(data, start, crunchFast(data.slice().reverse(), { effort: o.effort }), mo)
           : memFile(data, start, await crunch(a.f ? data : data.slice().reverse(), memCrunchOptions(mo)), mo);
-        const c = 'brk' in r ? brkStats(r.brk) : stats(r.crunched);
+        const c = 'brk' in r ? brkStats(r.brk) : 'fast' in r ? fastStats(r.fast) : stats(r.crunched);
         const out = outName(files[0], load === 'none' ? '.bin' : '.prg', a.o);
         writeFileSync(out, r.bytes);
         say(`  in place it loads at ${span(r.inPlace.start, r.inPlace.end)} (safety ${c.safety})`);
@@ -230,6 +237,7 @@ async function main(argv: string[]): Promise<number> {
         const ro = { backward: !!a.b, reversed: !!a.r };
         let bytes: Uint8Array, c: Record<string, unknown>;
         if (format === 'brokkr') { const r = rawBrk(data, { ...ro, crunch: { effort: o.effort } }); bytes = r.bytes; c = brkStats(r.brk); }
+        else if (format === 'fast') { const r = rawFast(data, { ...ro, crunch: { effort: o.effort } }); bytes = r.bytes; c = fastStats(r.fast); }
         else { const r = rawFile(await crunch(a.b ? data.slice().reverse() : data, o), ro); bytes = r.bytes; c = stats(r.crunched); }
         const out = outName(files[0], '.bin', a.o);
         writeFileSync(out, bytes);
@@ -262,6 +270,7 @@ async function main(argv: string[]): Promise<number> {
           let bytes: Uint8Array;
           if (mode === 'sfx') bytes = (await sfxAsync(data, load, { format, crunch: o }, crunch)).prg;
           else if (mode === 'mem' && format === 'brokkr') bytes = memBrkFile(data, load, crunchBrk(data.slice().reverse(), { effort: o.effort })).bytes;
+          else if (mode === 'mem' && format === 'fast') bytes = memFastFile(data, load, crunchFast(data.slice().reverse(), { effort: o.effort })).bytes;
           else if (mode === 'mem') bytes = memFile(data, load, await crunch(data.slice().reverse(), memCrunchOptions({ crunch: o })), { crunch: o }).bytes;
           else throw new BrokkrError('BRK-E009', `--mode is sfx or mem, not "${String(mode)}".`);
           const written = disk.write(f.name, bytes, { replace: true });
@@ -275,15 +284,17 @@ async function main(argv: string[]): Promise<number> {
       }
     } else if (command === 'decruncher') {
       const opt = (k: string) => (a[k] != null ? number(String(a[k]), `--${k}`) : undefined);
-      const own = formatOf(a) === 'brokkr';
+      const format = formatOf(a), own = format === 'brokkr';
       const table = opt('table');
       if (own && table != null && table & 0xff) throw new BrokkrError('BRK-E015', `--table for Brokkr's own format is the start of a page ($c000), not ${h4(table)}.`);
       const src = own
         ? brkDecrunchSource({ zp: opt('zp'), table, at: opt('at'), small: !!a.small, effect: !!a.effect })
+        : format === 'fast'
+        ? fastDecrunchSource({ zp: opt('zp'), at: opt('at') })
         : decrunchSource({ zp: opt('zp'), table, at: opt('at'), four: !!a.four, reuse: !a['no-reuse'], effect: !!a.effect, literalSequences: !a['no-literal-sequences'] });
       const out = typeof a.o === 'string' ? a.o : 'brokkr_decrunch.asm';
       writeFileSync(out, src);
-      say(`${out}: Brokkr's decruncher ${own ? 'of its own format ' : ''}for Kick Assembler`);
+      say(`${out}: Brokkr's decruncher ${own ? 'of its own format ' : format === 'fast' ? 'of its fast format ' : ''}for Kick Assembler`);
       result = { output: { file: out } };
     } else {
       throw new BrokkrError('BRK-E010', `"${command}" is not a command.`, 'brokkr --help lists them.');
